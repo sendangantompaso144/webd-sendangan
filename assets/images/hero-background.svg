@@ -1,0 +1,16 @@
+<svg width="1440" height="720" viewBox="0 0 1440 720" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="heroSky" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#E3F2FD"/>
+      <stop offset="0.5" stop-color="#B3E5FC"/>
+      <stop offset="1" stop-color="#90CAF9"/>
+    </linearGradient>
+  </defs>
+  <rect width="1440" height="720" fill="url(#heroSky)"/>
+  <path d="M0 520L80 488C160 456 320 392 480 404C640 416 800 504 960 536C1120 568 1280 544 1360 532L1440 520V720H0V520Z" fill="#FFFFFF" fill-opacity="0.6"/>
+  <path d="M0 560L80 536C160 512 320 464 480 460C640 456 800 496 960 520C1120 544 1280 552 1360 556L1440 560V720H0V560Z" fill="#FFFFFF" fill-opacity="0.35"/>
+  <path d="M280 560L360 500L440 560V720H280V560Z" fill="#FFE082" fill-opacity="0.5"/>
+  <path d="M360 520C360 497.909 377.909 480 400 480C422.091 480 440 497.909 440 520V720H360V520Z" fill="#90CAF9" fill-opacity="0.55"/>
+  <path d="M880 600L960 520L1040 600V720H880V600Z" fill="#FFE082" fill-opacity="0.4"/>
+  <circle cx="1100" cy="420" r="110" fill="#FFE082" fill-opacity="0.5"/>
+</svg>

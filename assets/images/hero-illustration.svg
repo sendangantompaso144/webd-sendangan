@@ -1,0 +1,18 @@
+<svg width="680" height="420" viewBox="0 0 680 420" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#E3F2FD"/>
+      <stop offset="1" stop-color="#90CAF9"/>
+    </linearGradient>
+  </defs>
+  <rect width="680" height="420" rx="40" fill="url(#bg)"/>
+  <path d="M120 300L200 240L280 300L360 230L460 320L540 260L620 320V360H120V300Z" fill="#FFE082" opacity="0.6"/>
+  <path d="M160 290L220 240L280 290V360H160V290Z" fill="#FFFFFF" opacity="0.85"/>
+  <path d="M220 260C220 248.954 228.954 240 240 240C251.046 240 260 248.954 260 260V360H220V260Z" fill="#90CAF9"/>
+  <path d="M360 320L420 260L480 320V360H360V320Z" fill="#FFFFFF" opacity="0.85"/>
+  <circle cx="480" cy="220" r="42" fill="#FFE082" opacity="0.8"/>
+  <path d="M480 200L496 230H464L480 200Z" fill="#263238" opacity="0.3"/>
+  <path d="M120 320H620" stroke="#90CAF9" stroke-width="8" stroke-linecap="round" opacity="0.45"/>
+  <text x="340" y="120" text-anchor="middle" font-family="Poppins, Arial, sans-serif" font-size="32" font-weight="600" fill="#263238" opacity="0.7">Desa Sendangan</text>
+  <text x="340" y="160" text-anchor="middle" font-family="Inter, Arial, sans-serif" font-size="18" fill="#263238" opacity="0.6">Maju, Mandiri, Sejahtera</text>
+</svg>

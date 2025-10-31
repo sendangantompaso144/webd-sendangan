@@ -1,0 +1,7 @@
+<svg width="640" height="420" viewBox="0 0 640 420" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <rect width="640" height="420" rx="24" fill="#E3F2FD"/>
+  <rect x="60" y="80" width="520" height="240" rx="18" fill="#FFFFFF" stroke="#90CAF9" stroke-width="4" stroke-dasharray="16 16"/>
+  <path d="M180 260L240 200L300 260L360 220L440 300H180V260Z" fill="#90CAF9" opacity="0.4"/>
+  <circle cx="240" cy="170" r="38" fill="#FFE082" opacity="0.7"/>
+  <text x="320" y="360" text-anchor="middle" font-family="Poppins, Arial, sans-serif" font-size="24" fill="#263238">Foto / Dokumentasi Kegiatan</text>
+</svg>
