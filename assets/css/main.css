@@ -114,7 +114,7 @@ img {
 }
 
 .logo2 {
-    width: 58px;
+    width: 60px;
 }
 
 .brand-logo img {
@@ -140,11 +140,14 @@ img {
     background: rgba(0, 0, 0, 0.85);
     color: #FFFFFF;
     padding: 8px 14px;
-    border-radius: 8px;
-    font-size: 12px;
-    font-weight: 500;
-    letter-spacing: 0.02em;
-    white-space: nowrap;
+    border-radius: 5px;
+    font-size: 10px;
+    font-weight: 350;
+    letter-spacing: 0.01em;
+    white-space: normal;
+    width: min(175px, 75vw);
+    line-height: 1.5;
+    text-align: left;
     opacity: 0;
     pointer-events: none;
     transition: opacity 0.2s ease, transform 0.2s ease;
@@ -175,11 +178,6 @@ img {
 .brand-logo-group:hover::before {
     opacity: 1;
     transform: translate(-50%, 0) rotate(45deg);
-}
-
-.brand-logo img {
-    width: 70%;
-    height: auto;
 }
 
 .brand-text strong {
