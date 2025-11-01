@@ -293,7 +293,7 @@ render_base_layout([
             /* Hero Section */
             .hero-section {
                 position: relative;
-                min-height: 500px;
+                min-height: 560px;
                 background: linear-gradient(135deg, rgba(21, 101, 192, 0.05) 0%, rgba(144, 202, 249, 0.08) 100%), url('assets/images/hero-background.jpg');
                 background-position: center;
                 background-size: cover;
@@ -302,7 +302,8 @@ render_base_layout([
                 align-items: center;
                 justify-content: center;
                 text-align: center;
-                padding: 80px 20px;
+                margin-top: calc(-1 * var(--header-height, 88px));
+                padding: calc(100px + var(--header-height, 88px)) 20px 100px;
                 overflow: hidden;
             }
 
@@ -863,8 +864,8 @@ render_base_layout([
             /* Responsive Design */
             @media (max-width: 768px) {
                 .hero-section {
-                    min-height: 400px;
-                    padding: 60px 20px;
+                    min-height: 460px;
+                    padding: calc(80px + var(--header-height, 88px)) 20px 80px;
                 }
 
                 .hero-content-wrapper {

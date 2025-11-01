@@ -74,8 +74,26 @@ function render_base_layout(array $options = []): void
     <?php foreach ($scripts as $script): ?>
         <script src="<?= e($script) ?>" defer></script>
     <?php endforeach; ?>
+    <script>
+        (function () {
+            var header = document.querySelector('.site-header');
+            if (!header) {
+                return;
+            }
+
+            var updateHeaderState = function () {
+                if (window.scrollY > 3) {
+                    header.classList.add('is-scrolled');
+                } else {
+                    header.classList.remove('is-scrolled');
+                }
+            };
+
+            updateHeaderState();
+            window.addEventListener('scroll', updateHeaderState, { passive: true });
+        })();
+    </script>
 </body>
 </html>
 <?php
 }
-
