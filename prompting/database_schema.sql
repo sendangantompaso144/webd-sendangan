@@ -1,7 +1,7 @@
 CREATE TABLE data (
     data_key VARCHAR(255) PRIMARY KEY,
     data_value TEXT NOT NULL,
-    data_type VARCHAR(100),
+    data_type enum('string', 'integer', 'float', 'boolean', 'date') NOT NULL default 'string',
     data_updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     data_updated_by VARCHAR(100)
 ); -- Karena data administrasi desa kompleks maka konsep tabel ini hanya untuk menyimpan data dan valuenya saja.
