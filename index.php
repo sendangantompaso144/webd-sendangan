@@ -325,7 +325,7 @@ render_base_layout([
                 align-items: stretch;
                 text-align: center;
                 margin-top: calc(-1 * var(--header-height, 88px));
-                padding: calc(100px + var(--header-height, 88px)) 0 60px;
+                padding: calc(100px + var(--header-height, 88px)) 0 0px;
                 overflow: hidden;
             }
 
@@ -444,9 +444,9 @@ render_base_layout([
 
             /* Stats Section */
             .stats-section {
-                background: white;
-                padding: 40px 20px;
-                margin-top: -60px;
+                background: transparent;
+                padding: 24px 0;
+                margin-top: -30px;
                 position: relative;
                 z-index: 2;
             }
@@ -456,22 +456,24 @@ render_base_layout([
                 margin: 0 auto;
                 display: grid;
                 grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
-                gap: 30px;
+                gap: 20px;
             }
 
             .stat-card {
-                background: #F9FAFB;
-                padding: 30px;
-                border-radius: 16px;
                 display: flex;
-                align-items: center;
-                gap: 20px;
-                transition: transform 0.3s ease, box-shadow 0.3s ease;
+                align-items: flex-start;
+                gap: 16px;
+                padding: 16px 0;
+                border-bottom: 1px solid rgba(255, 255, 255, 0.25);
+                transition: color 0.3s ease;
+            }
+
+            .stat-card:last-child {
+                border-bottom: none;
             }
 
             .stat-card:hover {
-                transform: translateY(-5px);
-                box-shadow: 0 10px 30px rgba(144, 202, 249, 0.15);
+                color: rgba(255, 255, 255, 0.85);
             }
 
             .stat-icon {
@@ -950,16 +952,16 @@ render_base_layout([
             @media (max-width: 768px) {
                 .hero-section {
                     min-height: 460px;
-                    padding: calc(80px + var(--header-height, 88px)) 0 60px;
+                    padding: calc(70px + var(--header-height, 88px)) 0 0px;
                 }
 
                 .hero-content-wrapper {
-                    gap: 24px;
+                    gap: 16px;
                     padding: 0 20px;
                 }
 
                 .hero-headline-viewport {
-                    height: 40px;
+                    height: 30px;
                 }
 
                 .hero-headline-item {
@@ -970,7 +972,7 @@ render_base_layout([
 
                 .stats-section {
                     margin-top: -40px;
-                    padding: 30px 20px;
+                    padding: 24px 16px;
                 }
 
                 .stats-container {
