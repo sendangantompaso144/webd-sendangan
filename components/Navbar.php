@@ -6,15 +6,24 @@
 
 $active ??= '';
 $mainNavigation = navigation('main');
-$brandLogo = app_config('branding.logo', asset('images/logo-desa.svg'));
 $brandName = app_config('name', 'Desa Sendangan');
 $tagline = app_config('tagline', '');
+$logoMinahasa = asset('images/logo-minahasa.png');
+$logoUnsrat = asset('images/logo-unsrat.png');
 ?>
 <header class="site-header">
     <div class="container nav-container">
         <a class="brand" href="<?= e(base_uri('index.php')) ?>">
-            <span class="brand-logo">
-                <img src="<?= e($brandLogo) ?>" alt="Logo Desa <?= e($brandName) ?>">
+            <span
+                class="brand-logo-group"
+                data-tooltip="Kolaborasi Pemerintah Desa Sendangan dan KKT 144 Universitas Sam Ratulangi"
+            >
+                <span class="brand-logo logo2">
+                    <img src="<?= e($logoUnsrat) ?>" alt="Logo Universitas Sam Ratulangi">
+                </span>
+                <span class="brand-logo logo1">
+                    <img src="<?= e($logoMinahasa) ?>" alt="Logo Pemerintah Kabupaten Minahasa">
+                </span>
             </span>
             <span class="brand-text">
                 <strong><?= e($brandName) ?></strong>

@@ -80,6 +80,12 @@ img {
     gap: 1.5rem;
 }
 
+.site-header .nav-container {
+    width: 100%;
+    margin: 0;
+    padding: 1rem clamp(16px, 5vw, 48px);
+}
+
 .brand {
     display: inline-flex;
     align-items: center;
@@ -88,16 +94,92 @@ img {
     color: #ffffff;
 }
 
+.brand-logo-group {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    position: relative;
+}
+
 .brand-logo {
-    width: 44px;
-    height: 44px;
-    border-radius: 50%;
-    background: rgba(255, 255, 255, 0.16);
+    width: 48px;
+    height: 48px;
     display: inline-flex;
     align-items: center;
     justify-content: center;
     overflow: hidden;
-    box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.25);
+    flex-shrink: 0;
+    /* background: rgba(255, 255, 255, 0.18); */
+    /* box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.2); */
+}
+
+.logo2 {
+    width: 58px;
+}
+
+.brand-logo img {
+    width: 70%;
+    height: auto;
+    object-fit: contain;
+}
+
+.brand-logo-plain {
+    height: 52px;
+    width: auto;
+    display: inline-block;
+    object-fit: contain;
+    align-self: center;
+}
+
+.brand-logo-group::after {
+    content: attr(data-tooltip);
+    position: absolute;
+    top: calc(100% + 12px);
+    left: 50%;
+    transform: translate(-50%, -6px);
+    background: rgba(0, 0, 0, 0.85);
+    color: #FFFFFF;
+    padding: 8px 14px;
+    border-radius: 8px;
+    font-size: 12px;
+    font-weight: 500;
+    letter-spacing: 0.02em;
+    white-space: nowrap;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.2s ease, transform 0.2s ease;
+    z-index: 1001;
+    box-shadow: 0 6px 20px rgba(0, 0, 0, 0.25);
+}
+
+.brand-logo-group::before {
+    content: '';
+    position: absolute;
+    top: calc(100% + 4px);
+    left: 50%;
+    transform: translate(-50%, -6px) rotate(45deg);
+    width: 10px;
+    height: 10px;
+    background: rgba(0, 0, 0, 0.85);
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.2s ease, transform 0.2s ease;
+    z-index: 1000;
+}
+
+.brand-logo-group:hover::after {
+    opacity: 1;
+    transform: translate(-50%, 0);
+}
+
+.brand-logo-group:hover::before {
+    opacity: 1;
+    transform: translate(-50%, 0) rotate(45deg);
+}
+
+.brand-logo img {
+    width: 70%;
+    height: auto;
 }
 
 .brand-text strong {
@@ -112,7 +194,7 @@ img {
     color: rgba(255, 255, 255, 0.75);
 }
 
-.main-navigation ul {
+.main-navigation > ul {
     display: flex;
     align-items: center;
     gap: 1.25rem;
@@ -146,9 +228,10 @@ img {
 
 .main-navigation .dropdown {
     position: absolute;
-    inset-inline-start: 0;
-    top: calc(100% + 0.5rem);
-    min-width: 220px;
+    inset-inline-start: 50%;
+    top: 100%;
+    transform: translate(-50%, 8px);
+    min-width: 100%;
     background: #fff;
     box-shadow: var(--shadow-soft);
     border-radius: var(--radius-medium);
@@ -157,15 +240,25 @@ img {
     margin: 0;
     opacity: 0;
     visibility: hidden;
-    transform: translateY(12px);
-    transition: opacity 0.2s ease, transform 0.2s ease;
+    transition: opacity 0.2s ease;
+    display: flex;
+    flex-direction: column;
 }
 
 .main-navigation li.has-children:hover .dropdown,
 .main-navigation li.has-children:focus-within .dropdown {
     opacity: 1;
     visibility: visible;
-    transform: translateY(0);
+    transform: translate(-50%, 0);
+}
+
+.main-navigation li.has-children::after {
+    content: '';
+    position: absolute;
+    inset-inline-start: 0;
+    top: 100%;
+    width: 100%;
+    height: 12px;
 }
 
 .main-navigation .dropdown a {
