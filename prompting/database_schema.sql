@@ -50,8 +50,8 @@ create table ppid_dokumen (
 
 CREATE TABLE pengumuman (
     pengumuman_id INT AUTO_INCREMENT PRIMARY KEY,
-    pengumuman_judul VARCHAR(255) NOT NULL,
     pengumuman_isi TEXT NOT NULL,
+    pengumuman_valid_hingga TIMESTAMP NOT NULL,
     pengumuman_created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     pengumuman_updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
 );

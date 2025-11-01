@@ -35,15 +35,36 @@ render_base_layout([
             ['category' => 'UMKM', 'title' => 'UMKM Lokal', 'status' => 'Dukungan dan pelatihan untuk UMKM'],
             ['category' => 'Budaya', 'title' => 'Seni & Budaya', 'status' => 'Pelestarian tradisi dan festival lokal']
         ];
+        $headlines = $homeData['headlines'] ?? [
+            'Pelayanan administrasi desa buka Senin-Jumat pukul 08.00 - 15.00 WITA.',
+            'Pengumuman: Kerja bakti lingkungan akan dilaksanakan pada Sabtu, 16 November mulai pukul 07.00 WITA.',
+            'Program bantuan pupuk subsidi dibuka kembali, segera daftar di kantor desa sebelum 25 November.'
+        ];
         ?>
         
         <!-- Hero Section dengan Gradient -->
         <section class="hero-section">
             <div class="hero-overlay"></div>
             <div class="hero-content-wrapper">
-                <div class="hero-badge">Selamat datang di</div>
-                <h1 class="hero-title">Website Desa Sendangan</h1>
-                <p class="hero-subtitle">Desa yang penuh kehangatan dan kekeluargaan di Kabupaten Minahasa</p>
+                <div class="hero-main">
+                    <div class="hero-badge">Selamat datang di</div>
+                    <h1 class="hero-title">Website Desa Sendangan</h1>
+                    <p class="hero-subtitle">Desa yang penuh kehangatan dan kekeluargaan di Kabupaten Minahasa</p>
+                </div>
+                <?php if ($headlines !== []): ?>
+                    <div class="hero-headline" data-interval="10000">
+                        <div class="hero-headline-label">Pengumuman desa</div>
+                        <div class="hero-headline-viewport">
+                            <div class="hero-headline-track">
+                                <?php foreach ($headlines as $headline): ?>
+                                    <div class="hero-headline-item">
+                                        <span class="hero-headline-text"><?= e((string) $headline) ?></span>
+                                    </div>
+                                <?php endforeach; ?>
+                            </div>
+                        </div>
+                    </div>
+                <?php endif; ?>
             </div>
         </section>
 
@@ -75,7 +96,7 @@ render_base_layout([
                     <div class="explore-intro">
                         <h2 class="explore-title">Jelajahi Desa Sendangan</h2>
                         <p class="explore-description">
-                            Kenali lebih dekat berbagai aspek desa kami melalui menu utama berikut.
+                            Kenali lebih dekat berbagai aspek desa melalui menu-menu berikut.
                         </p>
                     </div>
                     <?php
@@ -300,11 +321,11 @@ render_base_layout([
                 background-size: cover;
                 background-repeat: no-repeat;
                 display: flex;
-                align-items: center;
+                align-items: stretch;
                 justify-content: center;
                 text-align: center;
                 margin-top: calc(-1 * var(--header-height, 88px));
-                padding: calc(100px + var(--header-height, 88px)) 20px 100px;
+                padding: calc(100px + var(--header-height, 88px)) 0 100px;
                 overflow: hidden;
             }
 
@@ -317,8 +338,25 @@ render_base_layout([
             .hero-content-wrapper {
                 position: relative;
                 z-index: 1;
-                max-width: 800px;
-                transform: translateY(-18%);
+                width: min(1120px, 92vw);
+                margin: 0 auto;
+                display: flex;
+                flex-direction: column;
+                align-items: center;
+                gap: 24px;
+                height: 100%;
+                justify-content: space-between;
+            }
+
+            .hero-main {
+                display: flex;
+                flex-direction: column;
+                align-items: center;
+                gap: 16px;
+                width: 100%;
+                max-width: 720px;
+                margin: 0 auto;
+                text-align: center;
             }
 
             .hero-badge {
@@ -356,6 +394,55 @@ render_base_layout([
                 text-shadow:
                     0 0 3px rgba(0, 0, 0, 0.8),
                     0 0 10px rgba(0, 0, 0, 0.6);
+            }
+
+            .hero-headline {
+                align-self: stretch;
+                width: 100%;
+                text-align: left;
+                color: #FFFFFF;
+                margin-top: auto;
+            }
+
+            .hero-headline-label {
+                font-size: 12px;
+                letter-spacing: 0.18em;
+                text-transform: uppercase;
+                color: rgba(255, 255, 255, 0.7);
+                margin-bottom: 12px;
+            }
+
+            .hero-headline-viewport {
+                position: relative;
+                overflow: hidden;
+                border-radius: 16px;
+                background: rgba(0, 0, 0, 0.55);
+                border: 1px solid rgba(255, 255, 255, 0.15);
+                height: 56px;
+            }
+
+            .hero-headline-track {
+                display: flex;
+                flex-direction: column;
+                transition: transform 0.6s ease;
+                will-change: transform;
+            }
+
+            .hero-headline-item {
+                display: flex;
+                align-items: center;
+                height: 56px;
+                padding: 0 24px;
+                font-size: 18px;
+                font-weight: 600;
+                white-space: nowrap;
+                color: inherit;
+            }
+
+            .hero-headline-text {
+                display: inline-block;
+                will-change: transform;
+                transition: transform 0.8s ease;
             }
 
             /* Stats Section */
@@ -866,11 +953,18 @@ render_base_layout([
             @media (max-width: 768px) {
                 .hero-section {
                     min-height: 460px;
-                    padding: calc(80px + var(--header-height, 88px)) 20px 80px;
+                    padding: calc(80px + var(--header-height, 88px)) 0 80px;
                 }
 
                 .hero-content-wrapper {
-                    transform: none;
+                    gap: 24px;
+                    padding: 0 20px;
+                }
+
+                .hero-headline-item {
+                    height: 52px;
+                    font-size: 16px;
+                    padding: 0 18px;
                 }
 
                 .stats-section {
@@ -933,6 +1027,16 @@ render_base_layout([
                 .hero-badge {
                     font-size: 12px;
                     padding: 6px 16px;
+                }
+
+                .hero-headline-label {
+                    letter-spacing: 0.12em;
+                }
+
+                .hero-headline-item {
+                    height: 48px;
+                    font-size: 15px;
+                    padding: 0 16px;
                 }
 
                 .stat-card {
@@ -1102,6 +1206,139 @@ render_base_layout([
                 color: white;
             }
         </style>
+        <script>
+            document.addEventListener('DOMContentLoaded', function () {
+                var heroHeadline = document.querySelector('.hero-headline');
+                if (!heroHeadline) {
+                    return;
+                }
+
+                var viewport = heroHeadline.querySelector('.hero-headline-viewport');
+                var track = heroHeadline.querySelector('.hero-headline-track');
+                var items = Array.prototype.slice.call(heroHeadline.querySelectorAll('.hero-headline-item'));
+
+                if (!viewport || !track || items.length === 0) {
+                    return;
+                }
+
+                var intervalAttr = parseInt(heroHeadline.getAttribute('data-interval') || '', 10);
+                var interval = Number.isFinite(intervalAttr) && intervalAttr > 0 ? intervalAttr : 10000;
+
+                var currentIndex = 0;
+                var timerId;
+                var positions = [];
+                var positionIndex = -1;
+
+                var setTrackPosition = function (index, animate) {
+                    var itemHeight = items[0] ? items[0].offsetHeight : 0;
+                    var offset = itemHeight * index;
+                    if (!animate) {
+                        var previousTransition = track.style.transition;
+                        track.style.transition = 'none';
+                        track.style.transform = 'translateY(-' + offset + 'px)';
+                        void track.offsetHeight;
+                        track.style.transition = previousTransition || 'transform 0.6s ease';
+                    } else {
+                        track.style.transition = 'transform 0.6s ease';
+                        track.style.transform = 'translateY(-' + offset + 'px)';
+                    }
+                };
+
+                var schedule = function (callback, delay) {
+                    window.clearTimeout(timerId);
+                    timerId = window.setTimeout(callback, delay);
+                };
+
+                var resetText = function (textEl) {
+                    textEl.style.transition = 'none';
+                    textEl.style.transform = 'translateX(0px)';
+                    void textEl.offsetWidth;
+                    textEl.style.transition = 'transform 0.8s ease';
+                };
+
+                var prepareText = function (item) {
+                    var textEl = item.querySelector('.hero-headline-text');
+                    if (!textEl) {
+                        return { positions: [] };
+                    }
+
+                    resetText(textEl);
+
+                    var viewportWidth = viewport.clientWidth;
+                    var textWidth = textEl.scrollWidth;
+
+                    if (textWidth <= viewportWidth + 1) {
+                        return { positions: [], element: textEl };
+                    }
+
+                    var maxOffset = textWidth - viewportWidth;
+                    var stepWidth = viewportWidth;
+                    var stepPositions = [];
+                    var current = 0;
+                    while (current < maxOffset) {
+                        current = Math.min(current + stepWidth, maxOffset);
+                        stepPositions.push(current);
+                    }
+
+                    return { positions: stepPositions, element: textEl };
+                };
+
+                var playHorizontalShift = function () {
+                    positionIndex++;
+                    if (positionIndex >= positions.length) {
+                        schedule(nextHeadline, interval);
+                        return;
+                    }
+
+                    var item = items[currentIndex];
+                    var textEl = item.querySelector('.hero-headline-text');
+                    if (!textEl) {
+                        schedule(nextHeadline, interval);
+                        return;
+                    }
+
+                    textEl.style.transform = 'translateX(-' + positions[positionIndex] + 'px)';
+                    schedule(playHorizontalShift, interval);
+                };
+
+                var nextHeadline = function () {
+                    var nextIndex = (currentIndex + 1) % items.length;
+                    showHeadline(nextIndex);
+                };
+
+                var showHeadline = function (index, options) {
+                    options = options || {};
+                    currentIndex = index;
+
+                    items.forEach(function (item, itemIndex) {
+                        var textEl = item.querySelector('.hero-headline-text');
+                        if (textEl && itemIndex !== index) {
+                            resetText(textEl);
+                        }
+                        item.classList.toggle('is-active', itemIndex === index);
+                    });
+
+                    setTrackPosition(index, !options.instant);
+
+                    var meta = prepareText(items[index]);
+                    positions = meta.positions;
+                    positionIndex = -1;
+
+                    if (positions.length === 0) {
+                        schedule(nextHeadline, interval);
+                    } else {
+                        schedule(playHorizontalShift, interval);
+                    }
+                };
+
+                window.addEventListener('resize', function () {
+                    window.clearTimeout(timerId);
+                    showHeadline(currentIndex, { instant: true });
+                });
+
+                showHeadline(0, { instant: true });
+            });
+        </script>
         <?php
     },
 ]);
