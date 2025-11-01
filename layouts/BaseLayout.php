@@ -76,6 +76,11 @@ function render_base_layout(array $options = []): void
     <?php endforeach; ?>
     <script>
         (function () {
+            var body = document.body;
+            if (!body || !body.classList.contains('page-home')) {
+                return;
+            }
+
             var header = document.querySelector('.site-header');
             if (!header) {
                 return;

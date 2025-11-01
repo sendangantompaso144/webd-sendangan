@@ -10,6 +10,7 @@ render_base_layout([
     'title' => 'Beranda | ' . app_config('name', 'Desa Sendangan'),
     'description' => 'Beranda Desa Sendangan: sambutan, data singkat, dan layanan utama untuk warga.',
     'activePage' => 'home',
+    'bodyClass' => 'page-home',
     'content' => static function () use ($homeData): void {
         $stats = $homeData['stats'] ?? [
             ['label' => 'Jumlah Penduduk', 'value' => '550', 'note' => ''],
