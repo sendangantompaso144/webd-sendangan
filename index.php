@@ -47,9 +47,9 @@ render_base_layout([
             <div class="hero-overlay"></div>
             <div class="hero-content-wrapper">
                 <div class="hero-main">
-                    <div class="hero-badge">Selamat datang di</div>
+                    <div class="hero-badge">Selamat datang</div>
                     <h1 class="hero-title">Website Desa Sendangan</h1>
-                    <p class="hero-subtitle">Desa yang penuh kehangatan dan kekeluargaan di Kabupaten Minahasa</p>
+                    <p class="hero-subtitle">Sumber informasi resmi tentang Desa Sendangan</p>
                 </div>
             </div>
             <?php if ($headlines !== []): ?>
@@ -1221,7 +1221,7 @@ render_base_layout([
                     return;
                 }
 
-                var intervalAttr = parseInt(heroHeadline.getAttribute('data-interval') || '', 10);
+                var intervalAttr = parseInt(heroHeadline.getAttribute('data-interval') || '', 8.5);
                 var interval = Number.isFinite(intervalAttr) && intervalAttr > 0 ? intervalAttr : 10000;
 
                 var currentIndex = 0;

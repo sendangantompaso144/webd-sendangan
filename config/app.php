@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 return [
     'name' => 'Desa Sendangan',
-    'tagline' => 'Portal Resmi Desa Sendangan',
+    'tagline' => 'Tompaso, Minahasa, Sulawesi Utara',
     'meta' => [
         'description' => 'Website resmi Desa Sendangan sebagai pusat informasi publik, transparansi, dan layanan warga.',
         'keywords' => [
