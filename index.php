@@ -67,27 +67,37 @@ render_base_layout([
                 </div>
             </section>
         <?php endif; ?>
-
         <!-- Features Section -->
         <?php if ($features !== []): ?>
-            <section class="content-section">
-                <div class="section-container">
-                    <div class="section-header-wrapper">
-                        <h2 class="section-title">Jelajahi Desa Sendangan</h2>
-                        <p class="section-description">Kenali lebih dekat berbagai aspek desa kami</p>
+            <section class="explore-section">
+                <div class="explore-container">
+                    <div class="explore-intro">
+                        <h2 class="explore-title">Jelajahi Desa Sendangan</h2>
+                        <p class="explore-description">
+                            Kenali lebih dekat berbagai aspek desa kami melalui menu utama berikut.
+                        </p>
                     </div>
-                    <div class="feature-grid">
-                        <?php 
-                        $featureIcons = ['🏛️', '📢', '💰', '🌾'];
-                        foreach ($features as $index => $feature): ?>
-                            <div class="feature-card">
-                                <div class="feature-icon"><?= $featureIcons[$index] ?? '📋' ?></div>
-                                <h3 class="feature-title"><?= e($feature['title'] ?? '') ?></h3>
-                                <p class="feature-description"><?= e($feature['summary'] ?? '') ?></p>
-                                <a class="feature-link" href="<?= e(base_uri($feature['link'] ?? '#')) ?>">
-                                    Kunjungi →
-                                </a>
-                            </div>
+                    <?php
+                        $featureIcons = [
+                            'Profil Desa' => '🏛️',
+                            'Informasi Publik' => '📢',
+                            'Transparansi' => '💰',
+                            'Potensi Desa' => '🌾',
+                        ];
+                    ?>
+                    <div class="explore-grid">
+                        <?php foreach ($features as $feature): ?>
+                            <?php
+                                $title = (string) ($feature['title'] ?? '');
+                                $summary = (string) ($feature['summary'] ?? '');
+                                $href = base_uri($feature['link'] ?? '#');
+                                $icon = $featureIcons[$title] ?? '➡️';
+                            ?>
+                            <a class="explore-card" href="<?= e($href) ?>">
+                                <span class="explore-icon"><?= e($icon) ?></span>
+                                <h3><?= e($title) ?></h3>
+                                <p><?= e($summary) ?></p>
+                            </a>
                         <?php endforeach; ?>
                     </div>
                 </div>
@@ -119,16 +129,18 @@ render_base_layout([
         </section>
 
         <!-- Map Section -->
-        <section class="content-section map-section">
-            <div class="section-container">
-                <div class="section-header-wrapper">
-                    <h2 class="section-title">Peta Desa Sendangan</h2>
-                    <p class="section-description">Lokasi dan wilayah Desa Sendangan</p>
+        <section class="map-section">
+            <div class="map-container">
+                <div class="map-intro">
+                    <h2>Peta Desa Sendangan</h2>
+                    <p>Lokasi fasilitas umum, batas wilayah, dan potensi desa dalam satu tampilan interaktif.</p>
                 </div>
-                <div class="map-placeholder">
-                    <div class="map-icon">📍</div>
-                    <p class="map-text">Peta desa akan ditampilkan di sini</p>
-                    <p class="map-subtext">Segera hadir dengan informasi lokasi lengkap</p>
+                <div class="map-display">
+                    <div class="map-placeholder">
+                        <div class="map-icon">🗺️</div>
+                        <p class="map-text">Peta desa akan ditampilkan di sini</p>
+                        <p class="map-subtext">Segera hadir dengan informasi lokasi lengkap</p>
+                    </div>
                 </div>
             </div>
         </section>
@@ -282,7 +294,10 @@ render_base_layout([
             .hero-section {
                 position: relative;
                 min-height: 500px;
-                background: linear-gradient(135deg, #90CAF9 0%, #E3F2FD 100%);
+                background: linear-gradient(135deg, rgba(21, 101, 192, 0.05) 0%, rgba(144, 202, 249, 0.08) 100%), url('assets/images/hero-background.jpg');
+                background-position: center;
+                background-size: cover;
+                background-repeat: no-repeat;
                 display: flex;
                 align-items: center;
                 justify-content: center;
@@ -294,25 +309,20 @@ render_base_layout([
             .hero-overlay {
                 position: absolute;
                 inset: 0;
-                background: url('data:image/svg+xml,%3Csvg width="60" height="60" xmlns="http://www.w3.org/2000/svg"%3E%3Cpath d="M30 0L60 30L30 60L0 30Z" fill="%23ffffff" opacity="0.05"/%3E%3C/svg%3E');
-                animation: heroPattern 20s linear infinite;
-            }
-
-            @keyframes heroPattern {
-                0% { transform: translate(0, 0); }
-                100% { transform: translate(60px, 60px); }
+                background: rgba(0, 0, 0, 0.45);
             }
 
             .hero-content-wrapper {
                 position: relative;
                 z-index: 1;
                 max-width: 800px;
+                transform: translateY(-18%);
             }
 
             .hero-badge {
                 display: inline-block;
-                background: rgba(255, 255, 255, 0.9);
-                color: #90CAF9;
+                background: rgba(0, 0, 0, 0.55);
+                color: #FFFFFF;
                 padding: 8px 20px;
                 border-radius: 20px;
                 font-size: 14px;
@@ -320,20 +330,30 @@ render_base_layout([
                 margin-bottom: 20px;
                 text-transform: uppercase;
                 letter-spacing: 0.5px;
+                text-shadow:
+                    0 0 3px rgba(0, 0, 0, 0.8),
+                    0 0 8px rgba(0, 0, 0, 0.6);
             }
 
             .hero-title {
                 font-size: clamp(32px, 5vw, 56px);
-                color: #263238;
+                color: #FFFFFF;
                 margin-bottom: 16px;
                 font-weight: 700;
+                text-shadow:
+                    0 0 4px rgba(0, 0, 0, 0.85),
+                    0 0 12px rgba(0, 0, 0, 0.6),
+                    0 0 18px rgba(0, 0, 0, 0.45);
             }
 
             .hero-subtitle {
                 font-size: clamp(16px, 2vw, 20px);
-                color: #37474F;
+                color: #FFFFFF;
                 max-width: 600px;
                 margin: 0 auto;
+                text-shadow:
+                    0 0 3px rgba(0, 0, 0, 0.8),
+                    0 0 10px rgba(0, 0, 0, 0.6);
             }
 
             /* Stats Section */
@@ -847,6 +867,10 @@ render_base_layout([
                     padding: 60px 20px;
                 }
 
+                .hero-content-wrapper {
+                    transform: none;
+                }
+
                 .stats-section {
                     margin-top: -40px;
                     padding: 30px 20px;
@@ -1079,3 +1103,8 @@ render_base_layout([
         <?php
     },
 ]);
+
+
+
+
+
