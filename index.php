@@ -409,7 +409,7 @@ render_base_layout([
             .hero-headline-viewport {
                 position: relative;
                 overflow: hidden;
-                background: rgba(0, 0, 0, 0.6);
+                background: rgba(255, 193, 7, 0.3);
                 height: 30px;
                 display: flex;
                 align-items: stretch;
@@ -440,6 +440,9 @@ render_base_layout([
                 display: inline-block;
                 will-change: transform;
                 transition: transform 0.8s ease;
+                text-shadow:
+                    0 0 2px rgba(0, 0, 0, 0.9),
+                    0 0 4px rgba(0, 0, 0, 0.7);
             }
 
             /* Stats Section */
@@ -961,7 +964,7 @@ render_base_layout([
                 }
 
                 .hero-headline-viewport {
-                    height: 30px;
+                    height: 25px;
                 }
 
                 .hero-headline-item {
