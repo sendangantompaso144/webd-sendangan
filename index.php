@@ -25,10 +25,9 @@ render_base_layout([
         ];
         $administrasi = $homeData['administrasi'] ?? [
             ['label' => 'Total Penduduk', 'value' => '550'],
-            ['label' => 'Jumlah RT/Jaga', 'value' => '3'],
-            ['label' => 'Anak-anak', 'value' => '18%'],
-            ['label' => 'Dewasa', 'value' => '62%'],
-            ['label' => 'Lansia', 'value' => '20%']
+            ['label' => 'Kepala Keluarga', 'value' => '180'],
+            ['label' => 'Laki-laki', 'value' => '270'],
+            ['label' => 'Perempuan', 'value' => '280'],
         ];
         $potentials = $homeData['potentials'] ?? [
             ['category' => 'Wisata', 'title' => 'Kolam Air Panas', 'status' => 'Direncanakan'],
@@ -207,15 +206,34 @@ render_base_layout([
                         <p class="section-description">Data kependudukan Desa Sendangan</p>
                     </div>
                     <div class="admin-grid">
-                        <?php 
-                        $adminIcons = ['👨‍👩‍👧‍👦', '🏘️', '👶', '👔', '👴'];
-                        foreach ($administrasi as $index => $item): ?>
+                        <?php
+                        $adminMap = [];
+                        foreach ($administrasi as $item) {
+                            $label = (string) ($item['label'] ?? '');
+                            if ($label === '') {
+                                continue;
+                            }
+                            $adminMap[$label] = $item;
+                        }
+
+                        $adminDefaults = [
+                            ['label' => 'Total Penduduk', 'icon' => '&#128101;', 'fallbackValue' => '550'],
+                            ['label' => 'Kepala Keluarga', 'icon' => '&#127968;', 'fallbackValue' => '180'],
+                            ['label' => 'Laki-laki', 'icon' => '&#128104;', 'fallbackValue' => '270'],
+                            ['label' => 'Perempuan', 'icon' => '&#128105;', 'fallbackValue' => '280'],
+                        ];
+
+                        foreach ($adminDefaults as $default) {
+                            $source = $adminMap[$default['label']] ?? ['value' => $default['fallbackValue']];
+                            $value = trim((string) ($source['value'] ?? $default['fallbackValue']));
+                            ?>
                             <div class="admin-card">
-                                <div class="admin-icon"><?= $adminIcons[$index] ?? '📊' ?></div>
-                                <div class="admin-value"><?= e($item['value'] ?? '') ?></div>
-                                <div class="admin-label"><?= e($item['label'] ?? '') ?></div>
+                                <div class="admin-value-block">
+                                <div class="admin-value"><?= e($value !== '' ? $value : '0') ?></div>
+                                </div>
+                                <div class="admin-label"><?= e($default['label']) ?></div>
                             </div>
-                        <?php endforeach; ?>
+                        <?php } ?>
                     </div>
                 </div>
             </section>
@@ -740,45 +758,61 @@ render_base_layout([
 
             /* Admin Section */
             .admin-section {
-                background: white;
+                background: #F5F7FA;
             }
 
             .admin-grid {
                 display: grid;
-                grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-                gap: 30px;
+                grid-template-columns: repeat(2, minmax(0, 1fr));
+                gap: 20px;
             }
 
             .admin-card {
-                background: #F9FAFB;
-                padding: 40px 20px;
-                border-radius: 16px;
-                text-align: center;
+                display: grid;
+                grid-template-columns: 160px 1fr;
+                align-items: stretch;
+                background: #FFFFFF;
+                border-radius: 12px;
+                box-shadow: 0 10px 24px rgba(15, 45, 60, 0.12);
+                overflow: hidden;
+                border: 1px solid rgba(226, 232, 240, 0.8);
                 transition: transform 0.3s ease, box-shadow 0.3s ease;
             }
 
             .admin-card:hover {
-                transform: translateY(-5px);
-                box-shadow: 0 10px 30px rgba(144, 202, 249, 0.15);
-                background: white;
+                transform: translateY(-4px);
+                box-shadow: 0 16px 32px rgba(30, 136, 229, 0.18);
             }
 
-            .admin-icon {
-                font-size: 56px;
-                margin-bottom: 16px;
+            .admin-value-block {
+                background: linear-gradient(135deg, #417dffff 0%, #6467ffff 100%);
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                padding: 22px;
             }
 
             .admin-value {
-                font-size: 36px;
+                font-size: 32px;
                 font-weight: 700;
-                color: #90CAF9;
-                margin-bottom: 8px;
+                color: #FFFFFF;
             }
 
             .admin-label {
-                font-size: 14px;
-                color: #607D8B;
-                font-weight: 500;
+                font-size: 26px;    
+                color: #455A64;
+                font-weight: 600;
+                letter-spacing: 0.02em;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                background: #FAFBFC;
+            }
+
+            @media (max-width: 768px) {
+                .admin-grid {
+                    grid-template-columns: 1fr;
+                }
             }
 
             /* Potential Section */

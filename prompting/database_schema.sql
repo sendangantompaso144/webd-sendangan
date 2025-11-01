@@ -60,7 +60,7 @@ create table potensi_desa (
     potensi_id INT AUTO_INCREMENT PRIMARY KEY,
     potensi_judul VARCHAR(255) NOT NULL,
     potensi_isi TEXT NOT NULL,
-    potensi_kategori VARCHAR(100) NOT NULL,
+    potensi_kategori enum('Wisata', 'Budaya', 'Kuliner', 'UMKM') NOT NULL,
     potensi_gmaps_link VARCHAR(255),
     potensi_created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     potensi_updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
