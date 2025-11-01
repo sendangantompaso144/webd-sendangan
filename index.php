@@ -51,21 +51,20 @@ render_base_layout([
                     <h1 class="hero-title">Website Desa Sendangan</h1>
                     <p class="hero-subtitle">Desa yang penuh kehangatan dan kekeluargaan di Kabupaten Minahasa</p>
                 </div>
-                <?php if ($headlines !== []): ?>
-                    <div class="hero-headline" data-interval="10000">
-                        <div class="hero-headline-label">Pengumuman desa</div>
-                        <div class="hero-headline-viewport">
-                            <div class="hero-headline-track">
-                                <?php foreach ($headlines as $headline): ?>
-                                    <div class="hero-headline-item">
-                                        <span class="hero-headline-text"><?= e((string) $headline) ?></span>
-                                    </div>
-                                <?php endforeach; ?>
-                            </div>
+            </div>
+            <?php if ($headlines !== []): ?>
+                <div class="hero-headline" data-interval="10000">
+                    <div class="hero-headline-viewport">
+                        <div class="hero-headline-track">
+                            <?php foreach ($headlines as $headline): ?>
+                                <div class="hero-headline-item">
+                                    <span class="hero-headline-text"><?= e((string) $headline) ?></span>
+                                </div>
+                            <?php endforeach; ?>
                         </div>
                     </div>
-                <?php endif; ?>
-            </div>
+                </div>
+            <?php endif; ?>
         </section>
 
         <!-- Stats Section -->
@@ -321,11 +320,12 @@ render_base_layout([
                 background-size: cover;
                 background-repeat: no-repeat;
                 display: flex;
-                align-items: stretch;
+                flex-direction: column;
                 justify-content: center;
+                align-items: stretch;
                 text-align: center;
                 margin-top: calc(-1 * var(--header-height, 88px));
-                padding: calc(100px + var(--header-height, 88px)) 0 100px;
+                padding: calc(100px + var(--header-height, 88px)) 0 60px;
                 overflow: hidden;
             }
 
@@ -340,12 +340,12 @@ render_base_layout([
                 z-index: 1;
                 width: min(1120px, 92vw);
                 margin: 0 auto;
+                flex: 1 1 auto;
                 display: flex;
                 flex-direction: column;
                 align-items: center;
+                justify-content: center;
                 gap: 24px;
-                height: 100%;
-                justify-content: space-between;
             }
 
             .hero-main {
@@ -397,28 +397,22 @@ render_base_layout([
             }
 
             .hero-headline {
+                position: relative;
+                z-index: 1;
                 align-self: stretch;
                 width: 100%;
+                margin-top: auto;
                 text-align: left;
                 color: #FFFFFF;
-                margin-top: auto;
-            }
-
-            .hero-headline-label {
-                font-size: 12px;
-                letter-spacing: 0.18em;
-                text-transform: uppercase;
-                color: rgba(255, 255, 255, 0.7);
-                margin-bottom: 12px;
             }
 
             .hero-headline-viewport {
                 position: relative;
                 overflow: hidden;
-                border-radius: 16px;
-                background: rgba(0, 0, 0, 0.55);
-                border: 1px solid rgba(255, 255, 255, 0.15);
-                height: 56px;
+                background: rgba(0, 0, 0, 0.6);
+                height: 30px;
+                display: flex;
+                align-items: stretch;
             }
 
             .hero-headline-track {
@@ -431,12 +425,15 @@ render_base_layout([
             .hero-headline-item {
                 display: flex;
                 align-items: center;
-                height: 56px;
-                padding: 0 24px;
+                height: 44px;
+                padding: 0 clamp(18px, 4vw, 40px);
                 font-size: 18px;
                 font-weight: 600;
                 white-space: nowrap;
                 color: inherit;
+                text-align: left;
+                justify-content: flex-start;
+                width: 100%;
             }
 
             .hero-headline-text {
@@ -953,7 +950,7 @@ render_base_layout([
             @media (max-width: 768px) {
                 .hero-section {
                     min-height: 460px;
-                    padding: calc(80px + var(--header-height, 88px)) 0 80px;
+                    padding: calc(80px + var(--header-height, 88px)) 0 60px;
                 }
 
                 .hero-content-wrapper {
@@ -961,10 +958,14 @@ render_base_layout([
                     padding: 0 20px;
                 }
 
+                .hero-headline-viewport {
+                    height: 40px;
+                }
+
                 .hero-headline-item {
-                    height: 52px;
+                    height: 40px;
                     font-size: 16px;
-                    padding: 0 18px;
+                    padding: 0 clamp(14px, 5vw, 26px);
                 }
 
                 .stats-section {
@@ -1029,18 +1030,14 @@ render_base_layout([
                     padding: 6px 16px;
                 }
 
-                .hero-headline-label {
-                    letter-spacing: 0.12em;
+                .hero-headline-viewport {
+                    height: 36px;
                 }
 
                 .hero-headline-item {
-                    height: 48px;
+                    height: 36px;
                     font-size: 15px;
-                    padding: 0 16px;
-                }
-
-                .stat-card {
-                    padding: 20px;
+                    padding: 0 clamp(12px, 6vw, 20px);
                 }
 
                 .stat-icon {
@@ -1083,6 +1080,7 @@ render_base_layout([
                     width: 100%;
                     text-align: center;
                 }
+            }
             }
 
             /* Smooth Scroll Behavior */
