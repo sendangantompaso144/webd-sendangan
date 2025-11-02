@@ -168,27 +168,9 @@ render_base_layout([
                         <h2>Peta dan Demografi</h2>
                         <p>Gambaran umum wilayah dan komposisi penduduk desa.</p>
                     </div>
-                    <div class="demografi-grid"<?php if ($mapInitialView !== 'none'): ?> data-map-section data-map-mode="<?= e($mapInitialView) ?>"<?php endif; ?>>
-                        <?php if ($mapInitialView !== 'none'): ?>
-                            <div class="map-display map-display--interactive" data-map-display>
-                                <?php if ($mapHasDefault): ?>
-                                    <div class="map-image<?= $mapInitialView === 'default' ? ' is-active' : '' ?>" data-map-view="default">
-                                        <img src="<?= e($mapMedia) ?>" alt="<?= e($mapAlt) ?>">
-                                    </div>
-                                <?php endif; ?>
-                                <?php if ($mapHasSatellite): ?>
-                                    <div class="map-image<?= $mapInitialView === 'satellite' ? ' is-active' : '' ?>" data-map-view="satellite">
-                                        <img src="<?= e($mapMediaSatellite) ?>" alt="<?= e($mapSatelliteAlt) ?>">
-                                    </div>
-                                <?php endif; ?>
-                            </div>
-                        <?php else: ?>
-                            <div class="map-placeholder">
-                                <span>Peta Desa Sendangan</span>
-                            </div>
-                        <?php endif; ?>
-                        <div class="demografi-info">
-                            <?php if ($mapToggleEnabled): ?>
+                    <div class="demografi-map-section"<?php if ($mapInitialView !== 'none'): ?> data-map-section data-map-mode="<?= e($mapInitialView) ?>"<?php endif; ?>>
+                        <?php if ($mapToggleEnabled): ?>
+                            <div class="demografi-map-toggle-wrapper">
                                 <div class="map-toggle demografi-map-toggle" data-map-toggle>
                                     <span class="map-toggle-label">Tampilan</span>
                                     <label class="map-toggle-switch">
@@ -200,13 +182,35 @@ render_base_layout([
                                     </label>
                                     <!-- <span class="map-toggle-caption" data-map-toggle-caption data-default="Peta Wilayah" data-satellite="Peta Citra" aria-live="polite">Peta Wilayah</span> -->
                                 </div>
-                            <?php endif; ?>
-                            <?php foreach ($demografi as $item): ?>
-                                <div class="demografi-item">
-                                    <span class="demografi-item__label"><?= e($item['label'] ?? '') ?></span>
-                                    <span class="demografi-item__value"><?= e($item['value'] ?? '') ?></span>
+                            </div>
+                        <?php endif; ?>
+                        <div class="demografi-grid">
+                            <?php if ($mapInitialView !== 'none'): ?>
+                                <div class="map-display map-display--interactive" data-map-display>
+                                    <?php if ($mapHasDefault): ?>
+                                        <div class="map-image<?= $mapInitialView === 'default' ? ' is-active' : '' ?>" data-map-view="default">
+                                            <img src="<?= e($mapMedia) ?>" alt="<?= e($mapAlt) ?>">
+                                        </div>
+                                    <?php endif; ?>
+                                    <?php if ($mapHasSatellite): ?>
+                                        <div class="map-image<?= $mapInitialView === 'satellite' ? ' is-active' : '' ?>" data-map-view="satellite">
+                                            <img src="<?= e($mapMediaSatellite) ?>" alt="<?= e($mapSatelliteAlt) ?>">
+                                        </div>
+                                    <?php endif; ?>
                                 </div>
-                            <?php endforeach; ?>
+                            <?php else: ?>
+                                <div class="map-placeholder">
+                                    <span>Peta Desa Sendangan</span>
+                                </div>
+                            <?php endif; ?>
+                            <div class="demografi-info">
+                                <?php foreach ($demografi as $item): ?>
+                                    <div class="demografi-item">
+                                        <span class="demografi-item__label"><?= e($item['label'] ?? '') ?></span>
+                                        <span class="demografi-item__value"><?= e($item['value'] ?? '') ?></span>
+                                    </div>
+                                <?php endforeach; ?>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -268,7 +272,7 @@ render_base_layout([
         <?php if ($mapInitialView !== 'none'): ?>
             <script>
                 document.addEventListener('DOMContentLoaded', function () {
-                    var mapSection = document.querySelector('.demografi-grid[data-map-section]');
+                    var mapSection = document.querySelector('.demografi-map-section[data-map-section]');
                     if (!mapSection) {
                         return;
                     }

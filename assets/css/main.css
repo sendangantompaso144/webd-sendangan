@@ -979,6 +979,17 @@ img {
     color: rgba(38, 50, 56, 0.75);
 }
 
+.demografi-map-section {
+    display: grid;
+    gap: 1.75rem;
+}
+
+.demografi-map-toggle-wrapper {
+    display: flex;
+    justify-content: flex-start;
+    align-items: center;
+}
+
 .map-display--interactive {
     background: rgba(144, 202, 249, 0.25);
     border-radius: var(--radius-large);
@@ -1729,6 +1740,10 @@ body.modal-open {
     .map-toggle {
         width: 100%;
         justify-content: space-between;
+    }
+
+    .demografi-map-toggle-wrapper {
+        width: 100%;
     }
 
     .hero-stats {
