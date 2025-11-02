@@ -71,7 +71,7 @@ create table gambar_potensi_desa (
     potensi_id INT,
     gambar_namafile VARCHAR(255) NOT NULL,
     gambar_created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (potensi_id) REFERENCES potensi_desa(potensi_id)
+    FOREIGN KEY (potensi_id) REFERENCES potensi_desa(potensi_id) 
 );
 
 create table fasilitas (

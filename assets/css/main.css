@@ -910,6 +910,11 @@ img {
     line-height: 1.7;
 }
 
+.potensi-card__body .btn {
+    margin-top: auto;
+    align-self: flex-start;
+}
+
 .page-header {
     display: flex;
     align-items: flex-end;
