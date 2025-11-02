@@ -108,3 +108,13 @@ create table galeri (
     galeri_gambar VARCHAR(50),
     galeri_created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
+
+create table apbdes (
+    apbdes_id INT AUTO_INCREMENT PRIMARY KEY,
+    apbdes_judul INT NOT NULL,
+    apbdes_file VARCHAR(255) NOT NULL,
+    apbdes_edited_by VARCHAR(100),
+    apbdes_created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    apbdes_updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+); -- Atribut dari APBDes masih belum jelas sehingga konsep dari halaman ini adalah menyajikan gambar/file pdf dari APBDes itu sendiri.
+
