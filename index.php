@@ -254,31 +254,43 @@ render_base_layout([
         $mapData = is_array($homeData['map'] ?? null) ? $homeData['map'] : [];
         $mapTitle = (string) ($mapData['title'] ?? 'Peta Desa Sendangan');
         $mapDescription = (string) ($mapData['description'] ?? 'Lokasi fasilitas umum, batas wilayah, dan potensi desa dalam satu tampilan interaktif.');
-        $mapMediaValue = trim((string) ($mapData['media'] ?? ''));
-        if ($mapMediaValue !== '') {
-            if (str_starts_with($mapMediaValue, 'http')) {
-                $mapMedia = $mapMediaValue;
-            } else {
-                $relativeMedia = ltrim(str_replace('\\', '/', $mapMediaValue), '/');
 
-                if (!str_contains($relativeMedia, '/')) {
-                    if (is_file(base_path('uploads/' . $relativeMedia))) {
-                        $relativeMedia = 'uploads/' . $relativeMedia;
-                    } elseif (is_file(base_path('uploads/assets/' . $relativeMedia))) {
-                        $relativeMedia = 'uploads/assets/' . $relativeMedia;
-                    } else {
-                        $relativeMedia = 'uploads/' . $relativeMedia;
-                    }
-                } elseif (!str_starts_with($relativeMedia, 'uploads/')) {
+        $resolveMapMedia = static function (string $raw): string {
+            $raw = trim($raw);
+            if ($raw === '') {
+                return '';
+            }
+
+            if (str_starts_with($raw, 'http')) {
+                return $raw;
+            }
+
+            $relativeMedia = ltrim(str_replace('\\', '/', $raw), '/');
+
+            if (!str_contains($relativeMedia, '/')) {
+                if (is_file(base_path('uploads/' . $relativeMedia))) {
+                    $relativeMedia = 'uploads/' . $relativeMedia;
+                } elseif (is_file(base_path('uploads/assets/' . $relativeMedia))) {
+                    $relativeMedia = 'uploads/assets/' . $relativeMedia;
+                } else {
                     $relativeMedia = 'uploads/' . $relativeMedia;
                 }
-
-                $mapMedia = base_uri($relativeMedia);
+            } elseif (!str_starts_with($relativeMedia, 'uploads/')) {
+                $relativeMedia = 'uploads/' . $relativeMedia;
             }
-        } else {
-            $mapMedia = '';
-        }
+
+            return base_uri($relativeMedia);
+        };
+
+        $mapMedia = $resolveMapMedia((string) ($mapData['media'] ?? ''));
+        $mapMediaSatellite = $resolveMapMedia((string) ($mapData['media_satellite'] ?? ''));
+
         $mapAlt = $mapTitle !== '' ? $mapTitle : 'Peta Desa Sendangan';
+        $mapSatelliteAlt = $mapAlt . ' - Peta Citra';
+        $mapHasDefault = $mapMedia !== '';
+        $mapHasSatellite = $mapMediaSatellite !== '';
+        $mapToggleEnabled = $mapHasDefault && $mapHasSatellite;
+        $mapInitialView = $mapHasDefault ? 'default' : ($mapHasSatellite ? 'satellite' : 'none');
         ?>
         
         <!-- Hero Section dengan Gradient -->
@@ -364,18 +376,37 @@ render_base_layout([
         </section>
 
         <!-- Map Section -->
-        <section class="map-section">
+        <section class="map-section" data-map-section>
             <div class="map-container">
                 <div class="map-intro">
                     <h2><?= e($mapTitle) ?></h2>
                     <p><?= e($mapDescription) ?></p>
+                    <?php if ($mapToggleEnabled): ?>
+                        <div class="map-toggle" data-map-toggle>
+                            <span class="map-toggle-label">Tampilan</span>
+                            <label class="map-toggle-switch">
+                                <input type="checkbox" data-map-toggle-input aria-label="Tampilkan peta citra (satelit)">
+                                <span class="map-toggle-slider">
+                                    <span class="map-toggle-option map-toggle-option-default">Wilayah</span>
+                                    <span class="map-toggle-option map-toggle-option-satellite">Citra</span>
+                                </span>
+                            </label>
+                            <span class="map-toggle-caption" data-default="Peta Wilayah" data-satellite="Peta Citra" aria-live="polite">Peta Wilayah</span>
+                        </div>
+                    <?php endif; ?>
                 </div>
-                <div class="map-display">
-                    <?php if ($mapMedia !== ''): ?>
-                        <div class="map-image">
+                <div class="map-display" data-map-display>
+                    <?php if ($mapHasDefault): ?>
+                        <div class="map-image<?= $mapInitialView === 'default' ? ' is-active' : '' ?>" data-map-view="default">
                             <img src="<?= e($mapMedia) ?>" alt="<?= e($mapAlt) ?>" />
                         </div>
-                    <?php else: ?>
+                    <?php endif; ?>
+                    <?php if ($mapHasSatellite): ?>
+                        <div class="map-image<?= $mapInitialView === 'satellite' ? ' is-active' : '' ?>" data-map-view="satellite">
+                            <img src="<?= e($mapMediaSatellite) ?>" alt="<?= e($mapSatelliteAlt) ?>" />
+                        </div>
+                    <?php endif; ?>
+                    <?php if (!$mapHasDefault && !$mapHasSatellite): ?>
                         <div class="map-placeholder">
                             <div class="map-icon">&#128205;</div>
                             <p class="map-text">Peta desa akan ditampilkan di sini</p>
@@ -897,6 +928,93 @@ render_base_layout([
                 background: white;
             }
 
+            .map-toggle {
+                margin-top: 16px;
+                display: flex;
+                align-items: center;
+                gap: 16px;
+                flex-wrap: wrap;
+            }
+
+            .map-toggle-label {
+                font-size: 14px;
+                font-weight: 600;
+                color: #1565C0;
+                text-transform: uppercase;
+                letter-spacing: 0.4px;
+            }
+
+            .map-toggle-switch {
+                position: relative;
+                display: inline-flex;
+                align-items: center;
+                cursor: pointer;
+                user-select: none;
+            }
+
+            .map-toggle-switch input {
+                position: absolute;
+                opacity: 0;
+                pointer-events: none;
+            }
+
+            .map-toggle-slider {
+                position: relative;
+                display: inline-flex;
+                align-items: center;
+                justify-content: space-between;
+                background: #E3F2FD;
+                border-radius: 999px;
+                padding: 4px;
+                min-width: 160px;
+                font-size: 13px;
+                font-weight: 600;
+                text-transform: uppercase;
+                letter-spacing: 0.4px;
+                color: #1565C0;
+                transition: background 0.3s ease;
+            }
+
+            .map-toggle-slider::before {
+                content: '';
+                position: absolute;
+                top: 4px;
+                bottom: 4px;
+                left: 4px;
+                width: calc(50% - 4px);
+                border-radius: 999px;
+                background: #1565C0;
+                transition: transform 0.3s ease;
+            }
+
+            .map-toggle-switch input:checked + .map-toggle-slider::before {
+                transform: translateX(100%);
+            }
+
+            .map-toggle-option {
+                position: relative;
+                z-index: 1;
+                flex: 1;
+                text-align: center;
+                transition: color 0.3s ease;
+            }
+
+            .map-toggle-switch input:not(:checked) + .map-toggle-slider .map-toggle-option-default,
+            .map-toggle-switch input:checked + .map-toggle-slider .map-toggle-option-satellite {
+                color: #FFFFFF;
+            }
+
+            .map-toggle-switch input:not(:checked) + .map-toggle-slider .map-toggle-option-satellite,
+            .map-toggle-switch input:checked + .map-toggle-slider .map-toggle-option-default {
+                color: #1565C0;
+            }
+
+            .map-toggle-caption {
+                font-size: 13px;
+                color: #546E7A;
+                font-weight: 500;
+            }
+
             .map-placeholder {
                 background: linear-gradient(135deg, #E3F2FD 0%, #F9FAFB 100%);
                 border-radius: 20px;
@@ -913,6 +1031,14 @@ render_base_layout([
                 align-items: center;
                 justify-content: center;
                 box-shadow: inset 0 0 0 1px rgba(144, 202, 249, 0.2);
+            }
+
+            .map-display[data-map-display] .map-image {
+                display: none;
+            }
+
+            .map-display[data-map-display] .map-image.is-active {
+                display: flex;
             }
 
             .map-image img {
@@ -1239,6 +1365,20 @@ render_base_layout([
 
             /* Responsive Design */
             @media (max-width: 768px) {
+                .map-toggle {
+                    gap: 12px;
+                }
+
+                .map-toggle-slider {
+                    min-width: 140px;
+                    font-size: 12px;
+                }
+
+                .map-toggle-label,
+                .map-toggle-caption {
+                    font-size: 12px;
+                }
+
                 .hero-section {
                     min-height: 460px;
                     padding: calc(30px + var(--header-height, 88px)) 0 0;
@@ -1507,134 +1647,184 @@ render_base_layout([
         <script>
             document.addEventListener('DOMContentLoaded', function () {
                 var heroHeadline = document.querySelector('.hero-headline');
-                if (!heroHeadline) {
-                    return;
-                }
+                if (heroHeadline) {
+                    var viewport = heroHeadline.querySelector('.hero-headline-viewport');
+                    var track = heroHeadline.querySelector('.hero-headline-track');
+                    var items = Array.prototype.slice.call(heroHeadline.querySelectorAll('.hero-headline-item'));
 
-                var viewport = heroHeadline.querySelector('.hero-headline-viewport');
-                var track = heroHeadline.querySelector('.hero-headline-track');
-                var items = Array.prototype.slice.call(heroHeadline.querySelectorAll('.hero-headline-item'));
+                    if (viewport && track && items.length > 0) {
+                        var intervalAttr = parseInt(heroHeadline.getAttribute('data-interval') || '', 8.5);
+                        var interval = Number.isFinite(intervalAttr) && intervalAttr > 0 ? intervalAttr : 10000;
 
-                if (!viewport || !track || items.length === 0) {
-                    return;
-                }
+                        var currentIndex = 0;
+                        var timerId;
+                        var positions = [];
+                        var positionIndex = -1;
 
-                var intervalAttr = parseInt(heroHeadline.getAttribute('data-interval') || '', 8.5);
-                var interval = Number.isFinite(intervalAttr) && intervalAttr > 0 ? intervalAttr : 10000;
+                        var setTrackPosition = function (index, animate) {
+                            var itemHeight = items[0] ? items[0].offsetHeight : 0;
+                            var offset = itemHeight * index;
+                            if (!animate) {
+                                var previousTransition = track.style.transition;
+                                track.style.transition = 'none';
+                                track.style.transform = 'translateY(-' + offset + 'px)';
+                                void track.offsetHeight;
+                                track.style.transition = previousTransition || 'transform 0.6s ease';
+                            } else {
+                                track.style.transition = 'transform 0.6s ease';
+                                track.style.transform = 'translateY(-' + offset + 'px)';
+                            }
+                        };
 
-                var currentIndex = 0;
-                var timerId;
-                var positions = [];
-                var positionIndex = -1;
+                        var schedule = function (callback, delay) {
+                            window.clearTimeout(timerId);
+                            timerId = window.setTimeout(callback, delay);
+                        };
 
-                var setTrackPosition = function (index, animate) {
-                    var itemHeight = items[0] ? items[0].offsetHeight : 0;
-                    var offset = itemHeight * index;
-                    if (!animate) {
-                        var previousTransition = track.style.transition;
-                        track.style.transition = 'none';
-                        track.style.transform = 'translateY(-' + offset + 'px)';
-                        void track.offsetHeight;
-                        track.style.transition = previousTransition || 'transform 0.6s ease';
-                    } else {
-                        track.style.transition = 'transform 0.6s ease';
-                        track.style.transform = 'translateY(-' + offset + 'px)';
-                    }
-                };
+                        var resetText = function (textEl) {
+                            textEl.style.transition = 'none';
+                            textEl.style.transform = 'translateX(0px)';
+                            void textEl.offsetWidth;
+                            textEl.style.transition = 'transform 0.8s ease';
+                        };
 
-                var schedule = function (callback, delay) {
-                    window.clearTimeout(timerId);
-                    timerId = window.setTimeout(callback, delay);
-                };
+                        var prepareText = function (item) {
+                            var textEl = item.querySelector('.hero-headline-text');
+                            if (!textEl) {
+                                return { positions: [] };
+                            }
 
-                var resetText = function (textEl) {
-                    textEl.style.transition = 'none';
-                    textEl.style.transform = 'translateX(0px)';
-                    void textEl.offsetWidth;
-                    textEl.style.transition = 'transform 0.8s ease';
-                };
-
-                var prepareText = function (item) {
-                    var textEl = item.querySelector('.hero-headline-text');
-                    if (!textEl) {
-                        return { positions: [] };
-                    }
-
-                    resetText(textEl);
-
-                    var viewportWidth = viewport.clientWidth;
-                    var textWidth = textEl.scrollWidth;
-
-                    if (textWidth <= viewportWidth + 1) {
-                        return { positions: [], element: textEl };
-                    }
-
-                    var maxOffset = textWidth - viewportWidth;
-                    var stepWidth = viewportWidth;
-                    var stepPositions = [];
-                    var current = 0;
-                    while (current < maxOffset) {
-                        current = Math.min(current + stepWidth, maxOffset);
-                        stepPositions.push(current);
-                    }
-
-                    return { positions: stepPositions, element: textEl };
-                };
-
-                var playHorizontalShift = function () {
-                    positionIndex++;
-                    if (positionIndex >= positions.length) {
-                        schedule(nextHeadline, interval);
-                        return;
-                    }
-
-                    var item = items[currentIndex];
-                    var textEl = item.querySelector('.hero-headline-text');
-                    if (!textEl) {
-                        schedule(nextHeadline, interval);
-                        return;
-                    }
-
-                    textEl.style.transform = 'translateX(-' + positions[positionIndex] + 'px)';
-                    schedule(playHorizontalShift, interval);
-                };
-
-                var nextHeadline = function () {
-                    var nextIndex = (currentIndex + 1) % items.length;
-                    showHeadline(nextIndex);
-                };
-
-                var showHeadline = function (index, options) {
-                    options = options || {};
-                    currentIndex = index;
-
-                    items.forEach(function (item, itemIndex) {
-                        var textEl = item.querySelector('.hero-headline-text');
-                        if (textEl && itemIndex !== index) {
                             resetText(textEl);
-                        }
-                        item.classList.toggle('is-active', itemIndex === index);
-                    });
 
-                    setTrackPosition(index, !options.instant);
+                            var viewportWidth = viewport.clientWidth;
+                            var textWidth = textEl.scrollWidth;
 
-                    var meta = prepareText(items[index]);
-                    positions = meta.positions;
-                    positionIndex = -1;
+                            if (textWidth <= viewportWidth + 1) {
+                                return { positions: [], element: textEl };
+                            }
 
-                    if (positions.length === 0) {
-                        schedule(nextHeadline, interval);
-                    } else {
-                        schedule(playHorizontalShift, interval);
+                            var maxOffset = textWidth - viewportWidth;
+                            var stepWidth = viewportWidth;
+                            var stepPositions = [];
+                            var current = 0;
+                            while (current < maxOffset) {
+                                current = Math.min(current + stepWidth, maxOffset);
+                                stepPositions.push(current);
+                            }
+
+                            return { positions: stepPositions, element: textEl };
+                        };
+
+                        var playHorizontalShift = function () {
+                            positionIndex++;
+                            if (positionIndex >= positions.length) {
+                                schedule(nextHeadline, interval);
+                                return;
+                            }
+
+                            var item = items[currentIndex];
+                            var textEl = item.querySelector('.hero-headline-text');
+                            if (!textEl) {
+                                schedule(nextHeadline, interval);
+                                return;
+                            }
+
+                            textEl.style.transform = 'translateX(-' + positions[positionIndex] + 'px)';
+                            schedule(playHorizontalShift, interval);
+                        };
+
+                        var nextHeadline = function () {
+                            var nextIndex = (currentIndex + 1) % items.length;
+                            showHeadline(nextIndex);
+                        };
+
+                        var showHeadline = function (index, options) {
+                            options = options || {};
+                            currentIndex = index;
+
+                            items.forEach(function (item, itemIndex) {
+                                var textEl = item.querySelector('.hero-headline-text');
+                                if (textEl && itemIndex !== index) {
+                                    resetText(textEl);
+                                }
+                                item.classList.toggle('is-active', itemIndex === index);
+                            });
+
+                            setTrackPosition(index, !options.instant);
+
+                            var meta = prepareText(items[index]);
+                            positions = meta.positions;
+                            positionIndex = -1;
+
+                            if (positions.length === 0) {
+                                schedule(nextHeadline, interval);
+                            } else {
+                                schedule(playHorizontalShift, interval);
+                            }
+                        };
+
+                        window.addEventListener('resize', function () {
+                            window.clearTimeout(timerId);
+                            showHeadline(currentIndex, { instant: true });
+                        });
+
+                        showHeadline(0, { instant: true });
                     }
-                };
+                }
 
-                window.addEventListener('resize', function () {
-                    window.clearTimeout(timerId);
-                    showHeadline(currentIndex, { instant: true });
-                });
+                var mapSection = document.querySelector('[data-map-section]');
+                if (mapSection) {
+                    var toggleInput = mapSection.querySelector('[data-map-toggle-input]');
+                    var mapItemsArray = Array.prototype.slice.call(mapSection.querySelectorAll('[data-map-view]'));
+                    var toggleCaption = mapSection.querySelector('[data-map-toggle-caption]');
 
-                showHeadline(0, { instant: true });
+                    if (mapItemsArray.length > 0) {
+                        var setMapMode = function (mode) {
+                            mapSection.setAttribute('data-map-mode', mode);
+                        };
+
+                        var updateMapView = function (showSatellite) {
+                            var activeView = showSatellite ? 'satellite' : 'default';
+                            var hasTarget = mapItemsArray.some(function (item) {
+                                return item.getAttribute('data-map-view') === activeView;
+                            });
+
+                            if (!hasTarget) {
+                                activeView = mapItemsArray[0].getAttribute('data-map-view') || activeView;
+                            }
+
+                            mapItemsArray.forEach(function (item) {
+                                item.classList.toggle('is-active', item.getAttribute('data-map-view') === activeView);
+                            });
+
+                            if (toggleCaption) {
+                                var defaultText = toggleCaption.getAttribute('data-default') || toggleCaption.textContent || 'Peta Wilayah';
+                                var satelliteText = toggleCaption.getAttribute('data-satellite') || 'Peta Citra';
+                                toggleCaption.textContent = activeView === 'satellite' ? satelliteText : defaultText;
+                            }
+
+                            setMapMode(activeView);
+                        };
+
+                        if (toggleInput && mapItemsArray.length > 1) {
+                            updateMapView(toggleInput.checked);
+                            toggleInput.addEventListener('change', function () {
+                                updateMapView(toggleInput.checked);
+                            });
+                        } else {
+                            var fallbackView = mapItemsArray[0].getAttribute('data-map-view') || 'default';
+                            mapItemsArray[0].classList.add('is-active');
+
+                            if (toggleCaption) {
+                                var defaultText = toggleCaption.getAttribute('data-default') || toggleCaption.textContent || 'Peta Wilayah';
+                                var satelliteText = toggleCaption.getAttribute('data-satellite') || 'Peta Citra';
+                                toggleCaption.textContent = fallbackView === 'satellite' ? satelliteText : defaultText;
+                            }
+
+                            setMapMode(fallbackView);
+                        }
+                    }
+                }
             });
         </script>
         <?php

@@ -10,6 +10,7 @@ $greetingDefaultParagraphs = [
 $dynamicDefaults = [
     'greeting.hukum_tua' => implode("\n\n", $greetingDefaultParagraphs),
     'media.peta_desa_sendangan' => 'peta-desa-sendangan.jpg',
+    'media.peta_desa_sendangan_citra' => 'peta-desa-sendangan-citra.jpg',
 ];
 
 $dynamicValues = data_values($dynamicDefaults) + $dynamicDefaults;
@@ -32,6 +33,9 @@ if ($paragraphs === []) {
 $mapMedia = trim((string) $dynamicValues['media.peta_desa_sendangan']);
 $mapMedia = $mapMedia !== '' ? $mapMedia : null;
 
+$mapMediaSatellite = trim((string) ($dynamicValues['media.peta_desa_sendangan_citra'] ?? ''));
+$mapMediaSatellite = $mapMediaSatellite !== '' ? $mapMediaSatellite : null;
+
 return [
     'greeting' => [
         'badge' => 'SAMBUTAN HUKUM TUA',
@@ -45,6 +49,7 @@ return [
         'title' => 'Peta Desa Sendangan',
         'description' => 'Lokasi fasilitas umum, batas wilayah, dan potensi desa dalam satu tampilan interaktif.',
         'media' => $mapMedia,
+        'media_satellite' => $mapMediaSatellite,
     ],
     'stats' => [
         ['label' => 'Jumlah Penduduk', 'value' => '1.234', 'note' => 'Data 2024'],
