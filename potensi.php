@@ -15,7 +15,7 @@ render_base_layout([
         $wisata = $potensi['wisata'] ?? [];
         $seni = $potensi['seni'] ?? [];
         ?>
-        <section class="section">
+        <!-- <section class="section">
             <div class="container page-header">
                 <div>
                     <span class="chip">Potensi Desa</span>
@@ -23,7 +23,7 @@ render_base_layout([
                     <p>Kembangkan potensi lokal menuju Desa Sendangan yang berdaya dan berkelanjutan.</p>
                 </div>
             </div>
-        </section>
+        </section> -->
 
         <?php if ($umkm !== []): ?>
             <section class="section">
