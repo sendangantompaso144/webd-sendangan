@@ -55,6 +55,7 @@ function render_base_layout(array $options = []): void
             <meta name="<?= e($name) ?>" content="<?= e($value) ?>">
         <?php endif; ?>
     <?php endforeach; ?>
+    <link rel="icon" type="image/x-icon" href="assets/images/favicon.ico" />
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link rel="stylesheet" href="<?= e($fontsUrl) ?>">

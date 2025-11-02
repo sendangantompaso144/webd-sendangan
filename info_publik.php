@@ -46,8 +46,8 @@ render_base_layout([
         </section>
 
         <?php if ($tab === 'berita'): ?>
-            <section class="section">
-                <div class="container">
+            <section class="section section-info-content">
+                <div class="container info-content">
                     <div class="news-grid">
                         <?php foreach ($berita as $item): ?>
                             <?php
@@ -86,8 +86,8 @@ render_base_layout([
                 </div>
             </section>
         <?php elseif ($tab === 'pengumuman'): ?>
-            <section class="section">
-                <div class="container">
+            <section class="section section-info-content">
+                <div class="container info-content">
                     <ul class="announcement-list">
                         <?php foreach ($pengumuman as $item): ?>
                             <li>
@@ -102,8 +102,8 @@ render_base_layout([
                 </div>
             </section>
         <?php elseif ($tab === 'galeri'): ?>
-            <section class="section">
-                <div class="container">
+            <section class="section section-info-content">
+                <div class="container info-content">
                     <div class="gallery-grid">
                         <?php foreach ($galeri as $item): ?>
                             <figure class="gallery-card">
