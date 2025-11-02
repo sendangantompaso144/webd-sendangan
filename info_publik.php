@@ -104,22 +104,160 @@ render_base_layout([
         <?php elseif ($tab === 'galeri'): ?>
             <section class="section section-info-content">
                 <div class="container info-content">
-                    <div class="gallery-grid gallery-grid--plain">
-                        <?php foreach ($galeri as $item): ?>
+                    <div class="gallery-grid gallery-grid--plain" data-gallery-grid>
+                        <?php foreach ($galeri as $index => $item): ?>
                             <?php
                             $galleryCaption = (string) ($item['galeri_keterangan'] ?? $item['judul'] ?? '');
                             $galleryImage = (string) ($item['gambar'] ?? asset('images/placeholder-gallery.jpg'));
+                            $downloadUrl = (string) ($item['galeri_download'] ?? $galleryImage);
                             ?>
-                            <figure class="gallery-plain-card">
+                            <button
+                                class="gallery-plain-card"
+                                type="button"
+                                data-gallery-item
+                                data-gallery-index="<?= e((string) $index) ?>"
+                                data-gallery-src="<?= e($galleryImage) ?>"
+                                data-gallery-caption="<?= e($galleryCaption) ?>"
+                                data-gallery-download="<?= e($downloadUrl) ?>"
+                            >
                                 <img src="<?= e($galleryImage) ?>" alt="<?= e($galleryCaption !== '' ? $galleryCaption : 'Galeri Desa Sendangan') ?>">
                                 <?php if ($galleryCaption !== ''): ?>
                                     <figcaption><?= e($galleryCaption) ?></figcaption>
                                 <?php endif; ?>
-                            </figure>
+                            </button>
                         <?php endforeach; ?>
                     </div>
                 </div>
             </section>
+            <div class="gallery-modal" data-gallery-modal hidden>
+                <div class="gallery-modal__overlay" data-gallery-close></div>
+                <div class="gallery-modal__dialog" role="dialog" aria-modal="true" aria-label="Pratinjau Galeri">
+                    <div class="gallery-modal__media">
+                        <button class="gallery-modal__close" type="button" data-gallery-close aria-label="Tutup galeri">&times;</button>
+                        <img src="" alt="" data-gallery-modal-image>
+                    </div>
+                    <div class="gallery-modal__sidebar">
+                        <p class="gallery-modal__caption" data-gallery-modal-caption></p>
+                        <div class="gallery-modal__controls">
+                            <button class="btn btn-secondary" type="button" data-gallery-prev>&larr; Sebelumnya</button>
+                            <button class="btn btn-secondary" type="button" data-gallery-next>Selanjutnya &rarr;</button>
+                            <a class="btn btn-primary" data-gallery-download href="#" download>
+                                Unduh Gambar
+                            </a>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <script>
+                document.addEventListener('DOMContentLoaded', function () {
+                    var galleryGrid = document.querySelector('[data-gallery-grid]');
+                    var modal = document.querySelector('[data-gallery-modal]');
+
+                    if (!galleryGrid || !modal) {
+                        return;
+                    }
+
+                    var items = Array.from(galleryGrid.querySelectorAll('[data-gallery-item]'));
+                    var modalImage = modal.querySelector('[data-gallery-modal-image]');
+                    var modalCaption = modal.querySelector('[data-gallery-modal-caption]');
+                    var closeButtons = modal.querySelectorAll('[data-gallery-close]');
+                    var prevButton = modal.querySelector('[data-gallery-prev]');
+                    var nextButton = modal.querySelector('[data-gallery-next]');
+                    var downloadLink = modal.querySelector('[data-gallery-download]');
+
+                    var activeIndex = -1;
+
+                    function updateModal(index) {
+                        if (!items[index]) {
+                            return;
+                        }
+                        var trigger = items[index];
+                        var src = trigger.getAttribute('data-gallery-src') || '';
+                        var caption = trigger.getAttribute('data-gallery-caption') || '';
+                        var download = trigger.getAttribute('data-gallery-download') || src;
+
+                        if (modalImage) {
+                            modalImage.src = src;
+                            modalImage.alt = caption || 'Galeri Desa Sendangan';
+                        }
+
+                        if (modalCaption) {
+                            modalCaption.textContent = caption;
+                        }
+
+                        if (downloadLink) {
+                            downloadLink.href = download;
+                        }
+
+                        activeIndex = index;
+                        updateControlsState();
+                    }
+
+                    function updateControlsState() {
+                        if (!prevButton || !nextButton) {
+                            return;
+                        }
+
+                        prevButton.disabled = activeIndex <= 0;
+                        nextButton.disabled = activeIndex >= items.length - 1;
+                    }
+
+                    function openModal(index) {
+                        updateModal(index);
+                        modal.removeAttribute('hidden');
+                        document.body.classList.add('modal-open');
+                    }
+
+                    function closeModal() {
+                        modal.setAttribute('hidden', 'hidden');
+                        document.body.classList.remove('modal-open');
+                        if (modalImage) {
+                            modalImage.src = '';
+                        }
+                        activeIndex = -1;
+                    }
+
+                    items.forEach(function (item, index) {
+                        item.addEventListener('click', function () {
+                            openModal(index);
+                        });
+                    });
+
+                    closeButtons.forEach(function (btn) {
+                        btn.addEventListener('click', closeModal);
+                    });
+
+                    if (prevButton) {
+                        prevButton.addEventListener('click', function () {
+                            if (activeIndex > 0) {
+                                updateModal(activeIndex - 1);
+                            }
+                        });
+                    }
+
+                    if (nextButton) {
+                        nextButton.addEventListener('click', function () {
+                            if (activeIndex < items.length - 1) {
+                                updateModal(activeIndex + 1);
+                            }
+                        });
+                    }
+
+                    document.addEventListener('keydown', function (event) {
+                        if (modal.hasAttribute('hidden')) {
+                            return;
+                        }
+
+                        if (event.key === 'Escape') {
+                            closeModal();
+                        } else if (event.key === 'ArrowLeft' && activeIndex > 0) {
+                            updateModal(activeIndex - 1);
+                        } else if (event.key === 'ArrowRight' && activeIndex < items.length - 1) {
+                            updateModal(activeIndex + 1);
+                        }
+                    });
+                });
+            </script>
         <?php endif; ?>
         <?php
     },

@@ -1151,6 +1151,147 @@ img {
     transform: translateY(0);
 }
 
+.gallery-plain-card {
+    border: none;
+    cursor: pointer;
+}
+
+.gallery-modal {
+    position: fixed;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(15, 23, 42, 0.45);
+    padding: 2rem;
+    z-index: 1000;
+}
+
+.gallery-modal[hidden] {
+    display: none;
+}
+
+.gallery-modal__overlay {
+    position: absolute;
+    inset: 0;
+}
+
+.gallery-modal__dialog {
+    position: relative;
+    display: grid;
+    grid-template-columns: 7fr 3fr;
+    width: min(1100px, 90%);
+    max-height: 80vh;
+    background: #fff;
+    border-radius: var(--radius-large);
+    overflow: hidden;
+    box-shadow: 0 30px 60px rgba(15, 23, 42, 0.25);
+    z-index: 1;
+}
+
+.gallery-modal__media {
+    position: relative;
+    background: #111827;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.gallery-modal__media img {
+    max-width: 100%;
+    max-height: 100%;
+    object-fit: contain;
+}
+
+.gallery-modal__close {
+    position: absolute;
+    top: 1.25rem;
+    left: 1.25rem;
+    background: rgba(15, 23, 42, 0.6);
+    color: #fff;
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    border: none;
+    font-size: 1.5rem;
+    line-height: 1;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: background 0.2s ease;
+}
+
+.gallery-modal__close:hover {
+    background: rgba(15, 23, 42, 0.75);
+}
+
+.gallery-modal__sidebar {
+    padding: 2rem;
+    display: flex;
+    flex-direction: column;
+    gap: 1.5rem;
+    background: #f8fafc;
+}
+
+.gallery-modal__caption {
+    margin: 0;
+    color: rgba(15, 23, 42, 0.8);
+    font-size: 1.05rem;
+    line-height: 1.6;
+}
+
+.gallery-modal__controls {
+    display: grid;
+    gap: 0.75rem;
+}
+
+.gallery-modal__controls .btn {
+    width: 100%;
+    justify-content: center;
+}
+
+body.modal-open {
+    overflow: hidden;
+}
+
+@media (max-width: 960px) {
+    .gallery-modal {
+        padding: 1.5rem;
+    }
+
+    .gallery-modal__dialog {
+        grid-template-columns: 1fr;
+        max-height: 90vh;
+        width: min(90%, 720px);
+    }
+
+    .gallery-modal__sidebar {
+        padding: 1.5rem;
+    }
+
+    .gallery-modal__close {
+        left: auto;
+        right: 1.25rem;
+    }
+}
+
+@media (max-width: 640px) {
+    .gallery-modal {
+        padding: 1rem;
+    }
+
+    .gallery-modal__controls {
+        grid-template-columns: 1fr;
+    }
+
+    .gallery-modal__close {
+        width: 36px;
+        height: 36px;
+        font-size: 1.25rem;
+    }
+}
+
 .page-header {
     display: flex;
     align-items: flex-end;
