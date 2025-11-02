@@ -29,11 +29,81 @@ render_base_layout([
             ['label' => 'Laki-laki', 'value' => '270'],
             ['label' => 'Perempuan', 'value' => '280'],
         ];
-        $potentials = $homeData['potentials'] ?? [
-            ['category' => 'Wisata', 'title' => 'Kolam Air Panas', 'status' => 'Direncanakan'],
-            ['category' => 'UMKM', 'title' => 'UMKM Lokal', 'status' => 'Dukungan dan pelatihan untuk UMKM'],
-            ['category' => 'Budaya', 'title' => 'Seni & Budaya', 'status' => 'Pelestarian tradisi dan festival lokal']
-        ];
+        $potensiList = data_source('potensi', []);
+        $potentials = [];
+
+        if (is_array($potensiList)) {
+            if (array_is_list($potensiList)) {
+                $potentials = $potensiList;
+            } else {
+                foreach ($potensiList as $item) {
+                    if (is_array($item)) {
+                        $potentials[] = $item;
+                    }
+                }
+            }
+        }
+
+        if ($potentials === []) {
+            $potentials = [
+                [
+                    'potensi_kategori' => 'Wisata',
+                    'potensi_judul' => 'Kolam Air Panas',
+                    'potensi_isi' => 'Destinasi wisata air panas dalam tahap pengembangan.',
+                    'potensi_gmaps_link' => '#',
+                ],
+                [
+                    'potensi_kategori' => 'UMKM',
+                    'potensi_judul' => 'UMKM Lokal',
+                    'potensi_isi' => 'Pelatihan dan dukungan bagi pelaku UMKM desa.',
+                    'potensi_gmaps_link' => '#',
+                ],
+                [
+                    'potensi_kategori' => 'Budaya',
+                    'potensi_judul' => 'Seni & Budaya',
+                    'potensi_isi' => 'Festival dan kegiatan budaya rutin desa.',
+                    'potensi_gmaps_link' => '#',
+                ],
+            ];
+        }
+
+        $potentialsByCategory = [];
+        foreach ($potentials as $entry) {
+            if (!is_array($entry)) {
+                continue;
+            }
+
+            $category = (string) ($entry['potensi_kategori'] ?? 'Lainnya');
+            if (!isset($potentialsByCategory[$category])) {
+                $potentialsByCategory[$category] = [];
+            }
+
+            $potentialsByCategory[$category][] = $entry;
+        }
+
+        foreach ($potentialsByCategory as &$categoryItems) {
+            usort(
+                $categoryItems,
+                static function (array $a, array $b): int {
+                    return strcmp((string) ($b['potensi_created_at'] ?? ''), (string) ($a['potensi_created_at'] ?? ''));
+                }
+            );
+        }
+        unset($categoryItems);
+
+        $categoryPreference = ['Wisata', 'Budaya', 'Kuliner', 'UMKM'];
+        $orderedPotentialCategories = [];
+        foreach ($categoryPreference as $cat) {
+            if (isset($potentialsByCategory[$cat])) {
+                $orderedPotentialCategories[] = $cat;
+            }
+        }
+        foreach ($potentialsByCategory as $cat => $_) {
+            if (!in_array($cat, $orderedPotentialCategories, true)) {
+                $orderedPotentialCategories[] = $cat;
+            }
+        }
+        $orderedPotentialCategories = array_slice($orderedPotentialCategories, 0, 4);
         $headlines = $homeData['headlines'] ?? [
             'Pelayanan administrasi desa buka Senin-Jumat pukul 08.00 - 15.00 WITA.',
             'Pengumuman: Kerja bakti lingkungan akan dilaksanakan pada Sabtu, 16 November mulai pukul 07.00 WITA.',
@@ -45,18 +115,21 @@ render_base_layout([
                 'berita_isi' => 'Pemerintah desa berkolaborasi dengan komunitas pemuda untuk memberikan pelatihan pemasaran digital kepada para pelaku UMKM. Materi mencakup pengelolaan media sosial, fotografi produk, hingga penggunaan marketplace.',
                 'berita_gambar' => 'https://images.unsplash.com/photo-1520607162513-77705c0f0d4a',
                 'berita_dilihat' => 128,
+                'berita_tanggal' => '10 Oktober 2025',
             ],
             [
                 'berita_judul' => 'Jadwal Layanan Administrasi Desa',
                 'berita_isi' => 'Pelayanan administrasi kependudukan kini tersedia setiap Selasa dan Kamis pukul 09.00-14.00 WITA. Warga diimbau membawa dokumen pendukung yang lengkap untuk mempercepat proses pelayanan.',
                 'berita_gambar' => 'https://images.unsplash.com/photo-1522071820081-009f0129c71c',
                 'berita_dilihat' => 94,
+                'berita_tanggal' => '05 Oktober 2025',
             ],
             [
                 'berita_judul' => 'Gotong Royong Bersih Desa',
                 'berita_isi' => 'Kegiatan gotong royong rutin digelar pada Sabtu pekan pertama di setiap bulan. Warga berkumpul di Balai Desa sebelum bersama-sama membersihkan area publik dan saluran air.',
                 'berita_gambar' => 'https://images.unsplash.com/photo-1521737604893-d14cc237f11d',
                 'berita_dilihat' => 76,
+                'berita_tanggal' => '28 September 2025',
             ],
         ];
         ?>
@@ -91,10 +164,10 @@ render_base_layout([
             <section class="stats-section">
                 <div class="stats-container">
                     <?php 
-                    $icons = ['👥', '📍', '🏘️'];
+                    $icons = ['&#128101;', '&#127968;', '&#127963;', '&#128176;'];
                     foreach ($stats as $index => $stat): ?>
                         <div class="stat-card">
-                            <div class="stat-icon"><?= $icons[$index] ?? '📊' ?></div>
+                            <div class="stat-icon"><?= $icons[$index] ?? '&#9733;' ?></div>
                             <div class="stat-content">
                                 <div class="stat-value"><?= e($stat['value'] ?? '') ?></div>
                                 <div class="stat-label"><?= e($stat['label'] ?? '') ?></div>
@@ -104,42 +177,6 @@ render_base_layout([
                             </div>
                         </div>
                     <?php endforeach; ?>
-                </div>
-            </section>
-        <?php endif; ?>
-        <!-- Features Section -->
-        <?php if ($features !== []): ?>
-            <section class="explore-section">
-                <div class="explore-container">
-                    <div class="explore-intro">
-                        <h2 class="explore-title">Jelajahi Desa Sendangan</h2>
-                        <p class="explore-description">
-                            Kenali lebih dekat berbagai aspek desa melalui menu-menu berikut.
-                        </p>
-                    </div>
-                    <?php
-                        $featureIcons = [
-                            'Profil Desa' => '🏛️',
-                            'Informasi Publik' => '📢',
-                            'Transparansi' => '💰',
-                            'Potensi Desa' => '🌾',
-                        ];
-                    ?>
-                    <div class="explore-grid">
-                        <?php foreach ($features as $feature): ?>
-                            <?php
-                                $title = (string) ($feature['title'] ?? '');
-                                $summary = (string) ($feature['summary'] ?? '');
-                                $href = base_uri($feature['link'] ?? '#');
-                                $icon = $featureIcons[$title] ?? '➡️';
-                            ?>
-                            <a class="explore-card" href="<?= e($href) ?>">
-                                <span class="explore-icon"><?= e($icon) ?></span>
-                                <h3><?= e($title) ?></h3>
-                                <p><?= e($summary) ?></p>
-                            </a>
-                        <?php endforeach; ?>
-                    </div>
                 </div>
             </section>
         <?php endif; ?>
@@ -217,50 +254,8 @@ render_base_layout([
             </div>
         </section>
 
-        <!-- Administrasi Section -->
-        <?php if ($administrasi !== []): ?>
-            <section class="content-section admin-section">
-                <div class="section-container">
-                    <div class="section-header-wrapper">
-                        <h2 class="section-title">Administrasi Penduduk</h2>
-                        <p class="section-description">Data kependudukan Desa Sendangan</p>
-                    </div>
-                    <div class="admin-grid">
-                        <?php
-                        $adminMap = [];
-                        foreach ($administrasi as $item) {
-                            $label = (string) ($item['label'] ?? '');
-                            if ($label === '') {
-                                continue;
-                            }
-                            $adminMap[$label] = $item;
-                        }
-
-                        $adminDefaults = [
-                            ['label' => 'Total Penduduk', 'icon' => '&#128101;', 'fallbackValue' => '550'],
-                            ['label' => 'Kepala Keluarga', 'icon' => '&#127968;', 'fallbackValue' => '180'],
-                            ['label' => 'Laki-laki', 'icon' => '&#128104;', 'fallbackValue' => '270'],
-                            ['label' => 'Perempuan', 'icon' => '&#128105;', 'fallbackValue' => '280'],
-                        ];
-
-                        foreach ($adminDefaults as $default) {
-                            $source = $adminMap[$default['label']] ?? ['value' => $default['fallbackValue']];
-                            $value = trim((string) ($source['value'] ?? $default['fallbackValue']));
-                            ?>
-                            <div class="admin-card">
-                                <div class="admin-value-block">
-                                <div class="admin-value"><?= e($value !== '' ? $value : '0') ?></div>
-                                </div>
-                                <div class="admin-label"><?= e($default['label']) ?></div>
-                            </div>
-                        <?php } ?>
-                    </div>
-                </div>
-            </section>
-        <?php endif; ?>
-
         <!-- Potensi Section -->
-        <?php if ($potentials !== []): ?>
+        <?php if ($orderedPotentialCategories !== []): ?>
             <section class="content-section potential-section">
                 <div class="section-container">
                     <div class="section-header-flex">
@@ -269,25 +264,43 @@ render_base_layout([
                             <p class="section-description">Potensi dan peluang Desa Sendangan</p>
                         </div>
                         <a class="header-button" href="<?= e(base_uri('potensi.php')) ?>">
-                            Lihat Semua Potensi →
+                            Lihat Semua Potensi &rarr;
                         </a>
                     </div>
                     <div class="potential-grid">
-                        <?php 
-                        $potentialIcons = ['🌊', '🛍️', '🎭'];
-                        foreach ($potentials as $index => $potential): ?>
+                        <?php foreach ($orderedPotentialCategories as $category): ?>
+                            <?php
+                            $entries = $potentialsByCategory[$category] ?? [];
+                            if ($entries === []) {
+                                continue;
+                            }
+                            $primary = $entries[0];
+                            $title = (string) ($primary['potensi_judul'] ?? '');
+                            $description = (string) ($primary['potensi_isi'] ?? '');
+                            $summary = mb_substr($description, 0, 140);
+                            if (mb_strlen($description) > 140) {
+                                $summary .= '...';
+                            }
+                            $gmaps = (string) ($primary['potensi_gmaps_link'] ?? '');
+                            $iconLabel = strtoupper(substr($category, 0, 1));
+                            ?>
                             <div class="potential-card">
-                                <div class="potential-icon"><?= $potentialIcons[$index] ?? '🌟' ?></div>
-                                <div class="potential-category"><?= e($potential['category'] ?? '') ?></div>
-                                <h3 class="potential-title"><?= e($potential['title'] ?? '') ?></h3>
-                                <?php if (!empty($potential['status'])): ?>
-                                    <p class="potential-status"><?= e($potential['status']) ?></p>
+                                <div class="potential-icon"><?= e($iconLabel !== '' ? $iconLabel : 'P') ?></div>
+                                <div class="potential-category"><?= e($category) ?></div>
+                                <h3 class="potential-title"><?= e($title) ?></h3>
+                                <?php if ($summary !== ''): ?>
+                                    <p class="potential-status"><?= e($summary) ?></p>
+                                <?php endif; ?>
+                                <?php if ($gmaps !== ''): ?>
+                                    <a class="btn btn-secondary" href="<?= e($gmaps) ?>" target="_blank" rel="noopener">
+                                        Buka di Google Maps
+                                    </a>
                                 <?php endif; ?>
                             </div>
                         <?php endforeach; ?>
                     </div>
                     <div class="potential-note">
-                        <p>Keterangan: Potensi desa akan ditambahkan nanti</p>
+                        <p>Data potensi bersumber dari basis potensi desa. Kunjungi halaman Potensi Desa untuk informasi selengkapnya.</p>
                     </div>
                 </div>
             </section>
@@ -317,6 +330,7 @@ render_base_layout([
                                 $newsExcerpt .= '...';
                             }
                             $newsViews = isset($news['berita_dilihat']) ? (int) $news['berita_dilihat'] : 0;
+                            $newsDate = (string) ($news['berita_tanggal'] ?? $news['berita_created_at'] ?? '');
                             ?>
                             <article class="news-card">
                                 <?php if (!empty($news['berita_gambar'])): ?>
@@ -327,6 +341,9 @@ render_base_layout([
                                 <div class="news-card-content">
                                     <div class="news-meta">
                                         <span class="news-views"><?= e(number_format($newsViews)) ?> kali dibaca</span>
+                                        <?php if ($newsDate !== ''): ?>
+                                            <span class="news-date"><?= e($newsDate) ?></span>
+                                        <?php endif; ?>
                                     </div>
                                     <h3 class="news-title"><?= e($newsTitle) ?></h3>
                                     <p class="news-excerpt"><?= e($newsExcerpt) ?></p>
@@ -1429,6 +1446,7 @@ render_base_layout([
         <?php
     },
 ]);
+
 
 
 
