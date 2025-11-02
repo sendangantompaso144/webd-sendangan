@@ -4,10 +4,11 @@ declare(strict_types=1);
 
 return [
     'stats' => [
-        ['label' => 'Jumlah Penduduk', 'value' => '1.234', 'note' => 'Data 2024'],
-        ['label' => 'Jumlah KK', 'value' => '345', 'note' => ''],
-        ['label' => 'Luas Wilayah', 'value' => '420 ha', 'note' => ''],
-        ['label' => 'Jumlah Jaga', 'value' => '8', 'note' => ''],
+        // ['label' => 'Jumlah Penduduk', 'value' => '1.234', 'note' => 'Data 2024'],
+        // ['label' => 'Jumlah KK', 'value' => '345', 'note' => ''],
+        // ['label' => 'Luas Wilayah', 'value' => '420 ha', 'note' => ''],
+        // ['label' => 'Jumlah Jaga', 'value' => '8', 'note' => ''],
+        // Data lama sudah tidak terpakai, telah mengunakan data dari /data/profil.php
     ],
     'features' => [
         [
@@ -72,5 +73,11 @@ return [
         ['label' => 'Data Penduduk', 'value' => 'Terintegrasi Dukcapil'],
         ['label' => 'Layanan Online', 'value' => 'Mandiri & On-site'],
         ['label' => 'Jam Pelayanan', 'value' => 'Senin - Jumat, 08.00 - 15.00 WITA'],
+    ],
+    'greeting' => [
+        'title' => 'Johny R. Mandagi',
+        'text' => [
+            'Selamat datang di website resmi Desa Sendangan. Kami berkomitmen untuk memberikan pelayanan terbaik kepada masyarakat dan membangun desa yang lebih maju, sejahtera, dan bermartabat. Melalui website ini, kami berharap dapat meningkatkan transparansi dan komunikasi dengan seluruh warga. Mari bersama-sama membangun Desa Sendangan yang lebih baik.',
+        ],
     ],
 ];

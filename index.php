@@ -264,13 +264,26 @@ render_base_layout([
                             <img src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='400' height='500'%3E%3Crect fill='%23E3F2FD' width='400' height='500'/%3E%3Ctext x='50%25' y='50%25' font-size='16' fill='%2390CAF9' text-anchor='middle' dominant-baseline='middle'%3EJohny R. Mandagi%3C/text%3E%3C/svg%3E" alt="Johny R. Mandagi" />
                         </div>
                     </div>
+                    <?php
+                    $greeting = $homeData['greeting'] ?? null;
+                    $greetingTitle = is_array($greeting) ? (string) ($greeting['title'] ?? '') : '';
+                    $greetingText = is_array($greeting) ? $greeting['text'] ?? [] : [];
+                    if (!is_array($greetingText)) {
+                        $greetingText = [];
+                    }
+                    ?>
                     <div class="greeting-content">
                         <div class="greeting-badge">SAMBUTAN HUKUM TUA</div>
-                        <h2 class="greeting-title">Johny R. Mandagi</h2>
-                        <div class="greeting-text">
-                            <p>Selamat datang di website resmi Desa Sendangan. Kami berkomitmen untuk memberikan pelayanan terbaik kepada masyarakat dan membangun desa yang lebih maju, sejahtera, dan bermartabat.</p>
-                            <p>Melalui website ini, kami berharap dapat meningkatkan transparansi dan komunikasi dengan seluruh warga. Mari bersama-sama membangun Desa Sendangan yang lebih baik.</p>
-                        </div>
+                        <?php if ($greetingTitle !== ''): ?>
+                            <h2 class="greeting-title"><?= e($greetingTitle) ?></h2>
+                        <?php endif; ?>
+                        <?php if ($greetingText !== []): ?>
+                            <div class="greeting-text">
+                                <?php foreach ($greetingText as $paragraph): ?>
+                                    <p><?= e((string) $paragraph) ?></p>
+                                <?php endforeach; ?>
+                            </div>
+                        <?php endif; ?>
                         <a class="greeting-button" href="<?= e(base_uri('profil.php')) ?>">
                             Profil Desa →
                         </a>
