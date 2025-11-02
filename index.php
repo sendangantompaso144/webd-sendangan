@@ -206,6 +206,79 @@ render_base_layout([
                 'berita_tanggal' => '28 September 2025',
             ],
         ];
+        $defaultGreetingMessages = [
+            'Selamat datang di website resmi Desa Sendangan. Kami berkomitmen untuk memberikan pelayanan terbaik kepada masyarakat dan membangun desa yang lebih maju, sejahtera, dan bermartabat.',
+            'Melalui website ini, kami berharap dapat meningkatkan transparansi dan komunikasi dengan seluruh warga. Mari bersama-sama membangun Desa Sendangan yang lebih baik.',
+        ];
+        $greetingData = is_array($homeData['greeting'] ?? null) ? $homeData['greeting'] : [];
+        $greetingBadge = (string) ($greetingData['badge'] ?? 'SAMBUTAN HUKUM TUA');
+        $greetingName = trim((string) ($greetingData['name'] ?? 'Johny R. Mandagi'));
+        $greetingMessageRaw = $greetingData['message'] ?? $defaultGreetingMessages;
+        $greetingMessages = [];
+        if (is_string($greetingMessageRaw)) {
+            $chunks = preg_split("/\r?\n\r?\n|\r?\n/", $greetingMessageRaw) ?: [];
+            foreach ($chunks as $chunk) {
+                $chunk = trim((string) $chunk);
+                if ($chunk !== '') {
+                    $greetingMessages[] = $chunk;
+                }
+            }
+        } elseif (is_array($greetingMessageRaw)) {
+            foreach ($greetingMessageRaw as $chunk) {
+                if (!is_string($chunk)) {
+                    continue;
+                }
+                $chunk = trim($chunk);
+                if ($chunk !== '') {
+                    $greetingMessages[] = $chunk;
+                }
+            }
+        }
+        if ($greetingMessages === []) {
+            $greetingMessages = $defaultGreetingMessages;
+        }
+        $greetingCtaLabel = (string) ($greetingData['cta_label'] ?? 'Profil Desa');
+        $greetingCtaLink = (string) ($greetingData['cta_link'] ?? 'profil.php');
+        $greetingCtaHref = $greetingCtaLink !== '' && str_starts_with($greetingCtaLink, 'http')
+            ? $greetingCtaLink
+            : base_uri($greetingCtaLink !== '' ? ltrim($greetingCtaLink, '/') : 'profil.php');
+        $greetingPhoto = (string) ($greetingData['photo'] ?? '');
+        if ($greetingPhoto !== '') {
+            $greetingPhoto = str_starts_with($greetingPhoto, 'http')
+                ? $greetingPhoto
+                : base_uri('uploads/' . ltrim($greetingPhoto, '/'));
+        } else {
+            $greetingPhoto = '';
+        }
+        $greetingAlt = $greetingName !== '' ? $greetingName : 'Hukum Tua Desa Sendangan';
+        $mapData = is_array($homeData['map'] ?? null) ? $homeData['map'] : [];
+        $mapTitle = (string) ($mapData['title'] ?? 'Peta Desa Sendangan');
+        $mapDescription = (string) ($mapData['description'] ?? 'Lokasi fasilitas umum, batas wilayah, dan potensi desa dalam satu tampilan interaktif.');
+        $mapMediaValue = trim((string) ($mapData['media'] ?? ''));
+        if ($mapMediaValue !== '') {
+            if (str_starts_with($mapMediaValue, 'http')) {
+                $mapMedia = $mapMediaValue;
+            } else {
+                $relativeMedia = ltrim(str_replace('\\', '/', $mapMediaValue), '/');
+
+                if (!str_contains($relativeMedia, '/')) {
+                    if (is_file(base_path('uploads/' . $relativeMedia))) {
+                        $relativeMedia = 'uploads/' . $relativeMedia;
+                    } elseif (is_file(base_path('uploads/assets/' . $relativeMedia))) {
+                        $relativeMedia = 'uploads/assets/' . $relativeMedia;
+                    } else {
+                        $relativeMedia = 'uploads/' . $relativeMedia;
+                    }
+                } elseif (!str_starts_with($relativeMedia, 'uploads/')) {
+                    $relativeMedia = 'uploads/' . $relativeMedia;
+                }
+
+                $mapMedia = base_uri($relativeMedia);
+            }
+        } else {
+            $mapMedia = '';
+        }
+        $mapAlt = $mapTitle !== '' ? $mapTitle : 'Peta Desa Sendangan';
         ?>
         
         <!-- Hero Section dengan Gradient -->
@@ -261,19 +334,30 @@ render_base_layout([
                 <div class="greeting-grid">
                     <div class="greeting-photo">
                         <div class="photo-frame">
-                            <img src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='400' height='500'%3E%3Crect fill='%23E3F2FD' width='400' height='500'/%3E%3Ctext x='50%25' y='50%25' font-size='16' fill='%2390CAF9' text-anchor='middle' dominant-baseline='middle'%3EJohny R. Mandagi%3C/text%3E%3C/svg%3E" alt="Johny R. Mandagi" />
+                            <?php if ($greetingPhoto !== ''): ?>
+                                <img src="<?= e($greetingPhoto) ?>" alt="<?= e($greetingAlt) ?>" />
+                            <?php else: ?>
+                                <img src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='400' height='500'%3E%3Crect fill='%23E3F2FD' width='400' height='500'/%3E%3Ctext x='50%25' y='50%25' font-size='16' fill='%2390CAF9' text-anchor='middle' dominant-baseline='middle'%3E<?= rawurlencode($greetingAlt) ?>%3C/text%3E%3C/svg%3E" alt="<?= e($greetingAlt) ?>" />
+                            <?php endif; ?>
                         </div>
                     </div>
                     <div class="greeting-content">
-                        <div class="greeting-badge">SAMBUTAN HUKUM TUA</div>
-                        <h2 class="greeting-title">Johny R. Mandagi</h2>
-                        <div class="greeting-text">
-                            <p>Selamat datang di website resmi Desa Sendangan. Kami berkomitmen untuk memberikan pelayanan terbaik kepada masyarakat dan membangun desa yang lebih maju, sejahtera, dan bermartabat.</p>
-                            <p>Melalui website ini, kami berharap dapat meningkatkan transparansi dan komunikasi dengan seluruh warga. Mari bersama-sama membangun Desa Sendangan yang lebih baik.</p>
-                        </div>
-                        <a class="greeting-button" href="<?= e(base_uri('profil.php')) ?>">
-                            Profil Desa →
-                        </a>
+                        <div class="greeting-badge"><?= e($greetingBadge) ?></div>
+                        <?php if ($greetingName !== ''): ?>
+                            <h2 class="greeting-title"><?= e($greetingName) ?></h2>
+                        <?php endif; ?>
+                        <?php if ($greetingMessages !== []): ?>
+                            <div class="greeting-text">
+                                <?php foreach ($greetingMessages as $paragraph): ?>
+                                    <p><?= e($paragraph) ?></p>
+                                <?php endforeach; ?>
+                            </div>
+                        <?php endif; ?>
+                        <?php if ($greetingCtaLabel !== ''): ?>
+                            <a class="greeting-button" href="<?= e($greetingCtaHref) ?>">
+                                <?= e($greetingCtaLabel) ?> <span class="greeting-button-icon">&rarr;</span>
+                            </a>
+                        <?php endif; ?>
                     </div>
                 </div>
             </div>
@@ -283,15 +367,21 @@ render_base_layout([
         <section class="map-section">
             <div class="map-container">
                 <div class="map-intro">
-                    <h2>Peta Desa Sendangan</h2>
-                    <p>Lokasi fasilitas umum, batas wilayah, dan potensi desa dalam satu tampilan interaktif.</p>
+                    <h2><?= e($mapTitle) ?></h2>
+                    <p><?= e($mapDescription) ?></p>
                 </div>
                 <div class="map-display">
-                    <div class="map-placeholder">
-                        <div class="map-icon">🗺️</div>
-                        <p class="map-text">Peta desa akan ditampilkan di sini</p>
-                        <p class="map-subtext">Segera hadir dengan informasi lokasi lengkap</p>
-                    </div>
+                    <?php if ($mapMedia !== ''): ?>
+                        <div class="map-image">
+                            <img src="<?= e($mapMedia) ?>" alt="<?= e($mapAlt) ?>" />
+                        </div>
+                    <?php else: ?>
+                        <div class="map-placeholder">
+                            <div class="map-icon">&#128205;</div>
+                            <p class="map-text">Peta desa akan ditampilkan di sini</p>
+                            <p class="map-subtext">Segera hadir dengan informasi lokasi lengkap</p>
+                        </div>
+                    <?php endif; ?>
                 </div>
             </div>
         </section>
@@ -316,7 +406,7 @@ render_base_layout([
                     foreach ($positions as $position): ?>
                         <div class="structure-card">
                             <div class="structure-photo">
-                                <img src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='200' height='200'%3E%3Crect fill='%23E3F2FD' width='200' height='200' rx='100'/%3E%3Ctext x='50%25' y='50%25' font-size='60' text-anchor='middle' dominant-baseline='middle'%3E👤%3C/text%3E%3C/svg%3E" alt="<?= e($position['role']) ?>" />
+                                <img src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='200' height='200'%3E%3Crect fill='%23E3F2FD' width='200' height='200' rx='100'/%3E%3Ctext x='50%25' y='50%25' font-size='60' text-anchor='middle' dominant-baseline='middle'%3EðŸ‘¤%3C/text%3E%3C/svg%3E" alt="<?= e($position['role']) ?>" />
                             </div>
                             <?php if (!empty($position['name'])): ?>
                                 <div class="structure-name"><?= e($position['name']) ?></div>
@@ -792,6 +882,16 @@ render_base_layout([
                 box-shadow: 0 6px 20px rgba(144, 202, 249, 0.4);
             }
 
+            .greeting-button-icon {
+                margin-left: 8px;
+                display: inline-block;
+                transition: transform 0.3s ease;
+            }
+
+            .greeting-button:hover .greeting-button-icon {
+                transform: translateX(4px);
+            }
+
             /* Map Section */
             .map-section {
                 background: white;
@@ -803,6 +903,23 @@ render_base_layout([
                 padding: 100px 40px;
                 text-align: center;
                 border: 2px dashed #90CAF9;
+            }
+
+            .map-image {
+                background: #E3F2FD;
+                border-radius: 20px;
+                padding: 16px;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                box-shadow: inset 0 0 0 1px rgba(144, 202, 249, 0.2);
+            }
+
+            .map-image img {
+                width: 100%;
+                height: auto;
+                border-radius: 12px;
+                object-fit: cover;
             }
 
             .map-icon {
@@ -1196,6 +1313,15 @@ render_base_layout([
                 .map-icon {
                     font-size: 60px;
                 }
+
+                .map-image {
+                    padding: 12px;
+                    border-radius: 16px;
+                }
+
+                .map-image img {
+                    border-radius: 10px;
+                }
             }
 
             @media (max-width: 480px) {
@@ -1514,6 +1640,10 @@ render_base_layout([
         <?php
     },
 ]);
+
+
+
+
 
 
 

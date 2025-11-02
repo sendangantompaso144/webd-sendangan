@@ -9,23 +9,73 @@ return [
         'Nama Sendangan sendiri memiliki arti "terbitnya matahari", menggambarkan letak geografis desa yang berada di bagian timur, tepat menghadap ke arah matahari terbit.',
         'Desa Sendangan dikenal dengan suasana alam yang sejuk dan masyarakat yang menjunjung tinggi nilai gotong royong. Kehidupan warga yang sederhana namun harmonis menjadi cerminan semangat kebersamaan yang telah diwariskan sejak berdirinya desa ini pada abad ke-17.',
     ],
-    'demografi_dasar' => [
-        'luas_wilayah_ha' => 103,
-        'jumlah_jaga' => 2,
-        'penduduk_jaga' => [
-            [
-                'nama' => 'Jaga 1',
-                'laki_laki' => 74,
-                'perempuan' => 78,
-            ],
-            [
-                'nama' => 'Jaga 2',
-                'laki_laki' => 98,
-                'perempuan' => 102,
-            ],
-        ],
-        'kepala_keluarga' => 137,
-    ],
+    'demografi_dasar' => (static function (): array {
+        $baseDefaults = [
+            'demografi.luas_wilayah_ha' => 103,
+            'demografi.jumlah_jaga' => 2,
+            'demografi.kepala_keluarga' => 137,
+        ];
+
+        $demografi = data_values($baseDefaults) + $baseDefaults;
+
+        $jumlahJaga = (int) ($demografi['demografi.jumlah_jaga'] ?? $baseDefaults['demografi.jumlah_jaga']);
+        $jumlahJaga = $jumlahJaga > 0 ? $jumlahJaga : $baseDefaults['demografi.jumlah_jaga'];
+
+        $presetPenduduk = [
+            1 => ['laki_laki' => 74, 'perempuan' => 78],
+            2 => ['laki_laki' => 98, 'perempuan' => 102],
+        ];
+
+        $jagaCount = max($jumlahJaga, count($presetPenduduk));
+        $pendudukDefaults = [];
+        for ($index = 1; $index <= $jagaCount; $index++) {
+            $preset = $presetPenduduk[$index] ?? ['laki_laki' => 0, 'perempuan' => 0];
+            $pendudukDefaults[sprintf('demografi.jaga_%d_laki', $index)] = $preset['laki_laki'];
+            $pendudukDefaults[sprintf('demografi.jaga_%d_perempuan', $index)] = $preset['perempuan'];
+        }
+
+        $pendudukValues = $pendudukDefaults === []
+            ? []
+            : data_values($pendudukDefaults) + $pendudukDefaults;
+
+        $pendudukJaga = [];
+        for ($index = 1; $index <= $jagaCount; $index++) {
+            $laki = (int) ($pendudukValues[sprintf('demografi.jaga_%d_laki', $index)] ?? 0);
+            $perempuan = (int) ($pendudukValues[sprintf('demografi.jaga_%d_perempuan', $index)] ?? 0);
+
+            if ($laki === 0 && $perempuan === 0 && !isset($pendudukDefaults[sprintf('demografi.jaga_%d_laki', $index)])) {
+                continue;
+            }
+
+            $pendudukJaga[] = [
+                'nama' => 'Jaga ' . $index,
+                'laki_laki' => $laki,
+                'perempuan' => $perempuan,
+            ];
+        }
+
+        if ($pendudukJaga === []) {
+            $pendudukJaga = [
+                [
+                    'nama' => 'Jaga 1',
+                    'laki_laki' => 74,
+                    'perempuan' => 78,
+                ],
+                [
+                    'nama' => 'Jaga 2',
+                    'laki_laki' => 98,
+                    'perempuan' => 102,
+                ],
+            ];
+        }
+
+        return [
+            'luas_wilayah_ha' => (float) ($demografi['demografi.luas_wilayah_ha'] ?? $baseDefaults['demografi.luas_wilayah_ha']),
+            'jumlah_jaga' => $jumlahJaga,
+            'penduduk_jaga' => $pendudukJaga,
+            'kepala_keluarga' => (int) ($demografi['demografi.kepala_keluarga'] ?? $baseDefaults['demografi.kepala_keluarga']),
+        ];
+    })(),
     'fasilitas' => [
         [
             'fasilitas_nama' => 'Kantor Hukum Tua',

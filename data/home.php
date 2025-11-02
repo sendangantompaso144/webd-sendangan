@@ -2,7 +2,50 @@
 
 declare(strict_types=1);
 
+$greetingDefaultParagraphs = [
+    'Selamat datang di website resmi Desa Sendangan. Kami berkomitmen untuk memberikan pelayanan terbaik kepada masyarakat dan membangun desa yang lebih maju, sejahtera, dan bermartabat.',
+    'Melalui website ini, kami berharap dapat meningkatkan transparansi dan komunikasi dengan seluruh warga. Mari bersama-sama membangun Desa Sendangan yang lebih baik.',
+];
+
+$dynamicDefaults = [
+    'greeting.hukum_tua' => implode("\n\n", $greetingDefaultParagraphs),
+    'media.peta_desa_sendangan' => 'peta-desa-sendangan.jpg',
+];
+
+$dynamicValues = data_values($dynamicDefaults) + $dynamicDefaults;
+
+$rawGreeting = (string) $dynamicValues['greeting.hukum_tua'];
+$paragraphs = array_values(
+    array_filter(
+        array_map(
+            static fn (string $line): string => trim($line),
+            preg_split("/\r?\n\r?\n|\r?\n/", $rawGreeting) ?: []
+        ),
+        static fn (string $line): bool => $line !== ''
+    )
+);
+
+if ($paragraphs === []) {
+    $paragraphs = $greetingDefaultParagraphs;
+}
+
+$mapMedia = trim((string) $dynamicValues['media.peta_desa_sendangan']);
+$mapMedia = $mapMedia !== '' ? $mapMedia : null;
+
 return [
+    'greeting' => [
+        'badge' => 'SAMBUTAN HUKUM TUA',
+        'name' => 'Johny R. Mandagi',
+        'message' => $paragraphs,
+        'cta_label' => 'Profil Desa',
+        'cta_link' => 'profil.php',
+        'photo' => null,
+    ],
+    'map' => [
+        'title' => 'Peta Desa Sendangan',
+        'description' => 'Lokasi fasilitas umum, batas wilayah, dan potensi desa dalam satu tampilan interaktif.',
+        'media' => $mapMedia,
+    ],
     'stats' => [
         ['label' => 'Jumlah Penduduk', 'value' => '1.234', 'note' => 'Data 2024'],
         ['label' => 'Jumlah KK', 'value' => '345', 'note' => ''],
@@ -74,3 +117,4 @@ return [
         ['label' => 'Jam Pelayanan', 'value' => 'Senin - Jumat, 08.00 - 15.00 WITA'],
     ],
 ];
+

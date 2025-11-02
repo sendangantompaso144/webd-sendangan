@@ -290,6 +290,74 @@ function data_source(string $path, mixed $default = null): mixed
 }
 
 /**
+ * Cast a raw data table value to a PHP type based on the data_type column.
+ */
+function normalize_data_value(mixed $value, string $type, mixed $default): mixed
+{
+    if ($value === null) {
+        return $default;
+    }
+
+    $type = strtolower($type);
+
+    return match ($type) {
+        'integer', 'int' => (int) $value,
+        'float', 'double', 'decimal' => (float) $value,
+        'boolean', 'bool' => filter_var($value, FILTER_VALIDATE_BOOLEAN, FILTER_NULL_ON_FAILURE) ?? (bool) $default,
+        'json' => json_decode((string) $value, true, 512, JSON_THROW_ON_ERROR),
+        default => (string) $value,
+    };
+}
+
+/**
+ * Fetch multiple values from the `data` table with defaults.
+ *
+ * @param array<string, mixed> $defaults
+ *
+ * @return array<string, mixed>
+ */
+function data_values(array $defaults): array
+{
+    if ($defaults === []) {
+        return [];
+    }
+
+    $result = $defaults;
+
+    try {
+        $keys = array_keys($defaults);
+        $placeholders = implode(', ', array_fill(0, count($keys), '?'));
+
+        $pdo = db();
+        $stmt = $pdo->prepare('SELECT data_key, data_value, data_type FROM data WHERE data_key IN (' . $placeholders . ')');
+
+        if ($stmt !== false && $stmt->execute($keys)) {
+            while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
+                $key = $row['data_key'] ?? null;
+
+                if ($key === null || !array_key_exists($key, $result)) {
+                    continue;
+                }
+
+                try {
+                    $result[$key] = normalize_data_value(
+                        $row['data_value'] ?? null,
+                        (string) ($row['data_type'] ?? 'string'),
+                        $result[$key]
+                    );
+                } catch (Throwable) {
+                    // Ignore JSON decode or casting issues and keep default.
+                }
+            }
+        }
+    } catch (Throwable) {
+        // If the query fails, fall back to provided defaults.
+    }
+
+    return $result;
+}
+
+/**
  * Get a shared PDO connection using configuration defaults.
  *
  * @throws RuntimeException
