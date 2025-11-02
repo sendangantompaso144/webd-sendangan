@@ -22,9 +22,9 @@ CREATE TABLE berita (
     berita_judul VARCHAR(255) NOT NULL,
     berita_isi TEXT NOT NULL,
     berita_gambar VARCHAR(255),
+    berita_dilihat INT DEFAULT 0,
     berita_created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    berita_updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-    berita_dilihat INT DEFAULT 0
+    berita_updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
 );
 
 create table permohonan_informasi (

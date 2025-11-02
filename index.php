@@ -39,6 +39,26 @@ render_base_layout([
             'Pengumuman: Kerja bakti lingkungan akan dilaksanakan pada Sabtu, 16 November mulai pukul 07.00 WITA.',
             'Program bantuan pupuk subsidi dibuka kembali, segera daftar di kantor desa sebelum 25 November.'
         ];
+        $newsItems = $homeData['news'] ?? [
+            [
+                'berita_judul' => 'Pelatihan Digital untuk UMKM Sendangan',
+                'berita_isi' => 'Pemerintah desa berkolaborasi dengan komunitas pemuda untuk memberikan pelatihan pemasaran digital kepada para pelaku UMKM. Materi mencakup pengelolaan media sosial, fotografi produk, hingga penggunaan marketplace.',
+                'berita_gambar' => 'https://images.unsplash.com/photo-1520607162513-77705c0f0d4a',
+                'berita_dilihat' => 128,
+            ],
+            [
+                'berita_judul' => 'Jadwal Layanan Administrasi Desa',
+                'berita_isi' => 'Pelayanan administrasi kependudukan kini tersedia setiap Selasa dan Kamis pukul 09.00-14.00 WITA. Warga diimbau membawa dokumen pendukung yang lengkap untuk mempercepat proses pelayanan.',
+                'berita_gambar' => 'https://images.unsplash.com/photo-1522071820081-009f0129c71c',
+                'berita_dilihat' => 94,
+            ],
+            [
+                'berita_judul' => 'Gotong Royong Bersih Desa',
+                'berita_isi' => 'Kegiatan gotong royong rutin digelar pada Sabtu pekan pertama di setiap bulan. Warga berkumpul di Balai Desa sebelum bersama-sama membersihkan area publik dan saluran air.',
+                'berita_gambar' => 'https://images.unsplash.com/photo-1521737604893-d14cc237f11d',
+                'berita_dilihat' => 76,
+            ],
+        ];
         ?>
         
         <!-- Hero Section dengan Gradient -->
@@ -273,40 +293,53 @@ render_base_layout([
             </section>
         <?php endif; ?>
 
-        <!-- News Section -->
-        <section class="content-section news-section">
-            <div class="section-container">
-                <div class="section-header-flex">
-                    <div>
-                        <h2 class="section-title">Berita Terbaru</h2>
-                        <p class="section-description">Informasi dan pengumuman terkini</p>
+        <?php if ($newsItems !== []): ?>
+            <!-- News Section -->
+            <section class="content-section news-section">
+                <div class="section-container">
+                    <div class="section-header-flex">
+                        <div>
+                            <h2 class="section-title">Berita Terbaru</h2>
+                            <p class="section-description">Informasi dan pengumuman terkini</p>
+                        </div>
+                        <a class="header-button" href="<?= e(base_uri('info_publik.php?tab=berita')) ?>">
+                            Lihat Semua Berita &rarr;
+                        </a>
                     </div>
-                    <a class="header-button" href="<?= e(base_uri('info_publik.php?tab=berita')) ?>">
-                        Lihat Semua Berita →
-                    </a>
+                    <div class="news-grid">
+                        <?php foreach ($newsItems as $news): ?>
+                            <?php
+                            $newsTitle = (string) ($news['berita_judul'] ?? '');
+                            $newsBody = (string) ($news['berita_isi'] ?? '');
+                            $newsRawExcerpt = trim(strip_tags($newsBody));
+                            $newsExcerpt = mb_substr($newsRawExcerpt, 0, 160);
+                            if (mb_strlen($newsRawExcerpt) > 160) {
+                                $newsExcerpt .= '...';
+                            }
+                            $newsViews = isset($news['berita_dilihat']) ? (int) $news['berita_dilihat'] : 0;
+                            ?>
+                            <article class="news-card">
+                                <?php if (!empty($news['berita_gambar'])): ?>
+                                    <div class="news-card-image">
+                                        <img src="<?= e((string) $news['berita_gambar']) ?>" alt="<?= e($newsTitle === '' ? 'Berita Desa' : $newsTitle) ?>">
+                                    </div>
+                                <?php endif; ?>
+                                <div class="news-card-content">
+                                    <div class="news-meta">
+                                        <span class="news-views"><?= e(number_format($newsViews)) ?> kali dibaca</span>
+                                    </div>
+                                    <h3 class="news-title"><?= e($newsTitle) ?></h3>
+                                    <p class="news-excerpt"><?= e($newsExcerpt) ?></p>
+                                    <a class="news-link" href="<?= e(base_uri('info_publik.php?tab=berita')) ?>">
+                                        Baca Selengkapnya &rarr;
+                                    </a>
+                                </div>
+                            </article>
+                        <?php endforeach; ?>
+                    </div>
                 </div>
-                <div class="news-grid">
-                    <article class="news-card">
-                        <div class="news-badge">Berita</div>
-                        <h3 class="news-title">Pelatihan Digital untuk UMKM Sendangan</h3>
-                        <p class="news-excerpt">Pemerintah desa bersama komunitas pemuda mengadakan pelatihan pemasaran digital bagi pelaku UMKM.</p>
-                        <a class="news-link" href="#">Baca Selengkapnya →</a>
-                    </article>
-                    <article class="news-card">
-                        <div class="news-badge badge-announcement">Pengumuman</div>
-                        <h3 class="news-title">Jadwal Pelayanan Administrasi</h3>
-                        <p class="news-excerpt">Pelayanan administrasi kependudukan tersedia setiap Selasa dan Kamis pukul 09.00-14.00 WITA.</p>
-                        <a class="news-link" href="#">Baca Selengkapnya →</a>
-                    </article>
-                    <article class="news-card">
-                        <div class="news-badge badge-agenda">Agenda</div>
-                        <h3 class="news-title">Gotong Royong Bersama Warga</h3>
-                        <p class="news-excerpt">Agenda bersih lingkungan dilaksanakan setiap Sabtu pekan pertama, dimulai dari Balai Desa.</p>
-                        <a class="news-link" href="#">Baca Selengkapnya →</a>
-                    </article>
-                </div>
-            </div>
-        </section>
+            </section>
+        <?php endif; ?>
 
         <style>
             /* Reset dan Base Styles */
@@ -922,10 +955,13 @@ render_base_layout([
 
             .news-card {
                 background: #F9FAFB;
-                padding: 35px;
                 border-radius: 16px;
                 transition: transform 0.3s ease, box-shadow 0.3s ease;
                 border: 2px solid transparent;
+                overflow: hidden;
+                display: flex;
+                flex-direction: column;
+                min-height: 100%;
             }
 
             .news-card:hover {
@@ -935,33 +971,47 @@ render_base_layout([
                 border-color: #E3F2FD;
             }
 
-            .news-badge {
-                display: inline-block;
-                background: #90CAF9;
-                color: white;
-                padding: 6px 16px;
-                border-radius: 15px;
+            .news-card-image {
+                position: relative;
+                width: 100%;
+                padding-top: 56%;
+                overflow: hidden;
+            }
+
+            .news-card-image img {
+                position: absolute;
+                top: 0;
+                left: 0;
+                width: 100%;
+                height: 100%;
+                object-fit: cover;
+            }
+
+            .news-card-content {
+                display: flex;
+                flex-direction: column;
+                gap: 16px;
+                padding: 24px 28px 28px;
+                height: 100%;
+            }
+
+            .news-meta {
+                display: flex;
+                justify-content: flex-end;
+                align-items: center;
+                gap: 12px;
+            }
+
+            .news-views {
                 font-size: 12px;
+                color: #78909C;
                 font-weight: 600;
-                margin-bottom: 20px;
-                text-transform: uppercase;
-                letter-spacing: 0.5px;
-            }
-
-            .badge-announcement {
-                background: #FFE082;
-                color: #F57C00;
-            }
-
-            .badge-agenda {
-                background: #CE93D8;
-                color: #6A1B9A;
+                white-space: nowrap;
             }
 
             .news-title {
                 font-size: 20px;
                 color: #263238;
-                margin-bottom: 16px;
                 line-height: 1.4;
             }
 
@@ -969,7 +1019,6 @@ render_base_layout([
                 font-size: 15px;
                 color: #607D8B;
                 line-height: 1.7;
-                margin-bottom: 24px;
             }
 
             .news-link {
@@ -979,6 +1028,7 @@ render_base_layout([
                 font-weight: 600;
                 font-size: 15px;
                 transition: transform 0.2s ease;
+                margin-top: auto;
             }
 
             .news-link:hover {
