@@ -10,6 +10,7 @@ return [
             'tanggal' => '12 Oktober 2025',
             'gambar' => asset('images/placeholder-media.svg'),
             'tautan' => '#',
+            'berita_dilihat' => 245,
         ],
         [
             'judul' => 'Pelaksanaan Posyandu Balita',
@@ -17,6 +18,7 @@ return [
             'tanggal' => '05 Oktober 2025',
             'gambar' => asset('images/placeholder-media.svg'),
             'tautan' => '#',
+            'berita_dilihat' => 198,
         ],
         [
             'judul' => 'Pelatihan Digital UMKM Desa',
@@ -24,6 +26,7 @@ return [
             'tanggal' => '28 September 2025',
             'gambar' => asset('images/placeholder-media.svg'),
             'tautan' => '#',
+            'berita_dilihat' => 167,
         ],
     ],
     'pengumuman' => [

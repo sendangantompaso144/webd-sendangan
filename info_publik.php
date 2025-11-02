@@ -48,15 +48,37 @@ render_base_layout([
         <?php if ($tab === 'berita'): ?>
             <section class="section">
                 <div class="container">
-                    <div class="cards-grid">
+                    <div class="news-grid">
                         <?php foreach ($berita as $item): ?>
-                            <article class="card media-card">
-                                <div class="media-thumb" style="background-image: url('<?= e($item['gambar'] ?? asset('images/placeholder-news.jpg')) ?>');"></div>
-                                <div>
-                                    <span class="chip"><?= e($item['tanggal'] ?? '') ?></span>
-                                    <h3><?= e($item['judul'] ?? '') ?></h3>
-                                    <p><?= e($item['ringkasan'] ?? '') ?></p>
-                                    <a class="btn btn-secondary" href="<?= e($item['tautan'] ?? '#') ?>">Baca Selengkapnya</a>
+                            <?php
+                            $beritaJudul = (string) ($item['judul'] ?? '');
+                            $beritaRingkasan = (string) ($item['ringkasan'] ?? '');
+                            $excerpt = mb_substr(trim(strip_tags($beritaRingkasan)), 0, 160);
+                            if (mb_strlen($beritaRingkasan) > 160) {
+                                $excerpt .= '...';
+                            }
+                            $beritaTanggal = (string) ($item['tanggal'] ?? '');
+                            $beritaTautan = (string) ($item['tautan'] ?? '#');
+                            $beritaViews = isset($item['berita_dilihat']) ? (int) $item['berita_dilihat'] : 0;
+                            ?>
+                            <article class="news-card">
+                                <?php if (!empty($item['gambar'])): ?>
+                                    <div class="news-card-image">
+                                        <img src="<?= e((string) $item['gambar']) ?>" alt="<?= e($beritaJudul === '' ? 'Berita Desa' : $beritaJudul) ?>">
+                                    </div>
+                                <?php endif; ?>
+                                <div class="news-card-content">
+                                    <div class="news-meta">
+                                        <span class="news-views"><?= e(number_format($beritaViews)) ?> kali dibaca</span>
+                                        <?php if ($beritaTanggal !== ''): ?>
+                                            <span class="news-date"><?= e($beritaTanggal) ?></span>
+                                        <?php endif; ?>
+                                    </div>
+                                    <h3 class="news-title"><?= e($beritaJudul) ?></h3>
+                                    <p class="news-excerpt"><?= e($excerpt) ?></p>
+                                    <a class="news-link" href="<?= e($beritaTautan) ?>">
+                                        Baca Selengkapnya &rarr;
+                                    </a>
                                 </div>
                             </article>
                         <?php endforeach; ?>
@@ -96,4 +118,3 @@ render_base_layout([
         <?php
     },
 ]);
-
