@@ -264,7 +264,7 @@ render_base_layout([
                             <p class="section-description">Potensi dan peluang Desa Sendangan</p>
                         </div>
                         <a class="header-button" href="<?= e(base_uri('potensi.php')) ?>">
-                            Lihat Semua Potensi &rarr;
+                            Selengkapnya untuk Potensi Desa &rarr;
                         </a>
                     </div>
                     <div class="potential-grid">
@@ -281,21 +281,15 @@ render_base_layout([
                             if (mb_strlen($description) > 140) {
                                 $summary .= '...';
                             }
-                            $gmaps = (string) ($primary['potensi_gmaps_link'] ?? '');
                             $iconLabel = strtoupper(substr($category, 0, 1));
                             ?>
                             <div class="potential-card">
                                 <div class="potential-icon"><?= e($iconLabel !== '' ? $iconLabel : 'P') ?></div>
                                 <div class="potential-category"><?= e($category) ?></div>
                                 <h3 class="potential-title"><?= e($title) ?></h3>
-                                <?php if ($summary !== ''): ?>
+                                <!-- <?php if ($summary !== ''): ?>
                                     <p class="potential-status"><?= e($summary) ?></p>
-                                <?php endif; ?>
-                                <?php if ($gmaps !== ''): ?>
-                                    <a class="btn btn-secondary" href="<?= e($gmaps) ?>" target="_blank" rel="noopener">
-                                        Buka di Google Maps
-                                    </a>
-                                <?php endif; ?>
+                                <?php endif; ?> -->
                             </div>
                         <?php endforeach; ?>
                     </div>
