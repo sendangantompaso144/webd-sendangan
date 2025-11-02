@@ -49,19 +49,23 @@ return [
     'galeri' => [
         [
             'judul' => 'Panen Raya',
-            'gambar' => asset('images/placeholder-media.svg'),
+            'gambar' => 'https://images.unsplash.com/photo-1501004318641-b39e6451bec6',
+            'galeri_keterangan' => 'Petani Desa Sendangan panen raya bersama di sawah.',
         ],
         [
             'judul' => 'Festival Budaya',
-            'gambar' => asset('images/placeholder-media.svg'),
+            'gambar' => 'https://images.unsplash.com/photo-1500530855697-b586d89ba3ee',
+            'galeri_keterangan' => 'Penampilan tari Maengket pada Festival Rentak Budaya.',
         ],
         [
             'judul' => 'Kegiatan Posyandu',
-            'gambar' => asset('images/placeholder-media.svg'),
+            'gambar' => 'https://images.unsplash.com/photo-1582711012124-a56cf82307ef',
+            'galeri_keterangan' => 'Kader posyandu melakukan pemeriksaan kesehatan balita.',
         ],
         [
             'judul' => 'Pelatihan UMKM',
-            'gambar' => asset('images/placeholder-media.svg'),
+            'gambar' => 'https://images.unsplash.com/photo-1489515217757-5fd1be406fef',
+            'galeri_keterangan' => 'Pelaku UMKM mengikuti pelatihan pemasaran digital desa.',
         ],
     ],
 ];

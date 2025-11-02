@@ -104,11 +104,17 @@ render_base_layout([
         <?php elseif ($tab === 'galeri'): ?>
             <section class="section section-info-content">
                 <div class="container info-content">
-                    <div class="gallery-grid">
+                    <div class="gallery-grid gallery-grid--plain">
                         <?php foreach ($galeri as $item): ?>
-                            <figure class="gallery-card">
-                                <div class="gallery-thumb" style="background-image: url('<?= e($item['gambar'] ?? asset('images/placeholder-gallery.jpg')) ?>');"></div>
-                                <figcaption><?= e($item['judul'] ?? '') ?></figcaption>
+                            <?php
+                            $galleryCaption = (string) ($item['galeri_keterangan'] ?? $item['judul'] ?? '');
+                            $galleryImage = (string) ($item['gambar'] ?? asset('images/placeholder-gallery.jpg'));
+                            ?>
+                            <figure class="gallery-plain-card">
+                                <img src="<?= e($galleryImage) ?>" alt="<?= e($galleryCaption !== '' ? $galleryCaption : 'Galeri Desa Sendangan') ?>">
+                                <?php if ($galleryCaption !== ''): ?>
+                                    <figcaption><?= e($galleryCaption) ?></figcaption>
+                                <?php endif; ?>
                             </figure>
                         <?php endforeach; ?>
                     </div>
