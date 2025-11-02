@@ -86,6 +86,51 @@ render_base_layout([
                 ];
             }
         }
+
+        $mapDefaults = [
+            'media.peta_desa_sendangan' => 'peta-desa-sendangan.jpg',
+            'media.peta_desa_sendangan_citra' => 'peta-desa-sendangan-citra.jpg',
+        ];
+
+        $mapValues = data_values($mapDefaults) + $mapDefaults;
+
+        $resolveMapMedia = static function (string $raw): string {
+            $raw = trim($raw);
+            if ($raw === '') {
+                return '';
+            }
+
+            if (str_starts_with($raw, 'http')) {
+                return $raw;
+            }
+
+            $relativeMedia = ltrim(str_replace('\\', '/', $raw), '/');
+
+            if (!str_contains($relativeMedia, '/')) {
+                if (is_file(base_path('uploads/' . $relativeMedia))) {
+                    $relativeMedia = 'uploads/' . $relativeMedia;
+                } elseif (is_file(base_path('uploads/assets/' . $relativeMedia))) {
+                    $relativeMedia = 'uploads/assets/' . $relativeMedia;
+                } else {
+                    $relativeMedia = 'uploads/' . $relativeMedia;
+                }
+            } elseif (!str_starts_with($relativeMedia, 'uploads/')) {
+                $relativeMedia = 'uploads/' . $relativeMedia;
+            }
+
+            return base_uri($relativeMedia);
+        };
+
+        $mapMedia = $resolveMapMedia((string) ($mapValues['media.peta_desa_sendangan'] ?? ''));
+        $mapMediaSatellite = $resolveMapMedia((string) ($mapValues['media.peta_desa_sendangan_citra'] ?? ''));
+
+        $mapTitle = 'Peta Desa Sendangan';
+        $mapAlt = $mapTitle;
+        $mapSatelliteAlt = $mapAlt . ' - Peta Citra';
+        $mapHasDefault = $mapMedia !== '';
+        $mapHasSatellite = $mapMediaSatellite !== '';
+        $mapToggleEnabled = $mapHasDefault && $mapHasSatellite;
+        $mapInitialView = $mapHasDefault ? 'default' : ($mapHasSatellite ? 'satellite' : 'none');
         ?>
         <!-- <section class="section">
             <div class="container page-header">
@@ -123,11 +168,39 @@ render_base_layout([
                         <h2>Peta dan Demografi</h2>
                         <p>Gambaran umum wilayah dan komposisi penduduk desa.</p>
                     </div>
-                    <div class="demografi-grid">
-                        <div class="map-placeholder">
-                            <span>Peta Desa Sendangan</span>
-                        </div>
+                    <div class="demografi-grid"<?php if ($mapInitialView !== 'none'): ?> data-map-section data-map-mode="<?= e($mapInitialView) ?>"<?php endif; ?>>
+                        <?php if ($mapInitialView !== 'none'): ?>
+                            <div class="map-display map-display--interactive" data-map-display>
+                                <?php if ($mapHasDefault): ?>
+                                    <div class="map-image<?= $mapInitialView === 'default' ? ' is-active' : '' ?>" data-map-view="default">
+                                        <img src="<?= e($mapMedia) ?>" alt="<?= e($mapAlt) ?>">
+                                    </div>
+                                <?php endif; ?>
+                                <?php if ($mapHasSatellite): ?>
+                                    <div class="map-image<?= $mapInitialView === 'satellite' ? ' is-active' : '' ?>" data-map-view="satellite">
+                                        <img src="<?= e($mapMediaSatellite) ?>" alt="<?= e($mapSatelliteAlt) ?>">
+                                    </div>
+                                <?php endif; ?>
+                            </div>
+                        <?php else: ?>
+                            <div class="map-placeholder">
+                                <span>Peta Desa Sendangan</span>
+                            </div>
+                        <?php endif; ?>
                         <div class="demografi-info">
+                            <?php if ($mapToggleEnabled): ?>
+                                <div class="map-toggle demografi-map-toggle" data-map-toggle>
+                                    <span class="map-toggle-label">Tampilan</span>
+                                    <label class="map-toggle-switch">
+                                        <input type="checkbox" data-map-toggle-input aria-label="Tampilkan peta citra (satelit)">
+                                        <span class="map-toggle-slider">
+                                            <span class="map-toggle-option map-toggle-option-default">Wilayah</span>
+                                            <span class="map-toggle-option map-toggle-option-satellite">Citra</span>
+                                        </span>
+                                    </label>
+                                    <!-- <span class="map-toggle-caption" data-map-toggle-caption data-default="Peta Wilayah" data-satellite="Peta Citra" aria-live="polite">Peta Wilayah</span> -->
+                                </div>
+                            <?php endif; ?>
                             <?php foreach ($demografi as $item): ?>
                                 <div class="demografi-item">
                                     <span class="demografi-item__label"><?= e($item['label'] ?? '') ?></span>
@@ -190,6 +263,70 @@ render_base_layout([
                     </div>
                 </div>
             </section>
+        <?php endif; ?>
+
+        <?php if ($mapInitialView !== 'none'): ?>
+            <script>
+                document.addEventListener('DOMContentLoaded', function () {
+                    var mapSection = document.querySelector('.demografi-grid[data-map-section]');
+                    if (!mapSection) {
+                        return;
+                    }
+
+                    var toggleInput = mapSection.querySelector('[data-map-toggle-input]');
+                    var mapItemsArray = Array.prototype.slice.call(mapSection.querySelectorAll('[data-map-view]'));
+                    var toggleCaption = mapSection.querySelector('[data-map-toggle-caption]');
+
+                    if (mapItemsArray.length === 0) {
+                        return;
+                    }
+
+                    var setMapMode = function (mode) {
+                        mapSection.setAttribute('data-map-mode', mode);
+                    };
+
+                    var updateMapView = function (showSatellite) {
+                        var activeView = showSatellite ? 'satellite' : 'default';
+                        var hasTarget = mapItemsArray.some(function (item) {
+                            return item.getAttribute('data-map-view') === activeView;
+                        });
+
+                        if (!hasTarget) {
+                            activeView = mapItemsArray[0].getAttribute('data-map-view') || activeView;
+                        }
+
+                        mapItemsArray.forEach(function (item) {
+                            item.classList.toggle('is-active', item.getAttribute('data-map-view') === activeView);
+                        });
+
+                        if (toggleCaption) {
+                            var defaultText = toggleCaption.getAttribute('data-default') || toggleCaption.textContent || 'Peta Wilayah';
+                            var satelliteText = toggleCaption.getAttribute('data-satellite') || 'Peta Citra';
+                            toggleCaption.textContent = activeView === 'satellite' ? satelliteText : defaultText;
+                        }
+
+                        setMapMode(activeView);
+                    };
+
+                    if (toggleInput && mapItemsArray.length > 1) {
+                        updateMapView(toggleInput.checked);
+                        toggleInput.addEventListener('change', function () {
+                            updateMapView(toggleInput.checked);
+                        });
+                    } else {
+                        var fallbackView = mapItemsArray[0].getAttribute('data-map-view') || 'default';
+                        mapItemsArray[0].classList.add('is-active');
+
+                        if (toggleCaption) {
+                            var defaultTextFallback = toggleCaption.getAttribute('data-default') || toggleCaption.textContent || 'Peta Wilayah';
+                            var satelliteTextFallback = toggleCaption.getAttribute('data-satellite') || 'Peta Citra';
+                            toggleCaption.textContent = fallbackView === 'satellite' ? satelliteTextFallback : defaultTextFallback;
+                        }
+
+                        setMapMode(fallbackView);
+                    }
+                });
+            </script>
         <?php endif; ?>
         <?php
     },

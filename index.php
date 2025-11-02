@@ -391,7 +391,7 @@ render_base_layout([
                                     <span class="map-toggle-option map-toggle-option-satellite">Citra</span>
                                 </span>
                             </label>
-                            <span class="map-toggle-caption" data-default="Peta Wilayah" data-satellite="Peta Citra" aria-live="polite">Peta Wilayah</span>
+                            <!-- <span class="map-toggle-caption" data-default="Peta Wilayah" data-satellite="Peta Citra" aria-live="polite">Peta Wilayah</span> -->
                         </div>
                     <?php endif; ?>
                 </div>
