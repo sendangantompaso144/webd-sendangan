@@ -12,11 +12,85 @@ render_base_layout([
     'activePage' => 'home',
     'bodyClass' => 'page-home',
     'content' => static function () use ($homeData): void {
-        $stats = $homeData['stats'] ?? [
-            ['label' => 'Jumlah Penduduk', 'value' => '550', 'note' => ''],
-            ['label' => 'Luas Wilayah', 'value' => '85 Ha', 'note' => ''],
-            ['label' => 'Jumlah Jaga', 'value' => '3', 'note' => '']
-        ];
+        $profilData = data_source('profil', []);
+        $demografiDasar = is_array($profilData['demografi_dasar'] ?? null) ? $profilData['demografi_dasar'] : null;
+        $stats = [];
+
+        if ($demografiDasar !== null) {
+            // Derive hero stats from demographic base data
+            $pendudukJaga = $demografiDasar['penduduk_jaga'] ?? [];
+            if (!is_array($pendudukJaga)) {
+                $pendudukJaga = [];
+            }
+
+            $totalLaki = 0;
+            $totalPerempuan = 0;
+
+            foreach ($pendudukJaga as $jaga) {
+                if (!is_array($jaga)) {
+                    continue;
+                }
+
+                $totalLaki += (int) ($jaga['laki_laki'] ?? 0);
+                $totalPerempuan += (int) ($jaga['perempuan'] ?? 0);
+            }
+
+            $totalPenduduk = $totalLaki + $totalPerempuan;
+
+            if ($totalPenduduk > 0) {
+                $stats[] = [
+                    'label' => 'Total Penduduk',
+                    'value' => number_format($totalPenduduk, 0, ',', '.'),
+                    'note' => sprintf('%d laki-laki, %d perempuan', $totalLaki, $totalPerempuan),
+                ];
+            }
+
+            if (isset($demografiDasar['kepala_keluarga'])) {
+                $stats[] = [
+                    'label' => 'Kepala Keluarga',
+                    'value' => number_format((int) $demografiDasar['kepala_keluarga'], 0, ',', '.') . ' KK',
+                    'note' => '',
+                ];
+            }
+
+            $jumlahJaga = $demografiDasar['jumlah_jaga'] ?? null;
+            if ($jumlahJaga !== null) {
+                $jumlahJaga = (int) $jumlahJaga;
+            } else {
+                $jumlahJaga = count($pendudukJaga);
+            }
+
+            if ($jumlahJaga > 0) {
+                $stats[] = [
+                    'label' => 'Jumlah Jaga',
+                    'value' => $jumlahJaga . ' Jaga',
+                    'note' => '',
+                ];
+            }
+
+            if (isset($demografiDasar['luas_wilayah_ha'])) {
+                $luasWilayahHa = (float) $demografiDasar['luas_wilayah_ha'];
+                if ($luasWilayahHa > 0.0) {
+                    $luasWilayahFormatted = fmod($luasWilayahHa, 1.0) === 0.0
+                        ? number_format((int) $luasWilayahHa, 0, ',', '.')
+                        : number_format($luasWilayahHa, 2, ',', '.');
+
+                    $stats[] = [
+                        'label' => 'Luas Wilayah',
+                        'value' => $luasWilayahFormatted . ' Ha',
+                        'note' => '',
+                    ];
+                }
+            }
+        }
+
+        if ($stats === []) {
+            $stats = $homeData['stats'] ?? [
+                ['label' => 'Jumlah Penduduk', 'value' => '550', 'note' => ''],
+                ['label' => 'Luas Wilayah', 'value' => '85 Ha', 'note' => ''],
+                ['label' => 'Jumlah Jaga', 'value' => '3', 'note' => ''],
+            ];
+        }
         $features = $homeData['features'] ?? [
             ['title' => 'Profil Desa', 'summary' => 'Sejarah, demografi, dan informasi lengkap tentang desa', 'link' => 'profil.php'],
             ['title' => 'Informasi Publik', 'summary' => 'Berita terkini, pengumuman, dan galeri kegiatan', 'link' => 'info_publik.php'],
@@ -164,7 +238,7 @@ render_base_layout([
             <section class="stats-section">
                 <div class="stats-container">
                     <?php 
-                    $icons = ['&#128101;', '&#127968;', '&#127963;', '&#128176;'];
+                    $icons = ['&#128101;', '&#128106;', '&#128205;', '&#128506;'];
                     foreach ($stats as $index => $stat): ?>
                         <div class="stat-card">
                             <div class="stat-icon"><?= $icons[$index] ?? '&#9733;' ?></div>
