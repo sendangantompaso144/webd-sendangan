@@ -12,9 +12,80 @@ render_base_layout([
     'activePage' => 'profil',
     'content' => static function () use ($profil): void {
         $sejarah = $profil['sejarah'] ?? [];
-        $demografi = $profil['demografi'] ?? [];
+        $demografiDasar = $profil['demografi_dasar'] ?? null;
+        $demografi = [];
         $fasilitas = $profil['fasilitas'] ?? [];
         $program = $profil['program'] ?? [];
+
+        if (is_array($demografiDasar)) {
+            $pendudukJaga = $demografiDasar['penduduk_jaga'] ?? [];
+            $luasWilayahHa = isset($demografiDasar['luas_wilayah_ha']) ? (float) $demografiDasar['luas_wilayah_ha'] : null;
+
+            if ($luasWilayahHa !== null) {
+                $luasWilayahFormatted = fmod($luasWilayahHa, 1.0) === 0.0
+                    ? number_format((int) $luasWilayahHa, 0, ',', '.')
+                    : number_format($luasWilayahHa, 2, ',', '.');
+
+                $demografi[] = [
+                    'label' => 'Luas Wilayah',
+                    'value' => $luasWilayahFormatted . ' Ha',
+                ];
+            }
+
+            $jumlahJaga = $demografiDasar['jumlah_jaga'] ?? count($pendudukJaga);
+            if ((int) $jumlahJaga > 0) {
+                $demografi[] = [
+                    'label' => 'Jumlah Jaga',
+                    'value' => (int) $jumlahJaga . ' Jaga',
+                ];
+            }
+
+            $totalLaki = 0;
+            $totalPerempuan = 0;
+
+            foreach ($pendudukJaga as $index => $jaga) {
+                if (!is_array($jaga)) {
+                    continue;
+                }
+
+                $namaJaga = $jaga['nama'] ?? 'Jaga ' . ($index + 1);
+                $laki = (int) ($jaga['laki_laki'] ?? 0);
+                $perempuan = (int) ($jaga['perempuan'] ?? 0);
+
+                $totalLaki += $laki;
+                $totalPerempuan += $perempuan;
+
+                $demografi[] = [
+                    'label' => 'Penduduk ' . $namaJaga,
+                    'value' => sprintf('%d laki-laki, %d perempuan', $laki, $perempuan),
+                ];
+            }
+
+            $totalPenduduk = $totalLaki + $totalPerempuan;
+
+            if ($totalPenduduk > 0) {
+                $demografi[] = [
+                    'label' => 'Komposisi Penduduk',
+                    'value' => sprintf('Total %d jiwa (%d laki-laki, %d perempuan)', $totalPenduduk, $totalLaki, $totalPerempuan),
+                ];
+
+                if ($luasWilayahHa !== null && $luasWilayahHa > 0) {
+                    $kepadatan = $totalPenduduk / ($luasWilayahHa / 100);
+
+                    $demografi[] = [
+                        'label' => 'Kepadatan Penduduk',
+                        'value' => sprintf('%d jiwa/km2', (int) round($kepadatan)),
+                    ];
+                }
+            }
+
+            if (isset($demografiDasar['kepala_keluarga'])) {
+                $demografi[] = [
+                    'label' => 'Kepala Keluarga',
+                    'value' => (int) $demografiDasar['kepala_keluarga'] . ' KK',
+                ];
+            }
+        }
         ?>
         <!-- <section class="section">
             <div class="container page-header">
@@ -56,12 +127,12 @@ render_base_layout([
                         <div class="map-placeholder">
                             <span>Peta Desa Sendangan</span>
                         </div>
-                        <div class="demografi-list">
+                        <div class="demografi-info">
                             <?php foreach ($demografi as $item): ?>
-                                <article class="card">
-                                    <h3><?= e($item['label'] ?? '') ?></h3>
-                                    <p><?= e($item['value'] ?? '') ?></p>
-                                </article>
+                                <div class="demografi-item">
+                                    <span class="demografi-item__label"><?= e($item['label'] ?? '') ?></span>
+                                    <span class="demografi-item__value"><?= e($item['value'] ?? '') ?></span>
+                                </div>
                             <?php endforeach; ?>
                         </div>
                     </div>

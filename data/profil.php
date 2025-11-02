@@ -4,17 +4,27 @@ declare(strict_types=1);
 
 return [
     'sejarah' => [
-        'Desa Sendangan merupakan desa tertua di Kecamatan Tompaso, yang berdiri sejak tahun 1632. Pada masa awal, kawasan tempat tinggal masyarakat dikenal dengan sebutan “Mawale”, yang berarti rumah wale.',
+        'Desa Sendangan merupakan desa tertua di Kecamatan Tompaso, yang berdiri sejak tahun 1632. Pada masa awal, kawasan tempat tinggal masyarakat dikenal dengan sebutan "Mawale", yang berarti rumah wale.',
         'Pada masa itu, penduduk Sendangan sempat tercerai-berai karena berbagai faktor, terutama dalam upaya mencari pekerjaan di tempat lain. Dari perpindahan tersebut, kemudian muncul beberapa desa baru, seperti Desa Kamanga dan lainnya.',
-        'Nama Sendangan sendiri memiliki arti “terbitnya matahari”, menggambarkan letak geografis desa yang berada di bagian timur, tepat menghadap ke arah matahari terbit.',
+        'Nama Sendangan sendiri memiliki arti "terbitnya matahari", menggambarkan letak geografis desa yang berada di bagian timur, tepat menghadap ke arah matahari terbit.',
         'Desa Sendangan dikenal dengan suasana alam yang sejuk dan masyarakat yang menjunjung tinggi nilai gotong royong. Kehidupan warga yang sederhana namun harmonis menjadi cerminan semangat kebersamaan yang telah diwariskan sejak berdirinya desa ini pada abad ke-17.',
-        
     ],
-    'demografi' => [
-        ['label' => 'Jumlah Penduduk', 'value' => '1.234 jiwa'],
-        ['label' => 'Wilayah Administratif', 'value' => '8 Jaga'],
-        ['label' => 'Komposisi Penduduk', 'value' => '52% laki-laki, 48% perempuan'],
-        ['label' => 'Rasio Usia Produktif', 'value' => '63%'],
+    'demografi_dasar' => [
+        'luas_wilayah_ha' => 103,
+        'jumlah_jaga' => 2,
+        'penduduk_jaga' => [
+            [
+                'nama' => 'Jaga 1',
+                'laki_laki' => 74,
+                'perempuan' => 78,
+            ],
+            [
+                'nama' => 'Jaga 2',
+                'laki_laki' => 98,
+                'perempuan' => 102,
+            ],
+        ],
+        'kepala_keluarga' => 137,
     ],
     'fasilitas' => [
         [
@@ -61,3 +71,4 @@ return [
         ],
     ],
 ];
+

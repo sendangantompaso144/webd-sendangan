@@ -582,20 +582,6 @@ img {
     justify-content: center;
 }
 
-.map-placeholder {
-    width: 100%;
-    min-height: 320px;
-    border: 2px dashed rgba(144, 202, 249, 0.45);
-    border-radius: 22px;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    gap: 0.75rem;
-    background: rgba(227, 242, 253, 0.55);
-    text-align: center;
-}
-
 .map-icon {
     font-size: 2.5rem;
 }
@@ -677,24 +663,6 @@ img {
 .sambutan-content p {
     margin-bottom: 1.25rem;
     color: rgba(38, 50, 56, 0.75);
-}
-
-.map-placeholder {
-    border-radius: var(--radius-large);
-    background: repeating-linear-gradient(
-        45deg,
-        rgba(144, 202, 249, 0.25),
-        rgba(144, 202, 249, 0.25) 20px,
-        rgba(227, 242, 253, 0.5) 20px,
-        rgba(227, 242, 253, 0.5) 40px
-    );
-    min-height: 320px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    color: rgba(38, 50, 56, 0.6);
-    font-weight: 600;
-    font-family: var(--font-heading);
 }
 
 .cards-grid {
@@ -984,14 +952,46 @@ img {
 
 .demografi-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
     gap: 2rem;
     align-items: stretch;
 }
 
-.demografi-list {
+.demografi-info {
     display: grid;
-    gap: 1rem;
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: 1.25rem 1.5rem;
+    align-content: center;
+}
+.demografi-item {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+}
+
+.demografi-item__label {
+    font-family: var(--font-heading);
+    font-weight: 600;
+    color: rgba(15, 23, 42, 0.75);
+}
+
+.demografi-item__value {
+    color: rgba(38, 50, 56, 0.75);
+}
+
+.map-placeholder {
+    position: relative;
+    aspect-ratio: 1 / 1;
+    border-radius: var(--radius-large);
+    background: linear-gradient(135deg, rgba(144, 202, 249, 0.4), rgba(227, 242, 253, 0.92));
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: rgba(15, 23, 42, 0.65);
+    font-weight: 600;
+    font-family: var(--font-heading);
+    box-shadow: var(--shadow-card);
+    min-height: 280px;
 }
 
 .tab-nav {
@@ -1356,18 +1356,6 @@ body.modal-open {
     box-shadow: 0 0 0 4px rgba(144, 202, 249, 0.25);
 }
 
-.demografi-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
-    gap: 2rem;
-    align-items: stretch;
-}
-
-.demografi-list {
-    display: grid;
-    gap: 1rem;
-}
-
 .card {
     background: #fff;
     border-radius: var(--radius-large);
@@ -1674,6 +1662,10 @@ body.modal-open {
 
     .potensi-gallery-btn.next {
         right: 0.75rem;
+    }
+
+    .demografi-info {
+        grid-template-columns: 1fr;
     }
 }
 
