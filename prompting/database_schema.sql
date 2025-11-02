@@ -77,7 +77,6 @@ create table gambar_potensi_desa (
 create table fasilitas (
     fasilitas_id INT AUTO_INCREMENT PRIMARY KEY,
     fasilitas_nama VARCHAR(255) NOT NULL,
-    fasilitas_deskripsi TEXT NOT NULL,
     fasilitas_gambar VARCHAR(255),
     fasilitas_gmaps_link VARCHAR(255),
     fasilitas_created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,

@@ -8,47 +8,23 @@ $profil = data_source('profil', []);
 
 render_base_layout([
     'title' => 'Profil Desa | ' . app_config('name', 'Desa Sendangan'),
-    'description' => 'Profil Desa Sendangan mencakup visi misi, sejarah desa, demografi, fasilitas, dan program strategis.',
+    'description' => 'Profil Desa Sendangan mencakup sejarah desa, demografi, fasilitas, dan program strategis.',
     'activePage' => 'profil',
     'content' => static function () use ($profil): void {
-        $visi = $profil['visi'] ?? '';
-        $misi = $profil['misi'] ?? [];
         $sejarah = $profil['sejarah'] ?? [];
         $demografi = $profil['demografi'] ?? [];
         $fasilitas = $profil['fasilitas'] ?? [];
         $program = $profil['program'] ?? [];
         ?>
-        <section class="section">
+        <!-- <section class="section">
             <div class="container page-header">
                 <div>
                     <span class="chip">Profil Desa</span>
                     <h1>Desa Sendangan</h1>
-                    <p>Informasi lengkap mengenai karakter, visi, dan potensi Desa Sendangan.</p>
+                    <p>Informasi lengkap mengenai karakter dan potensi Desa Sendangan.</p>
                 </div>
             </div>
-        </section>
-
-        <section class="section">
-            <div class="container profile-grid">
-                <div>
-                    <h2>Visi</h2>
-                    <div class="quote-box">
-                        <p><?= e($visi) ?></p>
-                    </div>
-                </div>
-
-                <?php if ($misi !== []): ?>
-                    <div>
-                        <h2>Misi</h2>
-                        <ol class="mission-list">
-                            <?php foreach ($misi as $point): ?>
-                                <li><?= e($point) ?></li>
-                            <?php endforeach; ?>
-                        </ol>
-                    </div>
-                <?php endif; ?>
-            </div>
-        </section>
+        </section> -->
 
         <?php if ($sejarah !== []): ?>
             <section class="section">
@@ -103,8 +79,17 @@ render_base_layout([
                     <div class="cards-grid">
                         <?php foreach ($fasilitas as $item): ?>
                             <article class="card">
-                                <span class="chip"><?= e($item['kategori'] ?? '') ?></span>
-                                <h3><?= e($item['nama'] ?? '') ?></h3>
+                                <?php if (!empty($item['fasilitas_gambar'])): ?>
+                                    <div class="card-image">
+                                        <img src="<?= e($item['fasilitas_gambar']) ?>" alt="<?= e(($item['fasilitas_nama'] ?? 'Fasilitas Desa') . ' - Foto') ?>">
+                                    </div>
+                                <?php endif; ?>
+                                <h3><?= e($item['fasilitas_nama'] ?? '') ?></h3>
+                                <?php if (!empty($item['fasilitas_gmaps_link'])): ?>
+                                    <a class="btn btn-secondary card__action" href="<?= e($item['fasilitas_gmaps_link']) ?>" target="_blank" rel="noopener">
+                                        Lihat Lokasi
+                                    </a>
+                                <?php endif; ?>
                             </article>
                         <?php endforeach; ?>
                     </div>
@@ -121,9 +106,14 @@ render_base_layout([
                     </div>
                     <div class="cards-grid">
                         <?php foreach ($program as $item): ?>
-                            <article class="card">
-                                <h3><?= e($item['nama'] ?? '') ?></h3>
-                                <p><?= e($item['deskripsi'] ?? '') ?></p>
+                            <article class="card program-card">
+                                <?php if (!empty($item['program_gambar'])): ?>
+                                    <div class="card-image">
+                                        <img src="<?= e($item['program_gambar']) ?>" alt="<?= e(($item['program_nama'] ?? 'Program Desa') . ' - Foto') ?>">
+                                    </div>
+                                <?php endif; ?>
+                                <h3><?= e($item['program_nama'] ?? '') ?></h3>
+                                <p><?= e($item['program_deskripsi'] ?? '') ?></p>
                             </article>
                         <?php endforeach; ?>
                     </div>
@@ -133,4 +123,3 @@ render_base_layout([
         <?php
     },
 ]);
-

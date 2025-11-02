@@ -969,6 +969,49 @@ img {
     transition: transform 0.2s ease, box-shadow 0.2s ease;
 }
 
+.card.card--facility {
+    border-radius: var(--radius-medium);
+    padding: 1.1rem;
+    gap: 0.75rem;
+}
+
+.card.card--facility .card-image {
+    margin: -1.1rem -1.1rem 0;
+    border-radius: var(--radius-medium) var(--radius-medium) 0 0;
+}
+
+.card.card--facility .card-image img {
+    border-radius: inherit;
+}
+
+.card.card--facility .card__action {
+    margin-top: auto;
+    align-self: flex-start;
+}
+
+.program-card .card-image {
+    margin: -1.75rem -1.75rem 1rem;
+    border-radius: var(--radius-large) var(--radius-large) 0 0;
+}
+
+.card-image {
+    position: relative;
+    width: 100%;
+    padding-top: 60%;
+    border-radius: calc(var(--radius-large) - 4px);
+    overflow: hidden;
+    background: rgba(15, 23, 42, 0.05);
+}
+
+.card-image img {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+}
+
 .card:hover {
     transform: translateY(-6px);
     box-shadow: 0 20px 45px rgba(15, 23, 42, 0.12);
