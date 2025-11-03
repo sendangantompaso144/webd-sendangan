@@ -12,6 +12,7 @@ CREATE TABLE admin (
     admin_password VARCHAR(255) NOT NULL,
     admin_no_hp VARCHAR(15) unique,
     admin_email VARCHAR(100) unique,
+    admin_is_superadmin smallint DEFAULT 0,
     admin_created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     admin_updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     admin_is_deleted smallint DEFAULT 0
