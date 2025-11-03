@@ -5,13 +5,27 @@ declare(strict_types=1);
 require __DIR__ . '/layouts/BaseLayout.php';
 
 $homeData = data_source('home', []);
+$latestNews = [];
+
+try {
+    $pdo = db();
+    $stmt = $pdo->query('SELECT berita_id, berita_judul, berita_isi, berita_gambar, berita_dilihat, berita_created_at FROM berita ORDER BY berita_created_at DESC LIMIT 6');
+    if ($stmt !== false) {
+        $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
+        if (is_array($rows)) {
+            $latestNews = $rows;
+        }
+    }
+} catch (Throwable) {
+    // Abaikan, tampilkan state kosong.
+}
 
 render_base_layout([
     'title' => 'Beranda | ' . app_config('name', 'Desa Sendangan'),
     'description' => 'Beranda Desa Sendangan: sambutan, data singkat, dan layanan utama untuk warga.',
     'activePage' => 'home',
     'bodyClass' => 'page-home',
-    'content' => static function () use ($homeData): void {
+    'content' => static function () use ($homeData, $latestNews): void {
         $profilData = data_source('profil', []);
         $demografiDasar = is_array($profilData['demografi_dasar'] ?? null) ? $profilData['demografi_dasar'] : null;
         $stats = [];
@@ -183,29 +197,32 @@ render_base_layout([
             'Pengumuman: Kerja bakti lingkungan akan dilaksanakan pada Sabtu, 16 November mulai pukul 07.00 WITA.',
             'Program bantuan pupuk subsidi dibuka kembali, segera daftar di kantor desa sebelum 25 November.'
         ];
-        $newsItems = $homeData['news'] ?? [
-            [
-                'berita_judul' => 'Pelatihan Digital untuk UMKM Sendangan',
-                'berita_isi' => 'Pemerintah desa berkolaborasi dengan komunitas pemuda untuk memberikan pelatihan pemasaran digital kepada para pelaku UMKM. Materi mencakup pengelolaan media sosial, fotografi produk, hingga penggunaan marketplace.',
-                'berita_gambar' => 'https://images.unsplash.com/photo-1520607162513-77705c0f0d4a',
-                'berita_dilihat' => 128,
-                'berita_tanggal' => '10 Oktober 2025',
-            ],
-            [
-                'berita_judul' => 'Jadwal Layanan Administrasi Desa',
-                'berita_isi' => 'Pelayanan administrasi kependudukan kini tersedia setiap Selasa dan Kamis pukul 09.00-14.00 WITA. Warga diimbau membawa dokumen pendukung yang lengkap untuk mempercepat proses pelayanan.',
-                'berita_gambar' => 'https://images.unsplash.com/photo-1522071820081-009f0129c71c',
-                'berita_dilihat' => 94,
-                'berita_tanggal' => '05 Oktober 2025',
-            ],
-            [
-                'berita_judul' => 'Gotong Royong Bersih Desa',
-                'berita_isi' => 'Kegiatan gotong royong rutin digelar pada Sabtu pekan pertama di setiap bulan. Warga berkumpul di Balai Desa sebelum bersama-sama membersihkan area publik dan saluran air.',
-                'berita_gambar' => 'https://images.unsplash.com/photo-1521737604893-d14cc237f11d',
-                'berita_dilihat' => 76,
-                'berita_tanggal' => '28 September 2025',
-            ],
-        ];
+        $newsItems = $latestNews;
+        if ($newsItems === []) {
+            $newsItems = $homeData['news'] ?? [
+                [
+                    'berita_judul' => 'Pelatihan Digital untuk UMKM Sendangan',
+                    'berita_isi' => 'Pemerintah desa berkolaborasi dengan komunitas pemuda untuk memberikan pelatihan pemasaran digital kepada para pelaku UMKM. Materi mencakup pengelolaan media sosial, fotografi produk, hingga penggunaan marketplace.',
+                    'berita_gambar' => 'https://images.unsplash.com/photo-1520607162513-77705c0f0d4a',
+                    'berita_dilihat' => 128,
+                    'berita_tanggal' => '10 Oktober 2025',
+                ],
+                [
+                    'berita_judul' => 'Jadwal Layanan Administrasi Desa',
+                    'berita_isi' => 'Pelayanan administrasi kependudukan kini tersedia setiap Selasa dan Kamis pukul 09.00-14.00 WITA. Warga diimbau membawa dokumen pendukung yang lengkap untuk mempercepat proses pelayanan.',
+                    'berita_gambar' => 'https://images.unsplash.com/photo-1522071820081-009f0129c71c',
+                    'berita_dilihat' => 94,
+                    'berita_tanggal' => '05 Oktober 2025',
+                ],
+                [
+                    'berita_judul' => 'Gotong Royong Bersih Desa',
+                    'berita_isi' => 'Kegiatan gotong royong rutin digelar pada Sabtu pekan pertama di setiap bulan. Warga berkumpul di Balai Desa sebelum bersama-sama membersihkan area publik dan saluran air.',
+                    'berita_gambar' => 'https://images.unsplash.com/photo-1521737604893-d14cc237f11d',
+                    'berita_dilihat' => 76,
+                    'berita_tanggal' => '28 September 2025',
+                ],
+            ];
+        }
         $defaultGreetingMessages = [
             'Selamat datang di website resmi Desa Sendangan. Kami berkomitmen untuk memberikan pelayanan terbaik kepada masyarakat dan membangun desa yang lebih maju, sejahtera, dan bermartabat.',
             'Melalui website ini, kami berharap dapat meningkatkan transparansi dan komunikasi dengan seluruh warga. Mari bersama-sama membangun Desa Sendangan yang lebih baik.',
@@ -495,6 +512,35 @@ render_base_layout([
             </section>
         <?php endif; ?>
 
+        <?php
+        $formatBeritaTanggal = static function (string $value): string {
+            $value = trim($value);
+            if ($value === '') {
+                return '';
+            }
+            $timestamp = strtotime($value);
+            if ($timestamp === false) {
+                return $value;
+            }
+            $bulan = [
+                1 => 'Januari',
+                2 => 'Februari',
+                3 => 'Maret',
+                4 => 'April',
+                5 => 'Mei',
+                6 => 'Juni',
+                7 => 'Juli',
+                8 => 'Agustus',
+                9 => 'September',
+                10 => 'Oktober',
+                11 => 'November',
+                12 => 'Desember',
+            ];
+            $nomorBulan = (int) date('n', $timestamp);
+            $namaBulan = $bulan[$nomorBulan] ?? date('F', $timestamp);
+            return date('j', $timestamp) . ' ' . $namaBulan . ' ' . date('Y', $timestamp);
+        };
+        ?>
         <?php if ($newsItems !== []): ?>
             <!-- News Section -->
             <section class="content-section news-section">
@@ -511,6 +557,7 @@ render_base_layout([
                     <div class="news-grid">
                         <?php foreach ($newsItems as $news): ?>
                             <?php
+                            $newsId = isset($news['berita_id']) ? (int) $news['berita_id'] : 0;
                             $newsTitle = (string) ($news['berita_judul'] ?? '');
                             $newsBody = (string) ($news['berita_isi'] ?? '');
                             $newsRawExcerpt = trim(strip_tags($newsBody));
@@ -519,24 +566,34 @@ render_base_layout([
                                 $newsExcerpt .= '...';
                             }
                             $newsViews = isset($news['berita_dilihat']) ? (int) $news['berita_dilihat'] : 0;
-                            $newsDate = (string) ($news['berita_tanggal'] ?? $news['berita_created_at'] ?? '');
+                            $newsDateRaw = (string) ($news['berita_created_at'] ?? $news['berita_tanggal'] ?? '');
+                            $newsDate = $newsDateRaw !== '' ? $formatBeritaTanggal($newsDateRaw) : '';
+                            $newsImageRaw = (string) ($news['berita_gambar'] ?? '');
+                            if ($newsId > 0 && $newsImageRaw !== '') {
+                                $newsImage = base_uri('uploads/berita/' . ltrim($newsImageRaw, '/'));
+                            } else {
+                                $newsImage = $newsImageRaw !== '' ? $newsImageRaw : asset('images/placeholder-media.svg');
+                            }
+                            $newsLink = $newsId > 0 ? base_uri('baca_berita.php?id=' . $newsId) : base_uri('info_publik.php?tab=berita');
                             ?>
                             <article class="news-card">
-                                <?php if (!empty($news['berita_gambar'])): ?>
+                                <?php if ($newsImage !== ''): ?>
                                     <div class="news-card-image">
-                                        <img src="<?= e((string) $news['berita_gambar']) ?>" alt="<?= e($newsTitle === '' ? 'Berita Desa' : $newsTitle) ?>">
+                                        <img src="<?= e($newsImage) ?>" alt="<?= e($newsTitle === '' ? 'Berita Desa' : $newsTitle) ?>">
                                     </div>
                                 <?php endif; ?>
                                 <div class="news-card-content">
                                     <div class="news-meta">
-                                        <span class="news-views"><?= e(number_format($newsViews)) ?> kali dibaca</span>
+                                        <?php if ($newsViews > 0): ?>
+                                            <span class="news-views"><?= e(number_format($newsViews)) ?> kali dibaca</span>
+                                        <?php endif; ?>
                                         <?php if ($newsDate !== ''): ?>
                                             <span class="news-date"><?= e($newsDate) ?></span>
                                         <?php endif; ?>
                                     </div>
                                     <h3 class="news-title"><?= e($newsTitle) ?></h3>
                                     <p class="news-excerpt"><?= e($newsExcerpt) ?></p>
-                                    <a class="news-link" href="<?= e(base_uri('info_publik.php?tab=berita')) ?>">
+                                    <a class="news-link" href="<?= e($newsLink) ?>">
                                         Baca Selengkapnya &rarr;
                                     </a>
                                 </div>
@@ -1298,8 +1355,9 @@ render_base_layout([
 
             .news-grid {
                 display: grid;
-                grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
-                gap: 30px;
+                grid-template-columns: repeat(4, minmax(0, 1fr));
+                gap: 26px;
+                justify-items: center;
             }
 
             .news-card {
@@ -1311,6 +1369,20 @@ render_base_layout([
                 display: flex;
                 flex-direction: column;
                 min-height: 100%;
+                width: 100%;
+                max-width: 260px;
+            }
+
+            @media (max-width: 1280px) {
+                .news-grid {
+                    grid-template-columns: repeat(3, minmax(0, 1fr));
+                }
+            }
+
+            @media (max-width: 1024px) {
+                .news-grid {
+                    grid-template-columns: repeat(2, minmax(0, 1fr));
+                }
             }
 
             .news-card:hover {

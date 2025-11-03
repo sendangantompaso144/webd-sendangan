@@ -220,6 +220,62 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         exit;
     }
 
+    if ($action === 'delete_berita') {
+        $beritaId = isset($_POST['berita_id']) ? (int) $_POST['berita_id'] : 0;
+        if ($beritaId <= 0) {
+            $_SESSION['flash_error'][] = 'Data berita tidak ditemukan.';
+            header('Location: admin_management.php#berita');
+            exit;
+        }
+
+        try {
+            $stmt = $pdo->prepare('SELECT berita_gambar FROM berita WHERE berita_id = ? LIMIT 1');
+            if ($stmt === false) {
+                throw new RuntimeException('Tidak dapat menyiapkan kueri.');
+            }
+            $stmt->execute([$beritaId]);
+            $row = $stmt->fetch(PDO::FETCH_ASSOC);
+        } catch (Throwable $exception) {
+            $_SESSION['flash_error'][] = 'Gagal memuat data berita: ' . $exception->getMessage();
+            header('Location: admin_management.php#berita');
+            exit;
+        }
+
+        if (!$row) {
+            $_SESSION['flash_error'][] = 'Data berita tidak ditemukan.';
+            header('Location: admin_management.php#berita');
+            exit;
+        }
+
+        $fileName = trim((string) ($row['berita_gambar'] ?? ''));
+        if ($fileName !== '') {
+            $filePath = base_path('uploads/berita/' . ltrim($fileName, "/\\"));
+            if (is_file($filePath) && !unlink($filePath)) {
+                $_SESSION['flash_error'][] = 'Gagal menghapus file gambar berita.';
+                header('Location: admin_management.php#berita');
+                exit;
+            }
+        }
+
+        try {
+            $stmt = $pdo->prepare('DELETE FROM berita WHERE berita_id = ?');
+            if ($stmt === false) {
+                throw new RuntimeException('Tidak dapat menyiapkan kueri.');
+            }
+            $executed = $stmt->execute([$beritaId]);
+            if ($executed) {
+                $_SESSION['flash'][] = 'Berita berhasil dihapus.';
+            } else {
+                $_SESSION['flash_error'][] = 'Gagal menghapus data berita.';
+            }
+        } catch (Throwable $exception) {
+            $_SESSION['flash_error'][] = 'Gagal menghapus data berita: ' . $exception->getMessage();
+        }
+
+        header('Location: admin_management.php#berita');
+        exit;
+    }
+
     if ($action === 'edit_apbdes') {
         $apbdesId = isset($_POST['apbdes_id']) ? (int) $_POST['apbdes_id'] : 0;
         $newTitle = trim((string) ($_POST['apbdes_judul'] ?? ''));
@@ -1424,11 +1480,19 @@ function render_modal(string $formId, array $definition, array $oldInputs, array
                 'berita',
                 'Berita Desa',
                 'Artikel dan berita dari info publik.',
-                ['ID', 'Judul', 'Gambar', 'Dibaca', 'Dibuat', 'Diperbarui'],
+                ['ID', 'Judul', 'Gambar', 'Dibaca', 'Dibuat', 'Diperbarui', 'Aksi'],
                 $berita,
                 static function (array $row): string {
                     $thumb = (string) ($row['berita_gambar'] ?? '');
                     $thumbHtml = $thumb !== '' ? '<a href="' . e(base_uri('uploads/berita/' . ltrim($thumb, '/'))) . '" target="_blank" rel="noopener">Buka</a>' : '-';
+                    $rowId = isset($row['berita_id']) ? (int) $row['berita_id'] : 0;
+                    $actionsHtml = $rowId > 0
+                        ? '<form method="post" action="admin_management.php#berita" class="table-actions__form" onsubmit="return confirm(\'Hapus berita ini?\');">'
+                            . '<input type="hidden" name="action" value="delete_berita">'
+                            . '<input type="hidden" name="berita_id" value="' . e((string) $rowId) . '">'
+                            . '<button type="submit" class="btn-danger">Hapus</button>'
+                        . '</form>'
+                        : '-';
                     return '<tr>'
                         . '<td>#' . e((string) $row['berita_id']) . '</td>'
                         . '<td>' . e((string) $row['berita_judul']) . '</td>'
@@ -1436,6 +1500,7 @@ function render_modal(string $formId, array $definition, array $oldInputs, array
                         . '<td>' . e((string) ($row['berita_dilihat'] ?? 0)) . ' kali</td>'
                         . '<td>' . e(format_datetime($row['berita_created_at'] ?? null)) . '</td>'
                         . '<td>' . e(format_datetime($row['berita_updated_at'] ?? null)) . '</td>'
+                        . '<td class="table-actions">' . $actionsHtml . '</td>'
                         . '</tr>';
                 }
             ) ?>
