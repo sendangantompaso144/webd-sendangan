@@ -83,7 +83,7 @@ $tableForms = [
         'title' => 'Fasilitas Desa',
         'fields' => [
             'fasilitas_nama' => ['label' => 'Nama Fasilitas', 'type' => 'text', 'required' => true],
-            'fasilitas_gambar' => ['label' => 'URL Gambar', 'type' => 'text', 'required' => false],
+            'fasilitas_gambar' => ['label' => 'Gambar', 'type' => 'file_image', 'required' => true],
             'fasilitas_gmaps_link' => ['label' => 'Link Google Maps', 'type' => 'text', 'required' => false],
         ],
     ],
@@ -273,6 +273,62 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
 
         header('Location: admin_management.php#berita');
+        exit;
+    }
+
+    if ($action === 'delete_fasilitas') {
+        $fasilitasId = isset($_POST['fasilitas_id']) ? (int) $_POST['fasilitas_id'] : 0;
+        if ($fasilitasId <= 0) {
+            $_SESSION['flash_error'][] = 'Data fasilitas tidak ditemukan.';
+            header('Location: admin_management.php#fasilitas');
+            exit;
+        }
+
+        try {
+            $stmt = $pdo->prepare('SELECT fasilitas_gambar FROM fasilitas WHERE fasilitas_id = ? LIMIT 1');
+            if ($stmt === false) {
+                throw new RuntimeException('Tidak dapat menyiapkan kueri.');
+            }
+            $stmt->execute([$fasilitasId]);
+            $row = $stmt->fetch(PDO::FETCH_ASSOC);
+        } catch (Throwable $exception) {
+            $_SESSION['flash_error'][] = 'Gagal memuat data fasilitas: ' . $exception->getMessage();
+            header('Location: admin_management.php#fasilitas');
+            exit;
+        }
+
+        if (!$row) {
+            $_SESSION['flash_error'][] = 'Data fasilitas tidak ditemukan.';
+            header('Location: admin_management.php#fasilitas');
+            exit;
+        }
+
+        $fileName = trim((string) ($row['fasilitas_gambar'] ?? ''));
+        if ($fileName !== '') {
+            $filePath = base_path('uploads/fasilitas/' . ltrim($fileName, "/\\"));
+            if (is_file($filePath) && !unlink($filePath)) {
+                $_SESSION['flash_error'][] = 'Gagal menghapus file gambar fasilitas.';
+                header('Location: admin_management.php#fasilitas');
+                exit;
+            }
+        }
+
+        try {
+            $stmt = $pdo->prepare('DELETE FROM fasilitas WHERE fasilitas_id = ?');
+            if ($stmt === false) {
+                throw new RuntimeException('Tidak dapat menyiapkan kueri.');
+            }
+            $executed = $stmt->execute([$fasilitasId]);
+            if ($executed) {
+                $_SESSION['flash'][] = 'Fasilitas berhasil dihapus.';
+            } else {
+                $_SESSION['flash_error'][] = 'Gagal menghapus data fasilitas.';
+            }
+        } catch (Throwable $exception) {
+            $_SESSION['flash_error'][] = 'Gagal menghapus data fasilitas: ' . $exception->getMessage();
+        }
+
+        header('Location: admin_management.php#fasilitas');
         exit;
     }
 
@@ -1692,13 +1748,21 @@ function render_modal(string $formId, array $definition, array $oldInputs, array
                 'fasilitas',
                 'Fasilitas Desa',
                 'Data fasilitas publik dan link lokasi.',
-                ['ID', 'Nama', 'Gambar', 'Google Maps', 'Dibuat', 'Diperbarui'],
+                ['ID', 'Nama', 'Gambar', 'Google Maps', 'Dibuat', 'Diperbarui', 'Aksi'],
                 $fasilitas,
                 static function (array $row): string {
                     $img = (string) ($row['fasilitas_gambar'] ?? '');
                     $maps = (string) ($row['fasilitas_gmaps_link'] ?? '');
-                    $imgHtml = $img !== '' ? '<div class="media-thumb"><img src="' . e($img) . '" alt="fasilitas"><span>Foto</span></div>' : '-';
+                    $imgHtml = $img !== '' ? '<a href="' . e(base_uri('uploads/fasilitas/' . ltrim($img, '/'))) . '" target="_blank" rel="noopener">Lihat</a>' : '-';
                     $mapsHtml = $maps !== '' ? '<a href="' . e($maps) . '" target="_blank" rel="noopener">Buka Maps</a>' : '-';
+                    $rowId = isset($row['fasilitas_id']) ? (int) $row['fasilitas_id'] : 0;
+                    $actionsHtml = $rowId > 0
+                        ? '<form method="post" action="admin_management.php#fasilitas" class="table-actions__form" onsubmit="return confirm(\'Hapus fasilitas ini?\');">'
+                            . '<input type="hidden" name="action" value="delete_fasilitas">'
+                            . '<input type="hidden" name="fasilitas_id" value="' . e((string) $rowId) . '">'
+                            . '<button type="submit" class="btn-danger">Hapus</button>'
+                        . '</form>'
+                        : '-';
                     return '<tr>'
                         . '<td>#' . e((string) $row['fasilitas_id']) . '</td>'
                         . '<td>' . e((string) $row['fasilitas_nama']) . '</td>'
@@ -1706,6 +1770,7 @@ function render_modal(string $formId, array $definition, array $oldInputs, array
                         . '<td>' . $mapsHtml . '</td>'
                         . '<td>' . e(format_datetime($row['fasilitas_created_at'] ?? null)) . '</td>'
                         . '<td>' . e(format_datetime($row['fasilitas_updated_at'] ?? null)) . '</td>'
+                        . '<td class="table-actions">' . $actionsHtml . '</td>'
                         . '</tr>';
                 }
             ) ?>
