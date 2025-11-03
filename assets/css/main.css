@@ -729,6 +729,16 @@ img {
     height: 100%;
 }
 
+.news-card--empty {
+    justify-content: center;
+    text-align: center;
+}
+
+.news-card--empty .news-card-content {
+    align-items: center;
+    gap: 12px;
+}
+
 .news-meta {
     display: flex;
     justify-content: space-between;

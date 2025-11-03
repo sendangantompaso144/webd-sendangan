@@ -75,8 +75,7 @@ $tableForms = [
         'fields' => [
             'berita_judul' => ['label' => 'Judul', 'type' => 'text', 'required' => true],
             'berita_isi' => ['label' => 'Isi Berita', 'type' => 'textarea', 'required' => true],
-            'berita_gambar' => ['label' => 'URL Gambar', 'type' => 'text', 'required' => false],
-            'berita_dilihat' => ['label' => 'Jumlah Dilihat', 'type' => 'number', 'required' => false, 'default' => 0],
+            'berita_gambar' => ['label' => 'Gambar', 'type' => 'file_image', 'required' => false],
         ],
     ],
     'fasilitas' => [
@@ -285,34 +284,65 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $errors = [];
 
         foreach ($fieldsDefinition as $fieldName => $fieldMeta) {
-            if (($fieldMeta['type'] ?? '') === 'file_pdf') {
+            $type = $fieldMeta['type'] ?? 'text';
+
+            if (in_array($type, ['file_pdf', 'file_image'], true)) {
                 $required = !empty($fieldMeta['required']);
                 $fileInfo = $_FILES[$fieldName] ?? null;
+
                 if (!is_array($fileInfo) || ($fileInfo['error'] ?? UPLOAD_ERR_NO_FILE) === UPLOAD_ERR_NO_FILE) {
                     if ($required) {
-                        $errors[$fieldName] = 'Silakan unggah file PDF.';
+                        $errors[$fieldName] = $type === 'file_pdf'
+                            ? 'Silakan unggah file PDF.'
+                            : 'Silakan pilih gambar.';
+                    }
+                    continue;
+                }
+
+                if (($fileInfo['error'] ?? UPLOAD_ERR_OK) !== UPLOAD_ERR_OK) {
+                    $errors[$fieldName] = 'Gagal mengunggah file.';
+                    continue;
+                }
+
+                $finfo = finfo_open(FILEINFO_MIME_TYPE);
+                $mime = $finfo ? (string) finfo_file($finfo, $fileInfo['tmp_name']) : '';
+                if ($finfo) {
+                    finfo_close($finfo);
+                }
+
+                $ext = strtolower(pathinfo((string) ($fileInfo['name'] ?? ''), PATHINFO_EXTENSION));
+
+                if ($type === 'file_pdf') {
+                    if ($mime !== 'application/pdf' || $ext !== 'pdf') {
+                        $errors[$fieldName] = 'File harus berupa PDF.';
+                        continue;
                     }
                 } else {
-                    if (($fileInfo['error'] ?? UPLOAD_ERR_OK) !== UPLOAD_ERR_OK) {
-                        $errors[$fieldName] = 'Gagal mengunggah file.';
-                    } else {
-                        $finfo = finfo_open(FILEINFO_MIME_TYPE);
-                        $mime = $finfo ? finfo_file($finfo, $fileInfo['tmp_name']) : '';
-                        if ($finfo) {
-                            finfo_close($finfo);
-                        }
-                        $ext = strtolower(pathinfo($fileInfo['name'], PATHINFO_EXTENSION));
-                        if ($mime !== 'application/pdf' || $ext !== 'pdf') {
-                            $errors[$fieldName] = 'File harus berupa PDF.';
-                        } else {
-                            $inputData[$fieldName] = $fileInfo;
-                        }
+                    $allowedExt = ['jpg', 'jpeg', 'png', 'webp'];
+                    $allowedMime = ['image/jpeg', 'image/png', 'image/webp'];
+
+                    if (!in_array($ext, $allowedExt, true) || !in_array($mime, $allowedMime, true)) {
+                        $errors[$fieldName] = 'Format gambar tidak didukung. Gunakan JPG, JPEG, PNG, atau WEBP.';
+                        continue;
                     }
+
+                    $imageMeta = @getimagesize($fileInfo['tmp_name']);
+                    if ($imageMeta === false) {
+                        $errors[$fieldName] = 'File gambar tidak valid.';
+                        continue;
+                    }
+
+                    $fileInfo['_width'] = (int) ($imageMeta[0] ?? 0);
+                    $fileInfo['_height'] = (int) ($imageMeta[1] ?? 0);
                 }
+
+                $fileInfo['_mime'] = $mime;
+                $fileInfo['_extension'] = $ext;
+                $fileInfo['_field_type'] = $type;
+                $inputData[$fieldName] = $fileInfo;
                 continue;
             }
 
-            $type = $fieldMeta['type'] ?? 'text';
             $required = !empty($fieldMeta['required']);
             $rawValue = $_POST[$fieldName] ?? null;
             $value = null;
@@ -424,6 +454,58 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     if (!is_dir($targetDir) && !mkdir($targetDir, 0755, true) && !is_dir($targetDir)) {
                         $errors['_general'] = 'Folder unggahan tidak dapat dibuat.';
                         break;
+                    }
+
+                    $fieldType = $fieldsDefinition[$column]['type'] ?? '';
+                    if ($fieldType === 'file_image') {
+                        $uniqueName = uniqid($formId . '_', true) . '.webp';
+                        $targetPath = $targetDir . DIRECTORY_SEPARATOR . $uniqueName;
+                        $mime = (string) ($fileInfo['_mime'] ?? '');
+
+                        if ($mime === 'image/webp') {
+                            if (!move_uploaded_file($fileInfo['tmp_name'], $targetPath)) {
+                                $errors['_general'] = 'Gagal menyimpan gambar.';
+                                break;
+                            }
+                        } else {
+                            if (!function_exists('imagewebp')) {
+                                $errors['_general'] = 'Konversi gambar ke WebP tidak tersedia di server.';
+                                break;
+                            }
+
+                            $image = null;
+                            switch ($mime) {
+                                case 'image/jpeg':
+                                    $image = @imagecreatefromjpeg($fileInfo['tmp_name']);
+                                    break;
+                                case 'image/png':
+                                    $image = @imagecreatefrompng($fileInfo['tmp_name']);
+                                    if ($image !== false) {
+                                        imagepalettetotruecolor($image);
+                                        imagealphablending($image, false);
+                                        imagesavealpha($image, true);
+                                    }
+                                    break;
+                            }
+
+                            if ($image === false || $image === null) {
+                                $errors['_general'] = 'Gagal memproses gambar yang diunggah.';
+                                break;
+                            }
+
+                            if (!imagewebp($image, $targetPath, 90)) {
+                                imagedestroy($image);
+                                $errors['_general'] = 'Gagal mengonversi gambar ke WebP.';
+                                break;
+                            }
+
+                            imagedestroy($image);
+                            @unlink($fileInfo['tmp_name']);
+                        }
+
+                        $fileInfo['_stored'] = $uniqueName;
+                        $fileUploads[$column] = $fileInfo;
+                        continue;
                     }
 
                     $uniqueName = uniqid($formId . '_', true) . '.pdf';
@@ -587,6 +669,9 @@ function render_modal(string $formId, array $definition, array $oldInputs, array
         switch ($type) {
             case 'file_pdf':
                 $inputHtml = '<input type="file" name="' . e($name) . '" accept="application/pdf"' . $requiredAttr . '>';
+                break;
+            case 'file_image':
+                $inputHtml = '<input type="file" name="' . e($name) . '" accept="image/jpeg,image/png,image/webp"' . $requiredAttr . '>';
                 break;
             case 'textarea':
                 $inputHtml = '<textarea name="' . e($name) . '" rows="4"' . $requiredAttr . '>' . e((string) $value) . '</textarea>';
@@ -1343,7 +1428,7 @@ function render_modal(string $formId, array $definition, array $oldInputs, array
                 $berita,
                 static function (array $row): string {
                     $thumb = (string) ($row['berita_gambar'] ?? '');
-                    $thumbHtml = $thumb !== '' ? '<div class="media-thumb"><img src="' . e($thumb) . '" alt="thumb"><span>Lihat</span></div>' : '-';
+                    $thumbHtml = $thumb !== '' ? '<a href="' . e(base_uri('uploads/berita/' . ltrim($thumb, '/'))) . '" target="_blank" rel="noopener">Buka</a>' : '-';
                     return '<tr>'
                         . '<td>#' . e((string) $row['berita_id']) . '</td>'
                         . '<td>' . e((string) $row['berita_judul']) . '</td>'
