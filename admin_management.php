@@ -72,7 +72,7 @@ $ppidDokumen = fetch_table($pdo, 'SELECT ppid_id, ppid_judul, ppid_kategori, ppi
 $programDesa = fetch_table($pdo, 'SELECT program_id, program_nama, program_gambar, program_created_at, program_updated_at FROM program_desa ORDER BY program_updated_at DESC LIMIT 50');
 $strukturOrganisasi = fetch_table($pdo, 'SELECT struktur_id, struktur_nama, struktur_jabatan, struktur_foto, struktur_created_at, struktur_updated_at FROM struktur_organisasi ORDER BY struktur_updated_at DESC LIMIT 50');
 
-function section_card(string $title, string $description, array $headers, array $rows, callable $rowRenderer): string
+function section_card(string $sectionId, string $title, string $description, array $headers, array $rows, callable $rowRenderer): string
 {
     $headerHtml = '';
     foreach ($headers as $header) {
@@ -89,7 +89,7 @@ function section_card(string $title, string $description, array $headers, array 
     }
 
     return '
-    <section class="card">
+    <section class="card section-card" data-section="' . e($sectionId) . '" id="' . e($sectionId) . '">
         <header class="card__header">
             <div>
                 <h2>' . e($title) . '</h2>
@@ -145,11 +145,12 @@ function section_card(string $title, string $description, array $headers, array 
             gap: 40px;
             overflow-y: auto;
             box-shadow: 10px 0 30px rgba(29, 78, 216, 0.25);
-            /* scrollbar-width: none; */
+            scrollbar-width: none;
         }
 
         .sidebar::-webkit-scrollbar {
-            /* display: none; */
+            width: 0;
+            height: 0;
         }
 
         .sidebar h1 {
@@ -178,6 +179,11 @@ function section_card(string $title, string $description, array $headers, array 
         .sidebar a:hover {
             background: rgba(255, 255, 255, 0.15);
             transform: translateX(4px);
+        }
+
+        .sidebar a.is-active {
+            background: rgba(255, 255, 255, 0.24);
+            color: #ffffff;
         }
 
         .sidebar footer {
@@ -212,8 +218,22 @@ function section_card(string $title, string $description, array $headers, array 
         }
 
         .cards-grid {
-            display: grid;
+            display: block;
             gap: 24px;
+        }
+
+        .section-card {
+            display: block;
+            margin-bottom: 24px;
+        }
+
+        .js-enabled .section-card {
+            display: none;
+        }
+
+        .js-enabled .section-card.is-active {
+            display: block;
+            animation: fadeIn 0.25s ease;
         }
 
         .card {
@@ -222,6 +242,11 @@ function section_card(string $title, string $description, array $headers, array 
             box-shadow: 0 18px 45px rgba(15, 23, 42, 0.12);
             border: 1px solid rgba(226, 232, 240, 0.7);
             padding: 24px 24px 28px;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(8px); }
+            to { opacity: 1; transform: translateY(0); }
         }
 
         .card__header {
@@ -402,16 +427,17 @@ function section_card(string $title, string $description, array $headers, array 
             <span><?= e($adminSession['email'] ?? 'admin@desa.id') ?></span>
         </div>
         <nav>
-            <a href="#apbdes">APBDes</a>
-            <a href="#berita">Berita</a>
-            <a href="#fasilitas">Fasilitas</a>
-            <a href="#potensi">Potensi Desa</a>
-            <a href="#pengumuman">Pengumuman</a>
-            <a href="#permohonan">Permohonan Informasi</a>
-            <a href="#ppid">PPID Dokumen</a>
-            <a href="#program">Program Desa</a>
-            <a href="#galeri">Galeri</a>
-            <a href="#struktur">Struktur Organisasi</a>
+            <a class="sidebar-link" href="#apbdes" data-section="apbdes">APBDes</a>
+            <a class="sidebar-link" href="#berita" data-section="berita">Berita</a>
+            <a class="sidebar-link" href="#fasilitas" data-section="fasilitas">Fasilitas</a>
+            <a class="sidebar-link" href="#potensi" data-section="potensi">Potensi Desa</a>
+            <a class="sidebar-link" href="#potensi-media" data-section="potensi-media">Media Potensi</a>
+            <a class="sidebar-link" href="#pengumuman" data-section="pengumuman">Pengumuman</a>
+            <a class="sidebar-link" href="#permohonan" data-section="permohonan">Permohonan Informasi</a>
+            <a class="sidebar-link" href="#ppid" data-section="ppid">PPID Dokumen</a>
+            <a class="sidebar-link" href="#program" data-section="program">Program Desa</a>
+            <a class="sidebar-link" href="#galeri" data-section="galeri">Galeri</a>
+            <a class="sidebar-link" href="#struktur" data-section="struktur">Struktur Organisasi</a>
         </nav>
         <footer>© <?= date('Y') ?> Desa Sendangan</footer>
     </aside>
@@ -426,204 +452,277 @@ function section_card(string $title, string $description, array $headers, array 
         </div>
 
         <div class="cards-grid">
-            <div id="apbdes">
-                <?= section_card(
-                    'Dokumen APBDes',
-                    'Daftar dokumen APBDes terbaru.',
-                    ['ID', 'Judul', 'Berkas', 'Diubah oleh', 'Dibuat', 'Diperbarui'],
-                    $apbdes,
-                    static function (array $row): string {
-                        $file = (string) ($row['apbdes_file'] ?? '');
-                        $fileLink = $file !== '' ? '<a href="' . e(base_uri('uploads/' . ltrim($file, '/'))) . '" target="_blank" rel="noopener">Lihat</a>' : '-';
-                        return '<tr>'
-                            . '<td>#' . e((string) $row['apbdes_id']) . '</td>'
-                            . '<td>' . e((string) $row['apbdes_judul']) . '</td>'
-                            . '<td>' . $fileLink . '</td>'
-                            . '<td>' . e((string) ($row['apbdes_edited_by'] ?? '')) . '</td>'
-                            . '<td>' . e(format_datetime($row['apbdes_created_at'] ?? null)) . '</td>'
-                            . '<td>' . e(format_datetime($row['apbdes_updated_at'] ?? null)) . '</td>'
-                            . '</tr>';
-                    }
-                ) ?>
-            </div>
+            <?= section_card(
+                'apbdes',
+                'Dokumen APBDes',
+                'Daftar dokumen APBDes terbaru.',
+                ['ID', 'Judul', 'Berkas', 'Diubah oleh', 'Dibuat', 'Diperbarui'],
+                $apbdes,
+                static function (array $row): string {
+                    $file = (string) ($row['apbdes_file'] ?? '');
+                    $fileLink = $file !== '' ? '<a href="' . e(base_uri('uploads/' . ltrim($file, '/'))) . '" target="_blank" rel="noopener">Lihat</a>' : '-';
+                    return '<tr>'
+                        . '<td>#' . e((string) $row['apbdes_id']) . '</td>'
+                        . '<td>' . e((string) $row['apbdes_judul']) . '</td>'
+                        . '<td>' . $fileLink . '</td>'
+                        . '<td>' . e((string) ($row['apbdes_edited_by'] ?? '')) . '</td>'
+                        . '<td>' . e(format_datetime($row['apbdes_created_at'] ?? null)) . '</td>'
+                        . '<td>' . e(format_datetime($row['apbdes_updated_at'] ?? null)) . '</td>'
+                        . '</tr>';
+                }
+            ) ?>
 
-            <div id="berita">
-                <?= section_card(
-                    'Berita Desa',
-                    'Artikel dan berita dari info publik.',
-                    ['ID', 'Judul', 'Gambar', 'Dibaca', 'Dibuat', 'Diperbarui'],
-                    $berita,
-                    static function (array $row): string {
-                        $thumb = (string) ($row['berita_gambar'] ?? '');
-                        $thumbHtml = $thumb !== '' ? '<div class="media-thumb"><img src="' . e($thumb) . '" alt="thumb"><span>Lihat</span></div>' : '-';
-                        return '<tr>'
-                            . '<td>#' . e((string) $row['berita_id']) . '</td>'
-                            . '<td>' . e((string) $row['berita_judul']) . '</td>'
-                            . '<td>' . $thumbHtml . '</td>'
-                            . '<td>' . e((string) ($row['berita_dilihat'] ?? 0)) . ' kali</td>'
-                            . '<td>' . e(format_datetime($row['berita_created_at'] ?? null)) . '</td>'
-                            . '<td>' . e(format_datetime($row['berita_updated_at'] ?? null)) . '</td>'
-                            . '</tr>';
-                    }
-                ) ?>
-            </div>
+            <?= section_card(
+                'berita',
+                'Berita Desa',
+                'Artikel dan berita dari info publik.',
+                ['ID', 'Judul', 'Gambar', 'Dibaca', 'Dibuat', 'Diperbarui'],
+                $berita,
+                static function (array $row): string {
+                    $thumb = (string) ($row['berita_gambar'] ?? '');
+                    $thumbHtml = $thumb !== '' ? '<div class="media-thumb"><img src="' . e($thumb) . '" alt="thumb"><span>Lihat</span></div>' : '-';
+                    return '<tr>'
+                        . '<td>#' . e((string) $row['berita_id']) . '</td>'
+                        . '<td>' . e((string) $row['berita_judul']) . '</td>'
+                        . '<td>' . $thumbHtml . '</td>'
+                        . '<td>' . e((string) ($row['berita_dilihat'] ?? 0)) . ' kali</td>'
+                        . '<td>' . e(format_datetime($row['berita_created_at'] ?? null)) . '</td>'
+                        . '<td>' . e(format_datetime($row['berita_updated_at'] ?? null)) . '</td>'
+                        . '</tr>';
+                }
+            ) ?>
 
-            <div id="fasilitas">
-                <?= section_card(
-                    'Fasilitas Desa',
-                    'Data fasilitas publik dan link lokasi.',
-                    ['ID', 'Nama', 'Gambar', 'Google Maps', 'Dibuat', 'Diperbarui'],
-                    $fasilitas,
-                    static function (array $row): string {
-                        $img = (string) ($row['fasilitas_gambar'] ?? '');
-                        $maps = (string) ($row['fasilitas_gmaps_link'] ?? '');
-                        $imgHtml = $img !== '' ? '<div class="media-thumb"><img src="' . e($img) . '" alt="fasilitas"><span>Foto</span></div>' : '-';
-                        $mapsHtml = $maps !== '' ? '<a href="' . e($maps) . '" target="_blank" rel="noopener">Buka Maps</a>' : '-';
-                        return '<tr>'
-                            . '<td>#' . e((string) $row['fasilitas_id']) . '</td>'
-                            . '<td>' . e((string) $row['fasilitas_nama']) . '</td>'
-                            . '<td>' . $imgHtml . '</td>'
-                            . '<td>' . $mapsHtml . '</td>'
-                            . '<td>' . e(format_datetime($row['fasilitas_created_at'] ?? null)) . '</td>'
-                            . '<td>' . e(format_datetime($row['fasilitas_updated_at'] ?? null)) . '</td>'
-                            . '</tr>';
-                    }
-                ) ?>
-            </div>
+            <?= section_card(
+                'fasilitas',
+                'Fasilitas Desa',
+                'Data fasilitas publik dan link lokasi.',
+                ['ID', 'Nama', 'Gambar', 'Google Maps', 'Dibuat', 'Diperbarui'],
+                $fasilitas,
+                static function (array $row): string {
+                    $img = (string) ($row['fasilitas_gambar'] ?? '');
+                    $maps = (string) ($row['fasilitas_gmaps_link'] ?? '');
+                    $imgHtml = $img !== '' ? '<div class="media-thumb"><img src="' . e($img) . '" alt="fasilitas"><span>Foto</span></div>' : '-';
+                    $mapsHtml = $maps !== '' ? '<a href="' . e($maps) . '" target="_blank" rel="noopener">Buka Maps</a>' : '-';
+                    return '<tr>'
+                        . '<td>#' . e((string) $row['fasilitas_id']) . '</td>'
+                        . '<td>' . e((string) $row['fasilitas_nama']) . '</td>'
+                        . '<td>' . $imgHtml . '</td>'
+                        . '<td>' . $mapsHtml . '</td>'
+                        . '<td>' . e(format_datetime($row['fasilitas_created_at'] ?? null)) . '</td>'
+                        . '<td>' . e(format_datetime($row['fasilitas_updated_at'] ?? null)) . '</td>'
+                        . '</tr>';
+                }
+            ) ?>
 
-            <div id="potensi">
-                <?= section_card(
-                    'Potensi Desa',
-                    'Daftar potensi desa beserta kategori.',
-                    ['ID', 'Judul', 'Kategori', 'Google Maps', 'Dibuat', 'Diperbarui'],
-                    $potensiDesa,
-                    static function (array $row): string {
-                        $maps = (string) ($row['potensi_gmaps_link'] ?? '');
-                        $mapsHtml = $maps !== '' ? '<a href="' . e($maps) . '" target="_blank" rel="noopener">Lokasi</a>' : '-';
-                        return '<tr>'
-                            . '<td>#' . e((string) $row['potensi_id']) . '</td>'
-                            . '<td>' . e((string) $row['potensi_judul']) . '</td>'
-                            . '<td>' . e((string) $row['potensi_kategori']) . '</td>'
-                            . '<td>' . $mapsHtml . '</td>'
-                            . '<td>' . e(format_datetime($row['potensi_created_at'] ?? null)) . '</td>'
-                            . '<td>' . e(format_datetime($row['potensi_updated_at'] ?? null)) . '</td>'
-                            . '</tr>';
-                    }
-                ) ?>
-            </div>
+            <?= section_card(
+                'potensi',
+                'Potensi Desa',
+                'Daftar potensi desa beserta kategori.',
+                ['ID', 'Judul', 'Kategori', 'Google Maps', 'Dibuat', 'Diperbarui'],
+                $potensiDesa,
+                static function (array $row): string {
+                    $maps = (string) ($row['potensi_gmaps_link'] ?? '');
+                    $mapsHtml = $maps !== '' ? '<a href="' . e($maps) . '" target="_blank" rel="noopener">Lokasi</a>' : '-';
+                    return '<tr>'
+                        . '<td>#' . e((string) $row['potensi_id']) . '</td>'
+                        . '<td>' . e((string) $row['potensi_judul']) . '</td>'
+                        . '<td>' . e((string) $row['potensi_kategori']) . '</td>'
+                        . '<td>' . $mapsHtml . '</td>'
+                        . '<td>' . e(format_datetime($row['potensi_created_at'] ?? null)) . '</td>'
+                        . '<td>' . e(format_datetime($row['potensi_updated_at'] ?? null)) . '</td>'
+                        . '</tr>';
+                }
+            ) ?>
 
-            <div id="galeri">
-                <?= section_card(
-                    'Galeri Desa',
-                    'Koleksi media foto galeri.',
-                    ['ID', 'Nama File', 'Keterangan', 'Preview', 'Dibuat'],
-                    $galeri,
-                    static function (array $row): string {
-                        $preview = (string) ($row['galeri_gambar'] ?? '');
-                        $previewHtml = $preview !== '' ? '<div class="media-thumb"><img src="' . e($preview) . '" alt="galeri"><span>Preview</span></div>' : '-';
-                        return '<tr>'
-                            . '<td>#' . e((string) $row['galeri_id']) . '</td>'
-                            . '<td>' . e((string) $row['galeri_namafile']) . '</td>'
-                            . '<td>' . e((string) ($row['galeri_keterangan'] ?? '')) . '</td>'
-                            . '<td>' . $previewHtml . '</td>'
-                            . '<td>' . e(format_datetime($row['galeri_created_at'] ?? null)) . '</td>'
-                            . '</tr>';
-                    }
-                ) ?>
-            </div>
+            <?= section_card(
+                'galeri',
+                'Galeri Desa',
+                'Koleksi media foto galeri.',
+                ['ID', 'Nama File', 'Keterangan', 'Preview', 'Dibuat'],
+                $galeri,
+                static function (array $row): string {
+                    $preview = (string) ($row['galeri_gambar'] ?? '');
+                    $previewHtml = $preview !== '' ? '<div class="media-thumb"><img src="' . e($preview) . '" alt="galeri"><span>Preview</span></div>' : '-';
+                    return '<tr>'
+                        . '<td>#' . e((string) $row['galeri_id']) . '</td>'
+                        . '<td>' . e((string) $row['galeri_namafile']) . '</td>'
+                        . '<td>' . e((string) ($row['galeri_keterangan'] ?? '')) . '</td>'
+                        . '<td>' . $previewHtml . '</td>'
+                        . '<td>' . e(format_datetime($row['galeri_created_at'] ?? null)) . '</td>'
+                        . '</tr>';
+                }
+            ) ?>
 
-            <div id="potensi-media">
-                <?= section_card(
-                    'Media Potensi Desa',
-                    'Daftar gambar terkait konten potensi.',
-                    ['ID', 'Potensi ID', 'Nama File', 'Dibuat'],
-                    $gambarPotensi,
-                    static function (array $row): string {
-                        return '<tr>'
-                            . '<td>#' . e((string) $row['gambar_id']) . '</td>'
-                            . '<td>' . e((string) ($row['potensi_id'] ?? '-')) . '</td>'
-                            . '<td>' . e((string) $row['gambar_namafile']) . '</td>'
-                            . '<td>' . e(format_datetime($row['gambar_created_at'] ?? null)) . '</td>'
-                            . '</tr>';
-                    }
-                ) ?>
-            </div>
+            <?= section_card(
+                'potensi-media',
+                'Media Potensi Desa',
+                'Daftar gambar terkait konten potensi.',
+                ['ID', 'Potensi ID', 'Nama File', 'Dibuat'],
+                $gambarPotensi,
+                static function (array $row): string {
+                    return '<tr>'
+                        . '<td>#' . e((string) $row['gambar_id']) . '</td>'
+                        . '<td>' . e((string) ($row['potensi_id'] ?? '-')) . '</td>'
+                        . '<td>' . e((string) $row['gambar_namafile']) . '</td>'
+                        . '<td>' . e(format_datetime($row['gambar_created_at'] ?? null)) . '</td>'
+                        . '</tr>';
+                }
+            ) ?>
 
-            <div id="pengumuman">
-                <?= section_card(
-                    'Pengumuman',
-                    'Informasi dan pengumuman penting desa.',
-                    ['ID', 'Berlaku sampai', 'Dibuat', 'Diperbarui'],
-                    $pengumuman,
-                    static function (array $row): string {
-                        return '<tr>'
-                            . '<td>#' . e((string) $row['pengumuman_id']) . '</td>'
-                            . '<td>' . e(format_datetime($row['pengumuman_valid_hingga'] ?? null)) . '</td>'
-                            . '<td>' . e(format_datetime($row['pengumuman_created_at'] ?? null)) . '</td>'
-                            . '<td>' . e(format_datetime($row['pengumuman_updated_at'] ?? null)) . '</td>'
-                            . '</tr>';
-                    }
-                ) ?>
-            </div>
+            <?= section_card(
+                'pengumuman',
+                'Pengumuman',
+                'Informasi dan pengumuman penting desa.',
+                ['ID', 'Berlaku sampai', 'Dibuat', 'Diperbarui'],
+                $pengumuman,
+                static function (array $row): string {
+                    return '<tr>'
+                        . '<td>#' . e((string) $row['pengumuman_id']) . '</td>'
+                        . '<td>' . e(format_datetime($row['pengumuman_valid_hingga'] ?? null)) . '</td>'
+                        . '<td>' . e(format_datetime($row['pengumuman_created_at'] ?? null)) . '</td>'
+                        . '<td>' . e(format_datetime($row['pengumuman_updated_at'] ?? null)) . '</td>'
+                        . '</tr>';
+                }
+            ) ?>
 
-            <div id="permohonan">
-                <?= section_card(
-                    'Permohonan Informasi',
-                    'Riwayat permintaan informasi publik.',
-                    ['ID', 'Email', 'Instansi', 'Status', 'Dibuat', 'Diperbarui'],
-                    $permohonanInformasi,
-                    static function (array $row): string {
-                        $status = (int) ($row['pi_selesai'] ?? 0) === 1
-                            ? '<span class="status-pill status-pill--done">Selesai</span>'
-                            : '<span class="status-pill status-pill--pending">Menunggu</span>';
+            <?= section_card(
+                'permohonan',
+                'Permohonan Informasi',
+                'Riwayat permintaan informasi publik.',
+                ['ID', 'Email', 'Instansi', 'Status', 'Dibuat', 'Diperbarui'],
+                $permohonanInformasi,
+                static function (array $row): string {
+                    $status = (int) ($row['pi_selesai'] ?? 0) === 1
+                        ? '<span class="status-pill status-pill--done">Selesai</span>'
+                        : '<span class="status-pill status-pill--pending">Menunggu</span>';
 
-                        return '<tr>'
-                            . '<td>#' . e((string) $row['pi_id']) . '</td>'
-                            . '<td>' . e((string) ($row['pi_email'] ?? '-')) . '</td>'
-                            . '<td>' . e((string) ($row['pi_asal_instansi'] ?? '-')) . '</td>'
-                            . '<td>' . $status . '</td>'
-                            . '<td>' . e(format_datetime($row['pi_created_at'] ?? null)) . '</td>'
-                            . '<td>' . e(format_datetime($row['pi_updated_at'] ?? null)) . '</td>'
-                            . '</tr>';
-                    }
-                ) ?>
-            </div>
+                    return '<tr>'
+                        . '<td>#' . e((string) $row['pi_id']) . '</td>'
+                        . '<td>' . e((string) ($row['pi_email'] ?? '-')) . '</td>'
+                        . '<td>' . e((string) ($row['pi_asal_instansi'] ?? '-')) . '</td>'
+                        . '<td>' . $status . '</td>'
+                        . '<td>' . e(format_datetime($row['pi_created_at'] ?? null)) . '</td>'
+                        . '<td>' . e(format_datetime($row['pi_updated_at'] ?? null)) . '</td>'
+                        . '</tr>';
+                }
+            ) ?>
 
-            <div id="ppid">
-                <?= section_card(
-                    'Dokumen PPID',
-                    'Daftar dokumen layanan informasi publik.',
-                    ['ID', 'Judul', 'Kategori', 'Nama File', 'Dibuat', 'Diperbarui'],
-                    $ppidDokumen,
-                    static function (array $row): string {
-                        return '<tr>'
-                            . '<td>#' . e((string) $row['ppid_id']) . '</td>'
-                            . '<td>' . e((string) $row['ppid_judul']) . '</td>'
-                            . '<td>' . e((string) ($row['ppid_kategori'] ?? '-')) . '</td>'
-                            . '<td>' . e((string) $row['ppid_namafile']) . '</td>'
-                            . '<td>' . e(format_datetime($row['ppid_created_at'] ?? null)) . '</td>'
-                            . '<td>' . e(format_datetime($row['ppid_updated_at'] ?? null)) . '</td>'
-                            . '</tr>';
-                    }
-                ) ?>
-            </div>
+            <?= section_card(
+                'ppid',
+                'Dokumen PPID',
+                'Daftar dokumen layanan informasi publik.',
+                ['ID', 'Judul', 'Kategori', 'Nama File', 'Dibuat', 'Diperbarui'],
+                $ppidDokumen,
+                static function (array $row): string {
+                    return '<tr>'
+                        . '<td>#' . e((string) $row['ppid_id']) . '</td>'
+                        . '<td>' . e((string) $row['ppid_judul']) . '</td>'
+                        . '<td>' . e((string) ($row['ppid_kategori'] ?? '-')) . '</td>'
+                        . '<td>' . e((string) $row['ppid_namafile']) . '</td>'
+                        . '<td>' . e(format_datetime($row['ppid_created_at'] ?? null)) . '</td>'
+                        . '<td>' . e(format_datetime($row['ppid_updated_at'] ?? null)) . '</td>'
+                        . '</tr>';
+                }
+            ) ?>
 
-            <div id="program">
-                <?= section_card(
-                    'Program Desa',
-                    'Program kerja dan kegiatan desa.',
-                    ['ID', 'Nama Program', 'Gambar', 'Dibuat', 'Diperbarui'],
-                    $programDesa,
-                    static function (array $row): string {
-                        $img = (string) ($row['program_gambar'] ?? '');
-                        $imgHtml = $img !== '' ? '<div class="media-thumb"><img src="' . e($img) . '" alt="program"><span>Media</span></div>' : '-';
-                        return '<tr>'
-                            . '<td>#' . e((string) $row['program_id']) . '</td>'
-                            . '<td>' . e((string) $row['program_nama']) . '</td>'
-                            . '<td>' . $imgHtml . '</td>'
-                            . '<td>' . e(format_datetime($row['program_created_at'] ?? null)) . '</td>'
-                            . '<td>' . e(format_datetime($row['program_updated_at'] ?? null)) . '</td>'
-                            . '</tr>';
-                    }
-                ) ?>
-            </div>
+            <?= section_card(
+                'program',
+                'Program Desa',
+                'Program kerja dan kegiatan desa.',
+                ['ID', 'Nama Program', 'Gambar', 'Dibuat', 'Diperbarui'],
+                $programDesa,
+                static function (array $row): string {
+                    $img = (string) ($row['program_gambar'] ?? '');
+                    $imgHtml = $img !== '' ? '<div class="media-thumb"><img src="' . e($img) . '" alt="program"><span>Media</span></div>' : '-';
+                    return '<tr>'
+                        . '<td>#' . e((string) $row['program_id']) . '</td>'
+                        . '<td>' . e((string) $row['program_nama']) . '</td>'
+                        . '<td>' . $imgHtml . '</td>'
+                        . '<td>' . e(format_datetime($row['program_created_at'] ?? null)) . '</td>'
+                        . '<td>' . e(format_datetime($row['program_updated_at'] ?? null)) . '</td>'
+                        . '</tr>';
+                }
+            ) ?>
+
+            <?= section_card(
+                'struktur',
+                'Struktur Organisasi',
+                'Susunan perangkat desa.',
+                ['ID', 'Nama', 'Jabatan', 'Foto', 'Dibuat', 'Diperbarui'],
+                $strukturOrganisasi,
+                static function (array $row): string {
+                    $foto = (string) ($row['struktur_foto'] ?? '');
+                    $fotoHtml = $foto !== '' ? '<div class="media-thumb"><img src="' . e($foto) . '" alt="struktur"><span>Foto</span></div>' : '-';
+                    return '<tr>'
+                        . '<td>#' . e((string) $row['struktur_id']) . '</td>'
+                        . '<td>' . e((string) $row['struktur_nama']) . '</td>'
+                        . '<td>' . e((string) $row['struktur_jabatan']) . '</td>'
+                        . '<td>' . $fotoHtml . '</td>'
+                        . '<td>' . e(format_datetime($row['struktur_created_at'] ?? null)) . '</td>'
+                        . '<td>' . e(format_datetime($row['struktur_updated_at'] ?? null)) . '</td>'
+                        . '</tr>';
+                }
+            ) ?>
+
+        </div>
+    </main>
+</div>
+<script>
+    document.addEventListener('DOMContentLoaded', function () {
+        document.body.classList.add('js-enabled');
+        var navLinks = Array.from(document.querySelectorAll('.sidebar-link[data-section]'));
+        var sectionMap = {};
+        Array.from(document.querySelectorAll('.section-card[data-section]')).forEach(function (section) {
+            var id = section.getAttribute('data-section');
+            if (id) {
+                sectionMap[id] = section;
+            }
+        });
+
+        var activateSection = function (id) {
+            if (!sectionMap[id]) {
+                return;
+            }
+
+            Object.keys(sectionMap).forEach(function (key) {
+                sectionMap[key].classList.toggle('is-active', key === id);
+            });
+
+            navLinks.forEach(function (link) {
+                var match = link.getAttribute('data-section') === id;
+                link.classList.toggle('is-active', match);
+            });
+        };
+
+        navLinks.forEach(function (link) {
+            link.addEventListener('click', function (event) {
+                event.preventDefault();
+                var targetId = link.getAttribute('data-section');
+                activateSection(targetId);
+                if (history.replaceState) {
+                    history.replaceState(null, '', '#' + targetId);
+                } else {
+                    window.location.hash = targetId;
+                }
+            });
+        });
+
+        var initial = window.location.hash ? window.location.hash.slice(1) : null;
+        if (!initial || !sectionMap[initial]) {
+            initial = navLinks.length ? navLinks[0].getAttribute('data-section') : null;
+        }
+
+        if (initial) {
+            activateSection(initial);
+        }
+
+        window.addEventListener('hashchange', function () {
+            var target = window.location.hash ? window.location.hash.slice(1) : null;
+            if (target && sectionMap[target]) {
+                activateSection(target);
+            }
+        });
+    });
+</script>
+</body>
+</html>
