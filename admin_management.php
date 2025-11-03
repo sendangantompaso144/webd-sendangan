@@ -276,6 +276,175 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         exit;
     }
 
+    if ($action === 'edit_berita') {
+        $beritaId = isset($_POST['berita_id']) ? (int) $_POST['berita_id'] : 0;
+        $newTitle = trim((string) ($_POST['berita_judul'] ?? ''));
+        $newContent = trim((string) ($_POST['berita_isi'] ?? ''));
+
+        if ($beritaId <= 0) {
+            $_SESSION['flash_error'][] = 'Data berita tidak ditemukan.';
+            header('Location: admin_management.php#berita');
+            exit;
+        }
+
+        if ($newTitle === '' || $newContent === '') {
+            $_SESSION['flash_error'][] = 'Judul dan isi berita wajib diisi.';
+            header('Location: admin_management.php#berita');
+            exit;
+        }
+
+        try {
+            $stmt = $pdo->prepare('SELECT berita_gambar FROM berita WHERE berita_id = ? LIMIT 1');
+            if ($stmt === false) {
+                throw new RuntimeException('Tidak dapat menyiapkan kueri.');
+            }
+            $stmt->execute([$beritaId]);
+            $row = $stmt->fetch(PDO::FETCH_ASSOC);
+        } catch (Throwable $exception) {
+            $_SESSION['flash_error'][] = 'Gagal memuat data berita: ' . $exception->getMessage();
+            header('Location: admin_management.php#berita');
+            exit;
+        }
+
+        if (!$row) {
+            $_SESSION['flash_error'][] = 'Data berita tidak ditemukan.';
+            header('Location: admin_management.php#berita');
+            exit;
+        }
+
+        $currentImage = trim((string) ($row['berita_gambar'] ?? ''));
+        $newImageName = null;
+        $newImagePath = null;
+
+        $fileInfo = $_FILES['berita_gambar'] ?? null;
+        $hasNewImage = is_array($fileInfo) && ($fileInfo['error'] ?? UPLOAD_ERR_NO_FILE) !== UPLOAD_ERR_NO_FILE;
+
+        if ($hasNewImage) {
+            if (($fileInfo['error'] ?? UPLOAD_ERR_OK) !== UPLOAD_ERR_OK) {
+                $_SESSION['flash_error'][] = 'Gagal mengunggah gambar baru.';
+                header('Location: admin_management.php#berita');
+                exit;
+            }
+
+            $finfo = finfo_open(FILEINFO_MIME_TYPE);
+            $mime = $finfo ? (string) finfo_file($finfo, $fileInfo['tmp_name']) : '';
+            if ($finfo) {
+                finfo_close($finfo);
+            }
+
+            $ext = strtolower(pathinfo((string) ($fileInfo['name'] ?? ''), PATHINFO_EXTENSION));
+            $allowedExt = ['jpg', 'jpeg', 'png', 'webp'];
+            $allowedMime = ['image/jpeg', 'image/png', 'image/webp'];
+
+            if (!in_array($ext, $allowedExt, true) || !in_array($mime, $allowedMime, true)) {
+                $_SESSION['flash_error'][] = 'Format gambar tidak didukung. Gunakan JPG, JPEG, PNG, atau WEBP.';
+                header('Location: admin_management.php#berita');
+                exit;
+            }
+
+            $imageMeta = @getimagesize($fileInfo['tmp_name']);
+            if ($imageMeta === false) {
+                $_SESSION['flash_error'][] = 'File gambar tidak valid.';
+                header('Location: admin_management.php#berita');
+                exit;
+            }
+
+            $targetDir = base_path('uploads/berita');
+            if (!is_dir($targetDir) && !mkdir($targetDir, 0755, true) && !is_dir($targetDir)) {
+                $_SESSION['flash_error'][] = 'Folder unggahan tidak dapat dibuat.';
+                header('Location: admin_management.php#berita');
+                exit;
+            }
+
+            $uniqueName = uniqid('berita_', true) . '.webp';
+            $targetPath = $targetDir . DIRECTORY_SEPARATOR . $uniqueName;
+
+            $conversionSuccess = false;
+            if ($mime === 'image/webp') {
+                $conversionSuccess = move_uploaded_file($fileInfo['tmp_name'], $targetPath);
+            } else {
+                if (!function_exists('imagewebp')) {
+                    $_SESSION['flash_error'][] = 'Konversi gambar ke WebP tidak tersedia di server.';
+                    header('Location: admin_management.php#berita');
+                    exit;
+                }
+
+                $image = null;
+                switch ($mime) {
+                    case 'image/jpeg':
+                        $image = @imagecreatefromjpeg($fileInfo['tmp_name']);
+                        break;
+                    case 'image/png':
+                        $image = @imagecreatefrompng($fileInfo['tmp_name']);
+                        if ($image !== false) {
+                            imagepalettetotruecolor($image);
+                            imagealphablending($image, false);
+                            imagesavealpha($image, true);
+                        }
+                        break;
+                }
+
+                if ($image !== false && $image !== null) {
+                    $conversionSuccess = imagewebp($image, $targetPath, 90);
+                    imagedestroy($image);
+                }
+            }
+
+            if (!$conversionSuccess) {
+                if (is_file($targetPath)) {
+                    @unlink($targetPath);
+                }
+                $_SESSION['flash_error'][] = 'Gagal memproses gambar baru.';
+                header('Location: admin_management.php#berita');
+                exit;
+            }
+
+            $newImageName = $uniqueName;
+            $newImagePath = $targetPath;
+        }
+
+        $setParts = ['berita_judul = ?', 'berita_isi = ?'];
+        $params = [$newTitle, $newContent];
+
+        if ($newImageName !== null) {
+            $setParts[] = 'berita_gambar = ?';
+            $params[] = $newImageName;
+        }
+
+        $params[] = $beritaId;
+        $setClause = implode(', ', $setParts);
+
+        try {
+            $stmt = $pdo->prepare('UPDATE berita SET ' . $setClause . ' WHERE berita_id = ?');
+            if ($stmt === false) {
+                throw new RuntimeException('Tidak dapat menyiapkan kueri.');
+            }
+            $executed = $stmt->execute($params);
+            if ($executed) {
+                if ($newImageName !== null && $currentImage !== '') {
+                    $oldPath = base_path('uploads/berita/' . ltrim($currentImage, "/\\"));
+                    if (is_file($oldPath)) {
+                        @unlink($oldPath);
+                    }
+                }
+                $_SESSION['flash'][] = 'Berita berhasil diperbarui.';
+            } else {
+                if ($newImagePath !== null && is_file($newImagePath)) {
+                    @unlink($newImagePath);
+                }
+                $_SESSION['flash_error'][] = 'Gagal memperbarui berita.';
+            }
+        } catch (Throwable $exception) {
+            if ($newImagePath !== null && is_file($newImagePath)) {
+                @unlink($newImagePath);
+            }
+            $_SESSION['flash_error'][] = 'Gagal memperbarui berita: ' . $exception->getMessage();
+        }
+
+        header('Location: admin_management.php#berita');
+        exit;
+    }
+
     if ($action === 'edit_apbdes') {
         $apbdesId = isset($_POST['apbdes_id']) ? (int) $_POST['apbdes_id'] : 0;
         $newTitle = trim((string) ($_POST['apbdes_judul'] ?? ''));
@@ -608,7 +777,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 }}
 
 $apbdes = fetch_table($pdo, 'SELECT apbdes_id, apbdes_judul, apbdes_file, apbdes_edited_by, apbdes_created_at, apbdes_updated_at FROM apbdes ORDER BY apbdes_updated_at DESC LIMIT 50');
-$berita = fetch_table($pdo, 'SELECT berita_id, berita_judul, berita_gambar, berita_dilihat, berita_created_at, berita_updated_at FROM berita ORDER BY berita_updated_at DESC LIMIT 50');
+$berita = fetch_table($pdo, 'SELECT berita_id, berita_judul, berita_isi, berita_gambar, berita_dilihat, berita_created_at, berita_updated_at FROM berita ORDER BY berita_updated_at DESC LIMIT 50');
 $fasilitas = fetch_table($pdo, 'SELECT fasilitas_id, fasilitas_nama, fasilitas_gambar, fasilitas_gmaps_link, fasilitas_created_at, fasilitas_updated_at FROM fasilitas ORDER BY fasilitas_updated_at DESC LIMIT 50');
 $galeri = fetch_table($pdo, 'SELECT galeri_id, galeri_namafile, galeri_keterangan, galeri_gambar, galeri_created_at FROM galeri ORDER BY galeri_created_at DESC LIMIT 50');
 $gambarPotensi = fetch_table($pdo, 'SELECT gambar_id, potensi_id, gambar_namafile, gambar_created_at FROM gambar_potensi_desa ORDER BY gambar_created_at DESC LIMIT 50');
@@ -1203,6 +1372,13 @@ function render_modal(string $formId, array $definition, array $oldInputs, array
             box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.15);
         }
 
+        .field-hint {
+            display: block;
+            margin-top: 6px;
+            font-size: 12px;
+            color: #64748b;
+        }
+
         .modal__field--checkbox label {
             font-weight: 500;
             display: inline-flex;
@@ -1486,12 +1662,19 @@ function render_modal(string $formId, array $definition, array $oldInputs, array
                     $thumb = (string) ($row['berita_gambar'] ?? '');
                     $thumbHtml = $thumb !== '' ? '<a href="' . e(base_uri('uploads/berita/' . ltrim($thumb, '/'))) . '" target="_blank" rel="noopener">Buka</a>' : '-';
                     $rowId = isset($row['berita_id']) ? (int) $row['berita_id'] : 0;
+                    $payload = [
+                        'id' => $rowId,
+                        'judul' => (string) ($row['berita_judul'] ?? ''),
+                        'isi' => (string) ($row['berita_isi'] ?? ''),
+                    ];
+                    $dataAttr = e((string) json_encode($payload, JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_AMP | JSON_UNESCAPED_UNICODE));
                     $actionsHtml = $rowId > 0
-                        ? '<form method="post" action="admin_management.php#berita" class="table-actions__form" onsubmit="return confirm(\'Hapus berita ini?\');">'
+                        ? '<button type="button" class="btn-outline" data-open-modal="berita-edit" data-berita="' . $dataAttr . '">Ubah</button>'
+                            . '<form method="post" action="admin_management.php#berita" class="table-actions__form" onsubmit="return confirm(\'Hapus berita ini?\');">'
                             . '<input type="hidden" name="action" value="delete_berita">'
                             . '<input type="hidden" name="berita_id" value="' . e((string) $rowId) . '">'
                             . '<button type="submit" class="btn-danger">Hapus</button>'
-                        . '</form>'
+                            . '</form>'
                         : '-';
                     return '<tr>'
                         . '<td>#' . e((string) $row['berita_id']) . '</td>'
@@ -1704,6 +1887,37 @@ function render_modal(string $formId, array $definition, array $oldInputs, array
             </div>
         </div>
     </div>
+    <div class="modal-backdrop" data-modal="berita-edit">
+        <div class="modal">
+            <div class="modal__header">
+                <h3 class="modal__title">Ubah Berita</h3>
+                <button type="button" class="modal__close" data-close-modal aria-label="Tutup">&times;</button>
+            </div>
+            <div class="modal__body">
+                <form method="post" action="admin_management.php#berita" autocomplete="off" enctype="multipart/form-data" id="berita-edit-form">
+                    <input type="hidden" name="action" value="edit_berita">
+                    <input type="hidden" name="berita_id" id="berita_edit_id">
+                    <div class="modal__field">
+                        <label for="berita_edit_judul">Judul Berita <span class="required">*</span></label>
+                        <input type="text" name="berita_judul" id="berita_edit_judul" required>
+                    </div>
+                    <div class="modal__field">
+                        <label for="berita_edit_isi">Isi Berita <span class="required">*</span></label>
+                        <textarea name="berita_isi" id="berita_edit_isi" rows="6" required></textarea>
+                    </div>
+                    <div class="modal__field">
+                        <label for="berita_edit_gambar">Gambar (opsional)</label>
+                        <input type="file" name="berita_gambar" id="berita_edit_gambar" accept="image/jpeg,image/png,image/webp">
+                        <small class="field-hint">Kosongkan jika tidak ingin mengganti gambar.</small>
+                    </div>
+                    <div class="modal__actions">
+                        <button type="button" class="btn-secondary" data-close-modal>Batal</button>
+                        <button type="submit" class="btn-primary">Simpan Perubahan</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
 </div>
 <div class="upload-overlay" id="upload-overlay" role="alert" aria-live="assertive" aria-hidden="true">
     <div class="upload-overlay__content">
@@ -1720,9 +1934,13 @@ function render_modal(string $formId, array $definition, array $oldInputs, array
             uploadOverlay.classList.remove('is-visible');
             uploadOverlay.setAttribute('aria-hidden', 'true');
         }
-        var apbdesEditForm = document.getElementById('apbdes-edit-form');
         var apbdesEditIdInput = document.getElementById('apbdes_edit_id');
         var apbdesEditTitleInput = document.getElementById('apbdes_edit_judul');
+        var beritaEditForm = document.getElementById('berita-edit-form');
+        var beritaEditIdInput = document.getElementById('berita_edit_id');
+        var beritaEditTitleInput = document.getElementById('berita_edit_judul');
+        var beritaEditBodyInput = document.getElementById('berita_edit_isi');
+        var beritaEditFileInput = document.getElementById('berita_edit_gambar');
         var showUploadOverlay = function () {
             if (!uploadOverlay) {
                 return;
@@ -1842,6 +2060,29 @@ function render_modal(string $formId, array $definition, array $oldInputs, array
                     }
                     if (apbdesEditTitleInput) {
                         apbdesEditTitleInput.value = btn.getAttribute('data-apbdes-judul') || '';
+                    }
+                }
+                if (targetId === 'berita-edit') {
+                    if (beritaEditFileInput) {
+                        beritaEditFileInput.value = '';
+                    }
+                    var payloadRaw = btn.getAttribute('data-berita') || '';
+                    var payload = {};
+                    if (payloadRaw !== '') {
+                        try {
+                            payload = JSON.parse(payloadRaw);
+                        } catch (error) {
+                            payload = {};
+                        }
+                    }
+                    if (beritaEditIdInput) {
+                        beritaEditIdInput.value = payload.id ? String(payload.id) : '';
+                    }
+                    if (beritaEditTitleInput) {
+                        beritaEditTitleInput.value = payload.judul ? String(payload.judul) : '';
+                    }
+                    if (beritaEditBodyInput) {
+                        beritaEditBodyInput.value = payload.isi ? String(payload.isi) : '';
                     }
                 }
                 if (targetId) {
