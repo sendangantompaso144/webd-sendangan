@@ -2226,13 +2226,18 @@ function render_modal(string $formId, array $definition, array $oldInputs, array
             if (!formIdValue) {
                 return;
             }
-            if (['apbdes', 'berita'].indexOf(formIdValue) === -1) {
+            if (['apbdes', 'berita', 'fasilitas'].indexOf(formIdValue) === -1) {
                 return;
             }
             form.addEventListener('submit', function () {
-                var selector = formIdValue === 'apbdes'
-                    ? 'input[type="file"][name="apbdes_file"]'
-                    : 'input[type="file"][name="berita_gambar"]';
+                var selector = 'input[type="file"]';
+                if (formIdValue === 'apbdes') {
+                    selector = 'input[type="file"][name="apbdes_file"]';
+                } else if (formIdValue === 'berita') {
+                    selector = 'input[type="file"][name="berita_gambar"]';
+                } else if (formIdValue === 'fasilitas') {
+                    selector = 'input[type="file"][name="fasilitas_gambar"]';
+                }
                 var fileInput = form.querySelector(selector);
                 if (fileInput && fileInput.files && fileInput.files.length > 0) {
                     showUploadOverlay();
