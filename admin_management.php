@@ -164,6 +164,63 @@ $tableForms = [
 ];
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    $action = (string) ($_POST['action'] ?? '');
+    if ($action === 'delete_apbdes') {
+        $apbdesId = isset($_POST['apbdes_id']) ? (int) $_POST['apbdes_id'] : 0;
+        if ($apbdesId <= 0) {
+            $_SESSION['flash_error'][] = 'Data APBDes tidak ditemukan.';
+            header('Location: admin_management.php#apbdes');
+            exit;
+        }
+
+        try {
+            $stmt = $pdo->prepare('SELECT apbdes_file FROM apbdes WHERE apbdes_id = ? LIMIT 1');
+            if ($stmt === false) {
+                throw new RuntimeException('Tidak dapat menyiapkan kueri.');
+            }
+            $stmt->execute([$apbdesId]);
+            $row = $stmt->fetch(PDO::FETCH_ASSOC);
+        } catch (Throwable $exception) {
+            $_SESSION['flash_error'][] = 'Gagal memuat data APBDes: ' . $exception->getMessage();
+            header('Location: admin_management.php#apbdes');
+            exit;
+        }
+
+        if (!$row) {
+            $_SESSION['flash_error'][] = 'Data APBDes tidak ditemukan.';
+            header('Location: admin_management.php#apbdes');
+            exit;
+        }
+
+        $fileName = trim((string) ($row['apbdes_file'] ?? ''));
+        if ($fileName !== '') {
+            $filePath = base_path('uploads/apbdes/' . ltrim($fileName, "/\\"));
+            if (is_file($filePath) && !unlink($filePath)) {
+                $_SESSION['flash_error'][] = 'Gagal menghapus berkas APBDes.';
+                header('Location: admin_management.php#apbdes');
+                exit;
+            }
+        }
+
+        try {
+            $stmt = $pdo->prepare('DELETE FROM apbdes WHERE apbdes_id = ?');
+            if ($stmt === false) {
+                throw new RuntimeException('Tidak dapat menyiapkan kueri.');
+            }
+            $executed = $stmt->execute([$apbdesId]);
+            if ($executed) {
+                $_SESSION['flash'][] = 'Dokumen APBDes berhasil dihapus.';
+            } else {
+                $_SESSION['flash_error'][] = 'Gagal menghapus data APBDes.';
+            }
+        } catch (Throwable $exception) {
+            $_SESSION['flash_error'][] = 'Gagal menghapus data APBDes: ' . $exception->getMessage();
+        }
+
+        header('Location: admin_management.php#apbdes');
+        exit;
+    }
+
     $formId = (string) ($_POST['form_id'] ?? '');
     if (isset($tableForms[$formId])) {
         $definition = $tableForms[$formId];
@@ -369,9 +426,10 @@ $programDesa = fetch_table($pdo, 'SELECT program_id, program_nama, program_gamba
 $strukturOrganisasi = fetch_table($pdo, 'SELECT struktur_id, struktur_nama, struktur_jabatan, struktur_foto, struktur_created_at, struktur_updated_at FROM struktur_organisasi ORDER BY struktur_updated_at DESC LIMIT 50');
 
 $flashMessages = $_SESSION['flash'] ?? [];
+$flashErrors = $_SESSION['flash_error'] ?? [];
 $formErrors = $_SESSION['form_errors'] ?? [];
 $formOld = $_SESSION['form_old'] ?? [];
-unset($_SESSION['flash'], $_SESSION['form_errors'], $_SESSION['form_old']);
+unset($_SESSION['flash'], $_SESSION['flash_error'], $_SESSION['form_errors'], $_SESSION['form_old']);
 
 function section_card(string $sectionId, string $title, string $description, array $headers, array $rows, callable $rowRenderer): string
 {
@@ -791,15 +849,17 @@ function render_modal(string $formId, array $definition, array $oldInputs, array
         }
 
         .table-actions {
-            display: inline-flex;
+            display: flex;
             align-items: center;
             gap: 8px;
-            font-size: 12px;
-            color: #1d4ed8;
+        }
+
+        .table-actions__form {
+            margin: 0;
         }
 
         .table-actions a {
-            color: inherit;
+            color: #2563eb;
             text-decoration: none;
             font-weight: 600;
         }
@@ -936,6 +996,24 @@ function render_modal(string $formId, array $definition, array $oldInputs, array
 
         .btn-secondary:hover {
             background: rgba(148, 163, 184, 0.35);
+        }
+
+        .btn-danger {
+            border: none;
+            border-radius: 8px;
+            padding: 8px 14px;
+            font-weight: 600;
+            font-size: 13px;
+            cursor: pointer;
+            background: rgba(220, 38, 38, 0.15);
+            color: #b91c1c;
+            line-height: 1.2;
+            transition: background 0.2s ease, color 0.2s ease;
+        }
+
+        .btn-danger:hover {
+            background: rgba(220, 38, 38, 0.25);
+            color: #991b1b;
         }
 
         .modal-alert {
@@ -1084,6 +1162,9 @@ function render_modal(string $formId, array $definition, array $oldInputs, array
             </div>
             <span>Total sumber konten: 10 tabel</span>
         </div>
+            <?php foreach ($flashErrors as $msg): ?>
+                <div class="flash flash--error"><?= e($msg) ?></div>
+            <?php endforeach; ?>
             <?php foreach ($flashMessages as $msg): ?>
                 <div class="flash flash--success"><?= e($msg) ?></div>
             <?php endforeach; ?>
@@ -1094,11 +1175,19 @@ function render_modal(string $formId, array $definition, array $oldInputs, array
                 'apbdes',
                 'Dokumen APBDes',
                 'Daftar dokumen APBDes terbaru.',
-                ['ID', 'Judul', 'Berkas', 'Diubah oleh', 'Dibuat', 'Diperbarui'],
+                ['ID', 'Judul', 'Berkas', 'Diubah oleh', 'Dibuat', 'Diperbarui', 'Aksi'],
                 $apbdes,
                 static function (array $row): string {
                     $file = (string) ($row['apbdes_file'] ?? '');
                     $fileLink = $file !== '' ? '<a href="' . e(base_uri('uploads/apbdes/' . ltrim($file, '/'))) . '" target="_blank" rel="noopener">Lihat</a>' : '-';
+                    $rowId = (int) ($row['apbdes_id'] ?? 0);
+                    $actionsHtml = $rowId > 0
+                        ? '<form method="post" action="admin_management.php#apbdes" class="table-actions__form" onsubmit="return confirm(\'Hapus dokumen ini?\');">'
+                            . '<input type="hidden" name="action" value="delete_apbdes">'
+                            . '<input type="hidden" name="apbdes_id" value="' . e((string) $rowId) . '">'
+                            . '<button type="submit" class="btn-danger">Hapus</button>'
+                        . '</form>'
+                        : '-';
                     return '<tr>'
                         . '<td>#' . e((string) $row['apbdes_id']) . '</td>'
                         . '<td>' . e((string) $row['apbdes_judul']) . '</td>'
@@ -1106,6 +1195,7 @@ function render_modal(string $formId, array $definition, array $oldInputs, array
                         . '<td>' . e((string) ($row['apbdes_edited_by'] ?? '')) . '</td>'
                         . '<td>' . e(format_datetime($row['apbdes_created_at'] ?? null)) . '</td>'
                         . '<td>' . e(format_datetime($row['apbdes_updated_at'] ?? null)) . '</td>'
+                        . '<td class="table-actions">' . $actionsHtml . '</td>'
                         . '</tr>';
                 }
             ) ?>
