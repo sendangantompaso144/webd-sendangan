@@ -2,50 +2,59 @@
 
 declare(strict_types=1);
 
-return [
-    'sejarah' => [
-        'Desa Sendangan merupakan desa tertua di Kecamatan Tompaso, yang berdiri sejak tahun 1632. Pada masa awal, kawasan tempat tinggal masyarakat dikenal dengan sebutan "Mawale", yang berarti rumah wale.',
-        'Pada masa itu, penduduk Sendangan sempat tercerai-berai karena berbagai faktor, terutama dalam upaya mencari pekerjaan di tempat lain. Dari perpindahan tersebut, kemudian muncul beberapa desa baru, seperti Desa Kamanga dan lainnya.',
-        'Nama Sendangan sendiri memiliki arti "terbitnya matahari", menggambarkan letak geografis desa yang berada di bagian timur, tepat menghadap ke arah matahari terbit.',
-        'Desa Sendangan dikenal dengan suasana alam yang sejuk dan masyarakat yang menjunjung tinggi nilai gotong royong. Kehidupan warga yang sederhana namun harmonis menjadi cerminan semangat kebersamaan yang telah diwariskan sejak berdirinya desa ini pada abad ke-17.',
-    ],
-    'demografi_dasar' => (static function (): array {
-        $baseDefaults = [
-            'demografi.luas_wilayah_ha' => 103,
-            'demografi.jumlah_jaga' => 2,
-            'demografi.kepala_keluarga' => 137,
-        ];
+$pdo = null;
+try {
+    $pdo = db();
+} catch (Throwable) {
+    $pdo = null;
+}
 
-        $demografi = data_values($baseDefaults) + $baseDefaults;
+$sejarah = [];
 
-        $jumlahJaga = (int) ($demografi['demografi.jumlah_jaga'] ?? $baseDefaults['demografi.jumlah_jaga']);
-        $jumlahJaga = $jumlahJaga > 0 ? $jumlahJaga : $baseDefaults['demografi.jumlah_jaga'];
-
-        $presetPenduduk = [
-            1 => ['laki_laki' => 74, 'perempuan' => 78],
-            2 => ['laki_laki' => 98, 'perempuan' => 102],
-        ];
-
-        $jagaCount = max($jumlahJaga, count($presetPenduduk));
-        $pendudukDefaults = [];
-        for ($index = 1; $index <= $jagaCount; $index++) {
-            $preset = $presetPenduduk[$index] ?? ['laki_laki' => 0, 'perempuan' => 0];
-            $pendudukDefaults[sprintf('demografi.jaga_%d_laki', $index)] = $preset['laki_laki'];
-            $pendudukDefaults[sprintf('demografi.jaga_%d_perempuan', $index)] = $preset['perempuan'];
+if ($pdo !== null) {
+    try {
+        $stmt = $pdo->query("SELECT data_key, data_value FROM data WHERE data_key LIKE 'profil.sejarah_%' ORDER BY data_key ASC");
+        if ($stmt !== false) {
+            while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
+                $paragraph = trim((string) ($row['data_value'] ?? ''));
+                if ($paragraph !== '') {
+                    $sejarah[] = $paragraph;
+                }
+            }
         }
+    } catch (Throwable) {
+        $sejarah = [];
+    }
+}
 
-        $pendudukValues = $pendudukDefaults === []
-            ? []
-            : data_values($pendudukDefaults) + $pendudukDefaults;
+$demografiDasar = (static function (): array {
+    $baseDefaults = [
+        'demografi.luas_wilayah_ha' => 0,
+        'demografi.jumlah_jaga' => 0,
+        'demografi.kepala_keluarga' => 0,
+    ];
 
-        $pendudukJaga = [];
-        for ($index = 1; $index <= $jagaCount; $index++) {
+    $demografi = data_values($baseDefaults) + $baseDefaults;
+
+    $jumlahJaga = max(0, (int) ($demografi['demografi.jumlah_jaga'] ?? 0));
+    $pendudukDefaults = [];
+
+    if ($jumlahJaga > 0) {
+        for ($index = 1; $index <= $jumlahJaga; $index++) {
+            $pendudukDefaults[sprintf('demografi.jaga_%d_laki', $index)] = 0;
+            $pendudukDefaults[sprintf('demografi.jaga_%d_perempuan', $index)] = 0;
+        }
+    }
+
+    $pendudukValues = $pendudukDefaults === []
+        ? []
+        : data_values($pendudukDefaults) + $pendudukDefaults;
+
+    $pendudukJaga = [];
+    if ($jumlahJaga > 0) {
+        for ($index = 1; $index <= $jumlahJaga; $index++) {
             $laki = (int) ($pendudukValues[sprintf('demografi.jaga_%d_laki', $index)] ?? 0);
             $perempuan = (int) ($pendudukValues[sprintf('demografi.jaga_%d_perempuan', $index)] ?? 0);
-
-            if ($laki === 0 && $perempuan === 0 && !isset($pendudukDefaults[sprintf('demografi.jaga_%d_laki', $index)])) {
-                continue;
-            }
 
             $pendudukJaga[] = [
                 'nama' => 'Jaga ' . $index,
@@ -53,72 +62,48 @@ return [
                 'perempuan' => $perempuan,
             ];
         }
+    }
 
-        if ($pendudukJaga === []) {
-            $pendudukJaga = [
-                [
-                    'nama' => 'Jaga 1',
-                    'laki_laki' => 74,
-                    'perempuan' => 78,
-                ],
-                [
-                    'nama' => 'Jaga 2',
-                    'laki_laki' => 98,
-                    'perempuan' => 102,
-                ],
-            ];
+    return [
+        'luas_wilayah_ha' => (float) ($demografi['demografi.luas_wilayah_ha'] ?? 0),
+        'jumlah_jaga' => $jumlahJaga,
+        'penduduk_jaga' => $pendudukJaga,
+        'kepala_keluarga' => (int) ($demografi['demografi.kepala_keluarga'] ?? 0),
+    ];
+})();
+
+$fasilitas = [];
+$program = [];
+
+if ($pdo !== null) {
+    try {
+        $stmt = $pdo->query('SELECT fasilitas_id, fasilitas_nama, fasilitas_gambar, fasilitas_gmaps_link FROM fasilitas ORDER BY fasilitas_updated_at DESC');
+        if ($stmt !== false) {
+            $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
+            if (is_array($rows)) {
+                $fasilitas = $rows;
+            }
         }
+    } catch (Throwable) {
+        $fasilitas = [];
+    }
 
-        return [
-            'luas_wilayah_ha' => (float) ($demografi['demografi.luas_wilayah_ha'] ?? $baseDefaults['demografi.luas_wilayah_ha']),
-            'jumlah_jaga' => $jumlahJaga,
-            'penduduk_jaga' => $pendudukJaga,
-            'kepala_keluarga' => (int) ($demografi['demografi.kepala_keluarga'] ?? $baseDefaults['demografi.kepala_keluarga']),
-        ];
-    })(),
-    'fasilitas' => [
-        [
-            'fasilitas_nama' => 'Kantor Hukum Tua',
-            'fasilitas_gambar' => 'https://images.unsplash.com/photo-1529429617124-aee3186eebd4',
-            'fasilitas_gmaps_link' => 'https://goo.gl/maps/htDesaKantor',
-        ],
-        [
-            'fasilitas_nama' => 'Balai Desa Sendangan',
-            'fasilitas_gambar' => 'https://images.unsplash.com/photo-1521737604893-d14cc237f11d',
-            'fasilitas_gmaps_link' => 'https://goo.gl/maps/blDesaCommunity',
-        ],
-        [
-            'fasilitas_nama' => 'Puskesdes Sendangan',
-            'fasilitas_gambar' => 'https://images.unsplash.com/photo-1587502536263-9296fcb752c8',
-            'fasilitas_gmaps_link' => 'https://goo.gl/maps/pskSendanganCare',
-        ],
-        [
-            'fasilitas_nama' => 'PAUD Kasih Bunda',
-            'fasilitas_gambar' => 'https://images.unsplash.com/photo-1509062522246-3755977927d7',
-            'fasilitas_gmaps_link' => 'https://goo.gl/maps/paudKasihBunda',
-        ],
-        [
-            'fasilitas_nama' => 'Lapangan Olahraga Sendangan',
-            'fasilitas_gambar' => 'https://images.unsplash.com/photo-1516483638261-f4dbaf036963',
-            'fasilitas_gmaps_link' => 'https://goo.gl/maps/lpSendanganSport',
-        ],
-    ],
-    'program' => [
-        [
-            'program_nama' => 'Gerakan Nelayan Mandiri',
-            'program_deskripsi' => 'Pemberdayaan petani dan nelayan dengan teknologi tepat guna.',
-            'program_gambar' => 'https://images.unsplash.com/photo-1474511014708-9d942288df0e',
-        ],
-        [
-            'program_nama' => 'Kelas UMKM Desa',
-            'program_deskripsi' => 'Pelatihan branding, pemasaran digital, dan pengelolaan keuangan.',
-            'program_gambar' => 'https://images.unsplash.com/photo-1545239351-1141bd82e8a6',
-        ],
-        [
-            'program_nama' => 'Rumah Belajar Sendangan',
-            'program_deskripsi' => 'Ruang literasi dan bimbingan belajar untuk anak sekolah.',
-            'program_gambar' => 'https://images.unsplash.com/photo-1509062522246-3755977927d7',
-        ],
-    ],
+    try {
+        $stmt = $pdo->query('SELECT program_id, program_nama, program_deskripsi, program_gambar FROM program_desa ORDER BY program_updated_at DESC');
+        if ($stmt !== false) {
+            $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
+            if (is_array($rows)) {
+                $program = $rows;
+            }
+        }
+    } catch (Throwable) {
+        $program = [];
+    }
+}
+
+return [
+    'sejarah' => $sejarah,
+    'demografi_dasar' => $demografiDasar,
+    'fasilitas' => $fasilitas,
+    'program' => $program,
 ];
-

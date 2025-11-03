@@ -17,6 +17,49 @@ render_base_layout([
         $fasilitas = $profil['fasilitas'] ?? [];
         $program = $profil['program'] ?? [];
 
+        $sejarah = array_values(array_filter(array_map(
+            static fn($item): string => is_string($item) ? trim($item) : '',
+            is_array($sejarah) ? $sejarah : []
+        ), static fn(string $paragraph): bool => $paragraph !== ''));
+
+        if (!is_array($fasilitas)) {
+            $fasilitas = [];
+        } else {
+            $fasilitas = array_values(array_filter(array_map(
+                static function ($item): ?array {
+                    if (!is_array($item)) {
+                        return null;
+                    }
+                    $image = trim((string) ($item['fasilitas_gambar'] ?? ''));
+                    if ($image !== '' && !str_starts_with($image, 'http')) {
+                        $item['fasilitas_gambar'] = base_uri('uploads/fasilitas/' . ltrim($image, '/'));
+                    }
+                    $gmaps = trim((string) ($item['fasilitas_gmaps_link'] ?? ''));
+                    $item['fasilitas_gmaps_link'] = $gmaps !== '' ? $gmaps : '';
+                    return $item;
+                },
+                $fasilitas
+            ), static fn($item): bool => is_array($item) && ($item['fasilitas_nama'] ?? '') !== ''));
+        }
+
+        if (!is_array($program)) {
+            $program = [];
+        } else {
+            $program = array_values(array_filter(array_map(
+                static function ($item): ?array {
+                    if (!is_array($item)) {
+                        return null;
+                    }
+                    $image = trim((string) ($item['program_gambar'] ?? ''));
+                    if ($image !== '' && !str_starts_with($image, 'http')) {
+                        $item['program_gambar'] = base_uri('uploads/program/' . ltrim($image, '/'));
+                    }
+                    return $item;
+                },
+                $program
+            ), static fn($item): bool => is_array($item) && ($item['program_nama'] ?? '') !== ''));
+        }
+
         if (is_array($demografiDasar)) {
             $pendudukJaga = $demografiDasar['penduduk_jaga'] ?? [];
             $luasWilayahHa = isset($demografiDasar['luas_wilayah_ha']) ? (float) $demografiDasar['luas_wilayah_ha'] : null;
