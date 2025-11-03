@@ -60,6 +60,302 @@ function format_datetime(null|string $value): string
     }
 }
 
+$tableForms = [
+    'apbdes' => [
+        'table' => 'apbdes',
+        'title' => 'Dokumen APBDes',
+        'fields' => [
+            'apbdes_judul' => ['label' => 'Judul', 'type' => 'text', 'required' => true],
+            'apbdes_file' => ['label' => 'Nama Berkas', 'type' => 'file_pdf', 'required' => true],
+        ],
+    ],
+    'berita' => [
+        'table' => 'berita',
+        'title' => 'Berita Desa',
+        'fields' => [
+            'berita_judul' => ['label' => 'Judul', 'type' => 'text', 'required' => true],
+            'berita_isi' => ['label' => 'Isi Berita', 'type' => 'textarea', 'required' => true],
+            'berita_gambar' => ['label' => 'URL Gambar', 'type' => 'text', 'required' => false],
+            'berita_dilihat' => ['label' => 'Jumlah Dilihat', 'type' => 'number', 'required' => false, 'default' => 0],
+        ],
+    ],
+    'fasilitas' => [
+        'table' => 'fasilitas',
+        'title' => 'Fasilitas Desa',
+        'fields' => [
+            'fasilitas_nama' => ['label' => 'Nama Fasilitas', 'type' => 'text', 'required' => true],
+            'fasilitas_gambar' => ['label' => 'URL Gambar', 'type' => 'text', 'required' => false],
+            'fasilitas_gmaps_link' => ['label' => 'Link Google Maps', 'type' => 'text', 'required' => false],
+        ],
+    ],
+    'potensi' => [
+        'table' => 'potensi_desa',
+        'title' => 'Potensi Desa',
+        'fields' => [
+            'potensi_judul' => ['label' => 'Judul Potensi', 'type' => 'text', 'required' => true],
+            'potensi_isi' => ['label' => 'Deskripsi', 'type' => 'textarea', 'required' => true],
+            'potensi_kategori' => ['label' => 'Kategori', 'type' => 'select', 'required' => true, 'options' => ['Wisata', 'Budaya', 'Kuliner', 'UMKM']],
+            'potensi_gmaps_link' => ['label' => 'Link Google Maps', 'type' => 'text', 'required' => false],
+        ],
+    ],
+    'galeri' => [
+        'table' => 'galeri',
+        'title' => 'Galeri Desa',
+        'fields' => [
+            'galeri_namafile' => ['label' => 'Nama File', 'type' => 'text', 'required' => true],
+            'galeri_keterangan' => ['label' => 'Keterangan', 'type' => 'textarea', 'required' => false],
+            'galeri_gambar' => ['label' => 'URL Gambar', 'type' => 'text', 'required' => false],
+        ],
+    ],
+    'potensi-media' => [
+        'table' => 'gambar_potensi_desa',
+        'title' => 'Media Potensi Desa',
+        'fields' => [
+            'potensi_id' => ['label' => 'ID Potensi', 'type' => 'number', 'required' => false],
+            'gambar_namafile' => ['label' => 'Nama File', 'type' => 'text', 'required' => true],
+        ],
+    ],
+    'pengumuman' => [
+        'table' => 'pengumuman',
+        'title' => 'Pengumuman',
+        'fields' => [
+            'pengumuman_isi' => ['label' => 'Isi Pengumuman', 'type' => 'textarea', 'required' => true],
+            'pengumuman_valid_hingga' => ['label' => 'Berlaku Hingga', 'type' => 'datetime', 'required' => true],
+        ],
+    ],
+    'permohonan' => [
+        'table' => 'permohonan_informasi',
+        'title' => 'Permohonan Informasi',
+        'fields' => [
+            'pi_isi_permintaan' => ['label' => 'Isi Permintaan', 'type' => 'textarea', 'required' => true],
+            'pi_email' => ['label' => 'Email Pemohon', 'type' => 'email', 'required' => false],
+            'pi_asal_instansi' => ['label' => 'Asal Instansi', 'type' => 'text', 'required' => false],
+            'pi_selesai' => ['label' => 'Ditandai Selesai', 'type' => 'checkbox', 'required' => false, 'default' => 0],
+        ],
+    ],
+    'ppid' => [
+        'table' => 'ppid_dokumen',
+        'title' => 'Dokumen PPID',
+        'fields' => [
+            'ppid_judul' => ['label' => 'Judul Dokumen', 'type' => 'text', 'required' => true],
+            'ppid_namafile' => ['label' => 'Nama File', 'type' => 'text', 'required' => true],
+            'ppid_kategori' => ['label' => 'Kategori', 'type' => 'text', 'required' => false],
+            'ppid_pi_id' => ['label' => 'Terkait Permohonan ID', 'type' => 'number', 'required' => false],
+        ],
+    ],
+    'program' => [
+        'table' => 'program_desa',
+        'title' => 'Program Desa',
+        'fields' => [
+            'program_nama' => ['label' => 'Nama Program', 'type' => 'text', 'required' => true],
+            'program_deskripsi' => ['label' => 'Deskripsi', 'type' => 'textarea', 'required' => true],
+            'program_gambar' => ['label' => 'URL Gambar', 'type' => 'text', 'required' => false],
+        ],
+    ],
+    'struktur' => [
+        'table' => 'struktur_organisasi',
+        'title' => 'Struktur Organisasi',
+        'fields' => [
+            'struktur_nama' => ['label' => 'Nama', 'type' => 'text', 'required' => true],
+            'struktur_jabatan' => ['label' => 'Jabatan', 'type' => 'text', 'required' => true],
+            'struktur_foto' => ['label' => 'URL Foto', 'type' => 'text', 'required' => false],
+        ],
+    ],
+];
+
+if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    $formId = (string) ($_POST['form_id'] ?? '');
+    if (isset($tableForms[$formId])) {
+        $definition = $tableForms[$formId];
+        $fieldsDefinition = $definition['fields'];
+        $inputData = [];
+        $errors = [];
+
+        foreach ($fieldsDefinition as $fieldName => $fieldMeta) {
+            if (($fieldMeta['type'] ?? '') === 'file_pdf') {
+                $required = !empty($fieldMeta['required']);
+                $fileInfo = $_FILES[$fieldName] ?? null;
+                if (!is_array($fileInfo) || ($fileInfo['error'] ?? UPLOAD_ERR_NO_FILE) === UPLOAD_ERR_NO_FILE) {
+                    if ($required) {
+                        $errors[$fieldName] = 'Silakan unggah file PDF.';
+                    }
+                } else {
+                    if (($fileInfo['error'] ?? UPLOAD_ERR_OK) !== UPLOAD_ERR_OK) {
+                        $errors[$fieldName] = 'Gagal mengunggah file.';
+                    } else {
+                        $finfo = finfo_open(FILEINFO_MIME_TYPE);
+                        $mime = $finfo ? finfo_file($finfo, $fileInfo['tmp_name']) : '';
+                        if ($finfo) {
+                            finfo_close($finfo);
+                        }
+                        $ext = strtolower(pathinfo($fileInfo['name'], PATHINFO_EXTENSION));
+                        if ($mime !== 'application/pdf' || $ext !== 'pdf') {
+                            $errors[$fieldName] = 'File harus berupa PDF.';
+                        } else {
+                            $inputData[$fieldName] = $fileInfo;
+                        }
+                    }
+                }
+                continue;
+            }
+
+            $type = $fieldMeta['type'] ?? 'text';
+            $required = !empty($fieldMeta['required']);
+            $rawValue = $_POST[$fieldName] ?? null;
+            $value = null;
+
+            switch ($type) {
+                case 'checkbox':
+                    $value = isset($_POST[$fieldName]) ? 1 : 0;
+                    if ($required && $value !== 1) {
+                        $errors[$fieldName] = 'Harus dicentang.';
+                    } elseif ($value === 1 || !empty($fieldMeta['default'])) {
+                        $inputData[$fieldName] = $value;
+                    } elseif ($required) {
+                        $inputData[$fieldName] = 0;
+                    }
+                    continue 2;
+
+                case 'number':
+                    $raw = is_array($rawValue) ? '' : trim((string) $rawValue);
+                    if ($raw === '') {
+                        if ($required) {
+                            $errors[$fieldName] = 'Data wajib diisi.';
+                        } elseif (array_key_exists('default', $fieldMeta)) {
+                            $inputData[$fieldName] = (int) $fieldMeta['default'];
+                        }
+                    } else {
+                        $filtered = filter_var($raw, FILTER_VALIDATE_INT);
+                        if ($filtered === false) {
+                            $errors[$fieldName] = 'Masukkan angka yang valid.';
+                        } else {
+                            $inputData[$fieldName] = $filtered;
+                        }
+                    }
+                    continue 2;
+
+                case 'select':
+                    $options = $fieldMeta['options'] ?? [];
+                    $raw = is_array($rawValue) ? '' : trim((string) $rawValue);
+                    if ($raw === '') {
+                        if ($required) {
+                            $errors[$fieldName] = 'Pilih salah satu opsi.';
+                        }
+                    } elseif (!in_array($raw, $options, true)) {
+                        $errors[$fieldName] = 'Opsi tidak valid.';
+                    } else {
+                        $inputData[$fieldName] = $raw;
+                    }
+                    continue 2;
+
+                case 'datetime':
+                    $raw = is_array($rawValue) ? '' : trim((string) $rawValue);
+                    if ($raw === '') {
+                        if ($required) {
+                            $errors[$fieldName] = 'Tanggal dan waktu wajib diisi.';
+                        }
+                    } else {
+                        $timestamp = strtotime($raw);
+                        if ($timestamp === false) {
+                            $errors[$fieldName] = 'Format tanggal dan waktu tidak valid.';
+                        } else {
+                            $inputData[$fieldName] = date('Y-m-d H:i:s', $timestamp);
+                        }
+                    }
+                    continue 2;
+
+                case 'email':
+                    $raw = is_array($rawValue) ? '' : trim((string) $rawValue);
+                    if ($raw === '') {
+                        if ($required) {
+                            $errors[$fieldName] = 'Email wajib diisi.';
+                        }
+                    } elseif (!filter_var($raw, FILTER_VALIDATE_EMAIL)) {
+                        $errors[$fieldName] = 'Email tidak valid.';
+                    } else {
+                        $inputData[$fieldName] = $raw;
+                    }
+                    continue 2;
+
+                case 'textarea':
+                case 'text':
+                case 'file_pdf':
+                default:
+                    $raw = is_array($rawValue) ? '' : trim((string) $rawValue);
+                    if ($raw === '') {
+                        if ($required) {
+                            $errors[$fieldName] = 'Data wajib diisi.';
+                        } elseif (array_key_exists('default', $fieldMeta)) {
+                            $inputData[$fieldName] = (string) $fieldMeta['default'];
+                        }
+                    } else {
+                        $inputData[$fieldName] = $raw;
+                    }
+                    continue 2;
+            }
+        }
+
+        if ($errors === []) {
+            if ($inputData === []) {
+                $errors['_general'] = 'Tidak ada data yang diisi.';
+            } else {
+                $fileUploads = [];
+                foreach ($inputData as $column => $value) {
+                    if (is_array($value) && isset($value['tmp_name'])) {
+                        $fileUploads[$column] = $value;
+                    }
+                }
+
+                foreach ($fileUploads as $column => $fileInfo) {
+                    $targetDir = base_path('uploads/' . $formId);
+                    if (!is_dir($targetDir) && !mkdir($targetDir, 0755, true) && !is_dir($targetDir)) {
+                        $errors['_general'] = 'Folder unggahan tidak dapat dibuat.';
+                        break;
+                    }
+
+                    $uniqueName = uniqid($formId . '_', true) . '.pdf';
+                    $targetPath = $targetDir . DIRECTORY_SEPARATOR . $uniqueName;
+                    if (!move_uploaded_file($fileInfo['tmp_name'], $targetPath)) {
+                        $errors['_general'] = 'Gagal memindahkan file unggahan.';
+                        break;
+                    }
+
+                    $fileInfo['_stored'] = $uniqueName;
+                    $fileUploads[$column] = $fileInfo;
+                }
+
+                if (($errors['_general'] ?? '') === '') {
+                    if ($formId === 'apbdes' && isset($adminSession['name'])) {
+                        $inputData['apbdes_edited_by'] = (string) $adminSession['name'];
+                    }
+
+                    foreach ($fileUploads as $column => $fileInfo) {
+                        $inputData[$column] = $fileInfo['_stored'] ?? '';
+                    }
+
+                    $columns = array_keys($inputData);
+                    $placeholders = implode(', ', array_fill(0, count($columns), '?'));
+                    $query = 'INSERT INTO ' . $definition['table'] . ' (' . implode(', ', $columns) . ') VALUES (' . $placeholders . ')';
+                try {
+                    $stmt = $pdo->prepare($query);
+                    $stmt->execute(array_values($inputData));
+                    $_SESSION['flash'][] = $definition['title'] . ' berhasil ditambahkan.';
+                    unset($_SESSION['form_errors'][$formId], $_SESSION['form_old'][$formId]);
+                    header('Location: admin_management.php#' . rawurlencode($formId));
+                    exit;
+                } catch (Throwable $exception) {
+                    $errors['_general'] = 'Gagal menyimpan data: ' . $exception->getMessage();
+                }
+            }
+        }
+
+        $_SESSION['form_errors'][$formId] = $errors;
+        $_SESSION['form_old'][$formId] = array_intersect_key($_POST, $fieldsDefinition);
+        header('Location: admin_management.php#' . rawurlencode($formId));
+        exit;
+    }
+}}
+
 $apbdes = fetch_table($pdo, 'SELECT apbdes_id, apbdes_judul, apbdes_file, apbdes_edited_by, apbdes_created_at, apbdes_updated_at FROM apbdes ORDER BY apbdes_updated_at DESC LIMIT 50');
 $berita = fetch_table($pdo, 'SELECT berita_id, berita_judul, berita_gambar, berita_dilihat, berita_created_at, berita_updated_at FROM berita ORDER BY berita_updated_at DESC LIMIT 50');
 $fasilitas = fetch_table($pdo, 'SELECT fasilitas_id, fasilitas_nama, fasilitas_gambar, fasilitas_gmaps_link, fasilitas_created_at, fasilitas_updated_at FROM fasilitas ORDER BY fasilitas_updated_at DESC LIMIT 50');
@@ -72,8 +368,15 @@ $ppidDokumen = fetch_table($pdo, 'SELECT ppid_id, ppid_judul, ppid_kategori, ppi
 $programDesa = fetch_table($pdo, 'SELECT program_id, program_nama, program_gambar, program_created_at, program_updated_at FROM program_desa ORDER BY program_updated_at DESC LIMIT 50');
 $strukturOrganisasi = fetch_table($pdo, 'SELECT struktur_id, struktur_nama, struktur_jabatan, struktur_foto, struktur_created_at, struktur_updated_at FROM struktur_organisasi ORDER BY struktur_updated_at DESC LIMIT 50');
 
+$flashMessages = $_SESSION['flash'] ?? [];
+$formErrors = $_SESSION['form_errors'] ?? [];
+$formOld = $_SESSION['form_old'] ?? [];
+unset($_SESSION['flash'], $_SESSION['form_errors'], $_SESSION['form_old']);
+
 function section_card(string $sectionId, string $title, string $description, array $headers, array $rows, callable $rowRenderer): string
 {
+    global $tableForms;
+
     $headerHtml = '';
     foreach ($headers as $header) {
         $headerHtml .= '<th>' . e($header) . '</th>';
@@ -88,6 +391,11 @@ function section_card(string $sectionId, string $title, string $description, arr
         }
     }
 
+    $toolsHtml = '<span class="badge">' . count($rows) . ' item</span>';
+    if (isset($tableForms[$sectionId])) {
+        $toolsHtml .= '<button type="button" class="btn-add" data-open-modal="' . e($sectionId) . '">Tambah Data</button>';
+    }
+
     return '
     <section class="card section-card" data-section="' . e($sectionId) . '" id="' . e($sectionId) . '">
         <header class="card__header">
@@ -95,7 +403,7 @@ function section_card(string $sectionId, string $title, string $description, arr
                 <h2>' . e($title) . '</h2>
                 <p>' . e($description) . '</p>
             </div>
-            <span class="badge">' . count($rows) . ' item</span>
+            <div class="card__tools">' . $toolsHtml . '</div>
         </header>
         <div class="table-wrapper">
             <table>
@@ -104,6 +412,126 @@ function section_card(string $sectionId, string $title, string $description, arr
             </table>
         </div>
     </section>';
+}
+
+function render_modal(string $formId, array $definition, array $oldInputs, array $errors): string
+{
+    $title = $definition['title'] ?? ucfirst(str_replace('-', ' ', $formId));
+    $fields = $definition['fields'] ?? [];
+
+    $errorList = '';
+    if ($errors !== []) {
+        $items = '';
+        foreach ($errors as $name => $message) {
+            if ($name === '_general') {
+                continue;
+            }
+            $items .= '<li>' . e($message) . '</li>';
+        }
+        if (isset($errors['_general'])) {
+            $items = '<li>' . e($errors['_general']) . '</li>' . $items;
+        }
+        $errorList = '<div class="modal-alert"><strong>Periksa kembali:</strong><ul>' . $items . '</ul></div>';
+    }
+
+    $fieldsHtml = '';
+
+    foreach ($fields as $name => $meta) {
+        $type = $meta['type'] ?? 'text';
+        $label = $meta['label'] ?? ucfirst(str_replace('_', ' ', $name));
+        $required = !empty($meta['required']);
+        $default = $meta['default'] ?? null;
+        $value = $oldInputs[$name] ?? ($default ?? '');
+        $fieldError = $errors[$name] ?? '';
+
+        if ($type === 'datetime' && $value !== '') {
+            $timestamp = strtotime((string) $value);
+            if ($timestamp !== false) {
+                $value = date('Y-m-d\TH:i', $timestamp);
+            }
+        }
+
+        if ($type === 'checkbox') {
+            $isChecked = isset($oldInputs[$name])
+                ? in_array((string) $oldInputs[$name], ['1', 'on', 'true'], true)
+                : (!empty($default));
+
+            $fieldsHtml .= '
+            <div class="modal__field modal__field--checkbox">
+                <label>
+                    <input type="checkbox" name="' . e($name) . '"' . ($isChecked ? ' checked' : '') . '>
+                    ' . e($label) . '
+                </label>'
+                . ($fieldError !== '' ? '<div class="field-error">' . e($fieldError) . '</div>' : '')
+            . '</div>';
+            continue;
+        }
+
+        $inputHtml = '';
+        $requiredAttr = $required ? ' required' : '';
+
+        switch ($type) {
+            case 'file_pdf':
+                $inputHtml = '<input type="file" name="' . e($name) . '" accept="application/pdf"' . $requiredAttr . '>';
+                break;
+            case 'textarea':
+                $inputHtml = '<textarea name="' . e($name) . '" rows="4"' . $requiredAttr . '>' . e((string) $value) . '</textarea>';
+                break;
+            case 'select':
+                $optionsHtml = '';
+                $options = $meta['options'] ?? [];
+                foreach ($options as $option) {
+                    $optionsHtml .= '<option value="' . e($option) . '"' . ((string) $value === (string) $option ? ' selected' : '') . '>' . e($option) . '</option>';
+                }
+                $inputHtml = '<select name="' . e($name) . '"' . $requiredAttr . '>' . $optionsHtml . '</select>';
+                break;
+            case 'number':
+                $inputHtml = '<input type="number" name="' . e($name) . '" value="' . e($value !== '' ? (string) $value : '') . '"' . $requiredAttr . '>';
+                break;
+            case 'email':
+                $inputHtml = '<input type="email" name="' . e($name) . '" value="' . e((string) $value) . '"' . $requiredAttr . '>';
+                break;
+            case 'datetime':
+                $inputHtml = '<input type="datetime-local" name="' . e($name) . '" value="' . e((string) $value) . '"' . $requiredAttr . '>';
+                break;
+            default:
+                    $inputHtml = '<input type="text" name="' . e($name) . '" value="' . e((string) (is_array($value) ? '' : $value)) . '"' . $requiredAttr . '>';
+                break;
+        }
+
+        $fieldsHtml .= '
+            <div class="modal__field">
+                <label for="' . e($formId . '_' . $name) . '">' . e($label) . ($required ? ' <span class="required">*</span>' : '') . '</label>
+                ' . str_replace('name="' . e($name) . '"', 'name="' . e($name) . '" id="' . e($formId . '_' . $name) . '"', $inputHtml) . '
+                ' . ($fieldError !== '' ? '<div class="field-error">' . e($fieldError) . '</div>' : '') . '
+            </div>';
+    }
+
+    $backdropAttr = 'class="modal-backdrop" data-modal="' . e($formId) . '"';
+    if ($errors !== []) {
+        $backdropAttr .= ' data-open-on-load="1"';
+    }
+
+    return '
+    <div ' . $backdropAttr . '>
+        <div class="modal">
+            <div class="modal__header">
+                <h3 class="modal__title">Tambah ' . e($definition['title'] ?? 'Data') . '</h3>
+                <button type="button" class="modal__close" data-close-modal aria-label="Tutup">&times;</button>
+            </div>
+            <div class="modal__body">
+                ' . $errorList . '
+                <form method="post" action="admin_management.php#' . e($formId) . '" autocomplete="off" enctype="multipart/form-data">
+                    <input type="hidden" name="form_id" value="' . e($formId) . '">
+                    ' . $fieldsHtml . '
+                    <div class="modal__actions">
+                        <button type="button" class="btn-secondary" data-close-modal>Batal</button>
+                        <button type="submit" class="btn-primary">Simpan</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>';
 }
 
 ?><!DOCTYPE html>
@@ -281,9 +709,53 @@ function section_card(string $sectionId, string $title, string $description, arr
             font-size: 12px;
         }
 
+        .card__tools {
+            display: inline-flex;
+            align-items: center;
+            gap: 12px;
+            flex-wrap: wrap;
+        }
+
+        .btn-add {
+            border: none;
+            border-radius: 10px;
+            padding: 10px 16px;
+            background: #2563eb;
+            color: #ffffff;
+            font-weight: 600;
+            font-size: 13px;
+            cursor: pointer;
+            transition: transform 0.2s ease, box-shadow 0.2s ease, background 0.2s ease;
+        }
+
+        .btn-add:hover {
+            transform: translateY(-1px);
+            background: #1d4ed8;
+            box-shadow: 0 10px 20px rgba(37, 99, 235, 0.28);
+        }
+
         .table-wrapper {
             overflow-x: auto;
             border-radius: 12px;
+        }
+
+        .flash {
+            margin-bottom: 20px;
+            padding: 14px 18px;
+            border-radius: 12px;
+            font-size: 14px;
+        }
+
+        .flash--success {
+            background: rgba(22, 163, 74, 0.12);
+            color: #166534;
+            border: 1px solid rgba(22, 163, 74, 0.3);
+        }
+
+        .flash--error {
+            background: rgba(239, 68, 68, 0.12);
+            color: #b91c1c;
+            border: 1px solid rgba(239, 68, 68, 0.3);
         }
 
         table {
@@ -330,6 +802,168 @@ function section_card(string $sectionId, string $title, string $description, arr
             color: inherit;
             text-decoration: none;
             font-weight: 600;
+        }
+
+        .modal-backdrop {
+            position: fixed;
+            inset: 0;
+            background: rgba(15, 23, 42, 0.55);
+            display: none;
+            align-items: center;
+            justify-content: center;
+            padding: 24px;
+            z-index: 100;
+        }
+
+        .modal-backdrop.is-open {
+            display: flex;
+        }
+
+        .modal {
+            background: #ffffff;
+            border-radius: 18px;
+            width: min(520px, 92vw);
+            max-height: 90vh;
+            overflow-y: auto;
+            padding: 28px 28px 32px;
+            box-shadow: 0 24px 60px rgba(15, 23, 42, 0.25);
+            border: 1px solid rgba(226, 232, 240, 0.85);
+        }
+
+        .modal__header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 16px;
+            margin-bottom: 20px;
+        }
+
+        .modal__title {
+            margin: 0;
+            font-size: 20px;
+            letter-spacing: -0.01em;
+        }
+
+        .modal__close {
+            border: none;
+            background: transparent;
+            font-size: 24px;
+            line-height: 1;
+            cursor: pointer;
+            color: #64748b;
+        }
+
+        .modal__body {
+            display: grid;
+            gap: 18px;
+        }
+
+        .modal__field label {
+            display: block;
+            font-weight: 600;
+            font-size: 14px;
+            color: #1f2937;
+            margin-bottom: 6px;
+        }
+
+        .modal__field input,
+        .modal__field select,
+        .modal__field textarea {
+            width: 100%;
+            padding: 12px 14px;
+            border-radius: 10px;
+            border: 1px solid rgba(100, 116, 139, 0.35);
+            font-size: 14px;
+            font-family: inherit;
+            transition: border 0.2s ease, box-shadow 0.2s ease;
+        }
+
+        .modal__field textarea {
+            resize: vertical;
+            min-height: 120px;
+        }
+
+        .modal__field input:focus,
+        .modal__field select:focus,
+        .modal__field textarea:focus {
+            outline: none;
+            border-color: #2563eb;
+            box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.15);
+        }
+
+        .modal__field--checkbox label {
+            font-weight: 500;
+            display: inline-flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .modal__field--checkbox input {
+            width: 18px;
+            height: 18px;
+        }
+
+        .modal__actions {
+            display: flex;
+            justify-content: flex-end;
+            gap: 12px;
+            margin-top: 10px;
+        }
+
+        .btn-primary,
+        .btn-secondary {
+            border: none;
+            border-radius: 10px;
+            padding: 10px 18px;
+            font-weight: 600;
+            font-size: 14px;
+            cursor: pointer;
+        }
+
+        .btn-primary {
+            background: #2563eb;
+            color: #ffffff;
+        }
+
+        .btn-primary:hover {
+            background: #1d4ed8;
+        }
+
+        .btn-secondary {
+            background: rgba(148, 163, 184, 0.2);
+            color: #334155;
+        }
+
+        .btn-secondary:hover {
+            background: rgba(148, 163, 184, 0.35);
+        }
+
+        .modal-alert {
+            padding: 12px 14px;
+            border-radius: 10px;
+            background: rgba(239, 68, 68, 0.12);
+            border: 1px solid rgba(239, 68, 68, 0.3);
+            color: #b91c1c;
+            font-size: 13px;
+        }
+
+        .modal-alert ul {
+            margin: 8px 0 0;
+            padding-left: 18px;
+        }
+
+        .field-error {
+            margin-top: 6px;
+            color: #b91c1c;
+            font-size: 12px;
+        }
+
+        .required {
+            color: #dc2626;
+        }
+
+        body.modal-open {
+            overflow: hidden;
         }
 
         .status-pill {
@@ -450,6 +1084,10 @@ function section_card(string $sectionId, string $title, string $description, arr
             </div>
             <span>Total sumber konten: 10 tabel</span>
         </div>
+            <?php foreach ($flashMessages as $msg): ?>
+                <div class="flash flash--success"><?= e($msg) ?></div>
+            <?php endforeach; ?>
+
 
         <div class="cards-grid">
             <?= section_card(
@@ -460,7 +1098,7 @@ function section_card(string $sectionId, string $title, string $description, arr
                 $apbdes,
                 static function (array $row): string {
                     $file = (string) ($row['apbdes_file'] ?? '');
-                    $fileLink = $file !== '' ? '<a href="' . e(base_uri('uploads/' . ltrim($file, '/'))) . '" target="_blank" rel="noopener">Lihat</a>' : '-';
+                    $fileLink = $file !== '' ? '<a href="' . e(base_uri('uploads/apbdes/' . ltrim($file, '/'))) . '" target="_blank" rel="noopener">Lihat</a>' : '-';
                     return '<tr>'
                         . '<td>#' . e((string) $row['apbdes_id']) . '</td>'
                         . '<td>' . e((string) $row['apbdes_judul']) . '</td>'
@@ -666,10 +1304,14 @@ function section_card(string $sectionId, string $title, string $description, arr
 
         </div>
     </main>
+    <?php foreach ($tableForms as $modalId => $definition): ?>
+        <?= render_modal($modalId, $definition, $formOld[$modalId] ?? [], $formErrors[$modalId] ?? []) ?>
+    <?php endforeach; ?>
 </div>
 <script>
     document.addEventListener('DOMContentLoaded', function () {
-        document.body.classList.add('js-enabled');
+        var bodyEl = document.body;
+        bodyEl.classList.add('js-enabled');
         var navLinks = Array.from(document.querySelectorAll('.sidebar-link[data-section]'));
         var sectionMap = {};
         Array.from(document.querySelectorAll('.section-card[data-section]')).forEach(function (section) {
@@ -722,6 +1364,80 @@ function section_card(string $sectionId, string $title, string $description, arr
                 activateSection(target);
             }
         });
+
+        var modalBackdrops = Array.from(document.querySelectorAll('.modal-backdrop'));
+        var openButtons = Array.from(document.querySelectorAll('[data-open-modal]'));
+        var activeModal = null;
+
+        var findBackdrop = function (id) {
+            return modalBackdrops.find(function (backdrop) {
+                return backdrop.getAttribute('data-modal') === id;
+            });
+        };
+
+        var openModal = function (id) {
+            var backdrop = findBackdrop(id);
+            if (!backdrop) {
+                return;
+            }
+            modalBackdrops.forEach(function (item) {
+                item.classList.remove('is-open');
+            });
+            backdrop.classList.add('is-open');
+            bodyEl.classList.add('modal-open');
+            activeModal = backdrop;
+            var firstInput = backdrop.querySelector('input, textarea, select');
+            if (firstInput) {
+                setTimeout(function () {
+                    firstInput.focus({ preventScroll: true });
+                }, 80);
+            }
+        };
+
+        var closeModal = function () {
+            if (!activeModal) {
+                return;
+            }
+            activeModal.classList.remove('is-open');
+            bodyEl.classList.remove('modal-open');
+            activeModal = null;
+        };
+
+        openButtons.forEach(function (btn) {
+            btn.addEventListener('click', function () {
+                var targetId = btn.getAttribute('data-open-modal');
+                if (targetId) {
+                    openModal(targetId);
+                }
+            });
+        });
+
+        modalBackdrops.forEach(function (backdrop) {
+            backdrop.addEventListener('click', function (event) {
+                if (event.target === backdrop) {
+                    closeModal();
+                }
+            });
+            Array.from(backdrop.querySelectorAll('[data-close-modal]')).forEach(function (btn) {
+                btn.addEventListener('click', function () {
+                    closeModal();
+                });
+            });
+        });
+
+        document.addEventListener('keydown', function (event) {
+            if (event.key === 'Escape') {
+                closeModal();
+            }
+        });
+
+        var initialModal = modalBackdrops.find(function (backdrop) {
+            return backdrop.getAttribute('data-open-on-load') === '1';
+        });
+        if (initialModal) {
+            openModal(initialModal.getAttribute('data-modal'));
+            initialModal.removeAttribute('data-open-on-load');
+        }
     });
 </script>
 </body>
