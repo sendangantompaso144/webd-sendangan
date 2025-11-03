@@ -221,6 +221,62 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         exit;
     }
 
+    if ($action === 'edit_apbdes') {
+        $apbdesId = isset($_POST['apbdes_id']) ? (int) $_POST['apbdes_id'] : 0;
+        $newTitle = trim((string) ($_POST['apbdes_judul'] ?? ''));
+
+        if ($apbdesId <= 0) {
+            $_SESSION['flash_error'][] = 'Data APBDes tidak ditemukan.';
+            header('Location: admin_management.php#apbdes');
+            exit;
+        }
+
+        if ($newTitle === '') {
+            $_SESSION['flash_error'][] = 'Judul APBDes wajib diisi.';
+            header('Location: admin_management.php#apbdes');
+            exit;
+        }
+
+        try {
+            $stmt = $pdo->prepare('SELECT apbdes_edited_by FROM apbdes WHERE apbdes_id = ? LIMIT 1');
+            if ($stmt === false) {
+                throw new RuntimeException('Tidak dapat menyiapkan kueri.');
+            }
+            $stmt->execute([$apbdesId]);
+            $row = $stmt->fetch(PDO::FETCH_ASSOC);
+        } catch (Throwable $exception) {
+            $_SESSION['flash_error'][] = 'Gagal memuat data APBDes: ' . $exception->getMessage();
+            header('Location: admin_management.php#apbdes');
+            exit;
+        }
+
+        if (!$row) {
+            $_SESSION['flash_error'][] = 'Data APBDes tidak ditemukan.';
+            header('Location: admin_management.php#apbdes');
+            exit;
+        }
+
+        $editedBy = isset($adminSession['name']) ? (string) $adminSession['name'] : (string) ($row['apbdes_edited_by'] ?? '');
+
+        try {
+            $stmt = $pdo->prepare('UPDATE apbdes SET apbdes_judul = ?, apbdes_edited_by = ? WHERE apbdes_id = ?');
+            if ($stmt === false) {
+                throw new RuntimeException('Tidak dapat menyiapkan kueri.');
+            }
+            $executed = $stmt->execute([$newTitle, $editedBy, $apbdesId]);
+            if ($executed) {
+                $_SESSION['flash'][] = 'Judul APBDes berhasil diperbarui.';
+            } else {
+                $_SESSION['flash_error'][] = 'Gagal memperbarui judul APBDes.';
+            }
+        } catch (Throwable $exception) {
+            $_SESSION['flash_error'][] = 'Gagal memperbarui judul APBDes: ' . $exception->getMessage();
+        }
+
+        header('Location: admin_management.php#apbdes');
+        exit;
+    }
+
     $formId = (string) ($_POST['form_id'] ?? '');
     if (isset($tableForms[$formId])) {
         $definition = $tableForms[$formId];
@@ -1053,6 +1109,25 @@ function render_modal(string $formId, array $definition, array $oldInputs, array
             background: rgba(148, 163, 184, 0.35);
         }
 
+        .btn-outline {
+            border: 1px solid rgba(37, 99, 235, 0.4);
+            border-radius: 8px;
+            padding: 8px 14px;
+            font-weight: 600;
+            font-size: 13px;
+            cursor: pointer;
+            background: transparent;
+            color: #2563eb;
+            line-height: 1.2;
+            transition: background 0.2s ease, color 0.2s ease, border-color 0.2s ease;
+        }
+
+        .btn-outline:hover {
+            background: rgba(37, 99, 235, 0.1);
+            color: #1d4ed8;
+            border-color: rgba(37, 99, 235, 0.6);
+        }
+
         .btn-danger {
             border: none;
             border-radius: 8px;
@@ -1236,13 +1311,18 @@ function render_modal(string $formId, array $definition, array $oldInputs, array
                     $file = (string) ($row['apbdes_file'] ?? '');
                     $fileLink = $file !== '' ? '<a href="' . e(base_uri('uploads/apbdes/' . ltrim($file, '/'))) . '" target="_blank" rel="noopener">Lihat</a>' : '-';
                     $rowId = (int) ($row['apbdes_id'] ?? 0);
-                    $actionsHtml = $rowId > 0
-                        ? '<form method="post" action="admin_management.php#apbdes" class="table-actions__form" onsubmit="return confirm(\'Hapus dokumen ini?\');">'
+                    $actionsHtml = '-';
+                    if ($rowId > 0) {
+                        $actionsHtml = '<button type="button" class="btn-outline" data-open-modal="apbdes-edit"'
+                            . ' data-apbdes-id="' . e((string) $rowId) . '"'
+                            . ' data-apbdes-judul="' . e((string) ($row['apbdes_judul'] ?? '')) . '"'
+                            . ' title="Ubah Judul">Ubah</button>'
+                            . '<form method="post" action="admin_management.php#apbdes" class="table-actions__form" onsubmit="return confirm(\'Hapus dokumen ini?\');">'
                             . '<input type="hidden" name="action" value="delete_apbdes">'
                             . '<input type="hidden" name="apbdes_id" value="' . e((string) $rowId) . '">'
                             . '<button type="submit" class="btn-danger">Hapus</button>'
-                        . '</form>'
-                        : '-';
+                            . '</form>';
+                    }
                     return '<tr>'
                         . '<td>#' . e((string) $row['apbdes_id']) . '</td>'
                         . '<td>' . e((string) $row['apbdes_judul']) . '</td>'
@@ -1452,6 +1532,28 @@ function render_modal(string $formId, array $definition, array $oldInputs, array
     <?php foreach ($tableForms as $modalId => $definition): ?>
         <?= render_modal($modalId, $definition, $formOld[$modalId] ?? [], $formErrors[$modalId] ?? []) ?>
     <?php endforeach; ?>
+    <div class="modal-backdrop" data-modal="apbdes-edit">
+        <div class="modal">
+            <div class="modal__header">
+                <h3 class="modal__title">Ubah Judul Dokumen</h3>
+                <button type="button" class="modal__close" data-close-modal aria-label="Tutup">&times;</button>
+            </div>
+            <div class="modal__body">
+                <form method="post" action="admin_management.php#apbdes" autocomplete="off" id="apbdes-edit-form">
+                    <input type="hidden" name="action" value="edit_apbdes">
+                    <input type="hidden" name="apbdes_id" id="apbdes_edit_id">
+                    <div class="modal__field">
+                        <label for="apbdes_edit_judul">Judul Dokumen <span class="required">*</span></label>
+                        <input type="text" name="apbdes_judul" id="apbdes_edit_judul" required>
+                    </div>
+                    <div class="modal__actions">
+                        <button type="button" class="btn-secondary" data-close-modal>Batal</button>
+                        <button type="submit" class="btn-primary">Simpan Perubahan</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
 </div>
 <div class="upload-overlay" id="upload-overlay" role="alert" aria-live="assertive" aria-hidden="true">
     <div class="upload-overlay__content">
@@ -1468,6 +1570,9 @@ function render_modal(string $formId, array $definition, array $oldInputs, array
             uploadOverlay.classList.remove('is-visible');
             uploadOverlay.setAttribute('aria-hidden', 'true');
         }
+        var apbdesEditForm = document.getElementById('apbdes-edit-form');
+        var apbdesEditIdInput = document.getElementById('apbdes_edit_id');
+        var apbdesEditTitleInput = document.getElementById('apbdes_edit_judul');
         var showUploadOverlay = function () {
             if (!uploadOverlay) {
                 return;
@@ -1581,6 +1686,14 @@ function render_modal(string $formId, array $definition, array $oldInputs, array
         openButtons.forEach(function (btn) {
             btn.addEventListener('click', function () {
                 var targetId = btn.getAttribute('data-open-modal');
+                if (targetId === 'apbdes-edit') {
+                    if (apbdesEditIdInput) {
+                        apbdesEditIdInput.value = btn.getAttribute('data-apbdes-id') || '';
+                    }
+                    if (apbdesEditTitleInput) {
+                        apbdesEditTitleInput.value = btn.getAttribute('data-apbdes-judul') || '';
+                    }
+                }
                 if (targetId) {
                     openModal(targetId);
                 }
