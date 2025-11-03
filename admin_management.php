@@ -1950,16 +1950,30 @@ function render_modal(string $formId, array $definition, array $oldInputs, array
         };
         Array.from(document.querySelectorAll('form')).forEach(function (form) {
             var formIdInput = form.querySelector('input[name="form_id"]');
-            if (!formIdInput || formIdInput.value !== 'apbdes') {
+            var formIdValue = formIdInput ? (formIdInput.value || '') : '';
+            if (!formIdValue) {
+                return;
+            }
+            if (['apbdes', 'berita'].indexOf(formIdValue) === -1) {
                 return;
             }
             form.addEventListener('submit', function () {
-                var fileInput = form.querySelector('input[type="file"][name="apbdes_file"]');
+                var selector = formIdValue === 'apbdes'
+                    ? 'input[type="file"][name="apbdes_file"]'
+                    : 'input[type="file"][name="berita_gambar"]';
+                var fileInput = form.querySelector(selector);
                 if (fileInput && fileInput.files && fileInput.files.length > 0) {
                     showUploadOverlay();
                 }
             });
         });
+        if (beritaEditForm) {
+            beritaEditForm.addEventListener('submit', function () {
+                if (beritaEditFileInput && beritaEditFileInput.files && beritaEditFileInput.files.length > 0) {
+                    showUploadOverlay();
+                }
+            });
+        }
         var navLinks = Array.from(document.querySelectorAll('.sidebar-link[data-section]'));
         var sectionMap = {};
         Array.from(document.querySelectorAll('.section-card[data-section]')).forEach(function (section) {
