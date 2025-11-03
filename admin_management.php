@@ -816,6 +816,61 @@ function render_modal(string $formId, array $definition, array $oldInputs, array
             border: 1px solid rgba(239, 68, 68, 0.3);
         }
 
+        .upload-overlay {
+            position: fixed;
+            inset: 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: rgba(15, 23, 42, 0.65);
+            z-index: 9999;
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 0.2s ease;
+        }
+
+        .upload-overlay.is-visible {
+            opacity: 1;
+            pointer-events: auto;
+        }
+
+        .upload-overlay__content {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 16px;
+            padding: 32px 40px;
+            border-radius: 16px;
+            background: rgba(15, 23, 42, 0.85);
+            color: #f8fafc;
+            text-align: center;
+            box-shadow: 0 24px 60px rgba(15, 23, 42, 0.4);
+        }
+
+        .upload-overlay__spinner {
+            width: 48px;
+            height: 48px;
+            border-radius: 50%;
+            border: 5px solid rgba(148, 163, 184, 0.35);
+            border-top-color: #60a5fa;
+            animation: upload-overlay-spin 0.9s linear infinite;
+        }
+
+        .upload-overlay__content p {
+            margin: 0;
+            font-size: 16px;
+            letter-spacing: 0.02em;
+        }
+
+        @keyframes upload-overlay-spin {
+            from {
+                transform: rotate(0);
+            }
+            to {
+                transform: rotate(360deg);
+            }
+        }
+
         table {
             width: 100%;
             border-collapse: collapse;
@@ -1398,10 +1453,40 @@ function render_modal(string $formId, array $definition, array $oldInputs, array
         <?= render_modal($modalId, $definition, $formOld[$modalId] ?? [], $formErrors[$modalId] ?? []) ?>
     <?php endforeach; ?>
 </div>
+<div class="upload-overlay" id="upload-overlay" role="alert" aria-live="assertive" aria-hidden="true">
+    <div class="upload-overlay__content">
+        <div class="upload-overlay__spinner" aria-hidden="true"></div>
+        <p>Mengupload file...</p>
+    </div>
+</div>
 <script>
     document.addEventListener('DOMContentLoaded', function () {
         var bodyEl = document.body;
         bodyEl.classList.add('js-enabled');
+        var uploadOverlay = document.getElementById('upload-overlay');
+        if (uploadOverlay) {
+            uploadOverlay.classList.remove('is-visible');
+            uploadOverlay.setAttribute('aria-hidden', 'true');
+        }
+        var showUploadOverlay = function () {
+            if (!uploadOverlay) {
+                return;
+            }
+            uploadOverlay.classList.add('is-visible');
+            uploadOverlay.setAttribute('aria-hidden', 'false');
+        };
+        Array.from(document.querySelectorAll('form')).forEach(function (form) {
+            var formIdInput = form.querySelector('input[name="form_id"]');
+            if (!formIdInput || formIdInput.value !== 'apbdes') {
+                return;
+            }
+            form.addEventListener('submit', function () {
+                var fileInput = form.querySelector('input[type="file"][name="apbdes_file"]');
+                if (fileInput && fileInput.files && fileInput.files.length > 0) {
+                    showUploadOverlay();
+                }
+            });
+        });
         var navLinks = Array.from(document.querySelectorAll('.sidebar-link[data-section]'));
         var sectionMap = {};
         Array.from(document.querySelectorAll('.section-card[data-section]')).forEach(function (section) {
