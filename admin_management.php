@@ -131,17 +131,25 @@ function section_card(string $title, string $description, array $headers, array 
 
         .layout {
             min-height: 100vh;
-            display: grid;
-            grid-template-columns: 280px 1fr;
         }
 
         .sidebar {
+            position: fixed;
+            inset: 0 auto 0 0;
+            width: 280px;
             background: #1d4ed8;
             color: #ffffff;
             padding: 32px 28px;
             display: flex;
             flex-direction: column;
             gap: 40px;
+            overflow-y: auto;
+            box-shadow: 10px 0 30px rgba(29, 78, 216, 0.25);
+            /* scrollbar-width: none; */
+        }
+
+        .sidebar::-webkit-scrollbar {
+            /* display: none; */
         }
 
         .sidebar h1 {
@@ -179,6 +187,7 @@ function section_card(string $title, string $description, array $headers, array 
         }
 
         .content {
+            margin-left: calc(280px + 20px);
             padding: 32px clamp(24px, 4vw, 48px);
         }
 
@@ -344,17 +353,14 @@ function section_card(string $title, string $description, array $headers, array 
         }
 
         @media (max-width: 1024px) {
-            .layout {
-                grid-template-columns: 1fr;
-            }
-
             .sidebar {
-                position: sticky;
-                top: 0;
-                z-index: 10;
+                position: relative;
+                inset: auto;
+                width: 100%;
                 flex-direction: row;
                 align-items: center;
                 gap: 18px;
+                box-shadow: none;
             }
 
             .sidebar nav {
@@ -366,6 +372,10 @@ function section_card(string $title, string $description, array $headers, array 
 
             .sidebar footer {
                 display: none;
+            }
+
+            .content {
+                margin-left: 0;
             }
         }
 
