@@ -112,7 +112,7 @@ create table galeri (
 
 create table apbdes (
     apbdes_id INT AUTO_INCREMENT PRIMARY KEY,
-    apbdes_judul INT NOT NULL,
+    apbdes_judul VARCHAR(255) NOT NULL,
     apbdes_file VARCHAR(255) NOT NULL,
     apbdes_edited_by VARCHAR(100),
     apbdes_created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
