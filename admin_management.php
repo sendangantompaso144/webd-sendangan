@@ -60,6 +60,37 @@ function format_datetime(null|string $value): string
     }
 }
 
+function resolve_potensi_media_url(string $path): string
+{
+    $path = trim($path);
+    if ($path === '') {
+        return '';
+    }
+
+    $lower = strtolower($path);
+    if (str_starts_with($lower, 'http://') || str_starts_with($lower, 'https://') || str_starts_with($path, '//')) {
+        return $path;
+    }
+
+    $normalized = ltrim(str_replace('\\', '/', $path), '/');
+
+    $candidates = [
+        $normalized,
+        'uploads/' . $normalized,
+        'uploads/potensi/' . $normalized,
+        'uploads/potensi_desa/' . $normalized,
+        'uploads/assets/' . $normalized,
+    ];
+
+    foreach ($candidates as $candidate) {
+        if (is_file(base_path($candidate))) {
+            return base_uri($candidate);
+        }
+    }
+
+    return base_uri($normalized);
+}
+
 $tableForms = [
     'apbdes' => [
         'table' => 'apbdes',
@@ -1005,7 +1036,26 @@ $apbdes = fetch_table($pdo, 'SELECT apbdes_id, apbdes_judul, apbdes_file, apbdes
 $berita = fetch_table($pdo, 'SELECT berita_id, berita_judul, berita_isi, berita_gambar, berita_dilihat, berita_created_at, berita_updated_at FROM berita ORDER BY berita_updated_at DESC LIMIT 50');
 $fasilitas = fetch_table($pdo, 'SELECT fasilitas_id, fasilitas_nama, fasilitas_gambar, fasilitas_gmaps_link, fasilitas_created_at, fasilitas_updated_at FROM fasilitas ORDER BY fasilitas_updated_at DESC LIMIT 50');
 $galeri = fetch_table($pdo, 'SELECT galeri_id, galeri_namafile, galeri_keterangan, galeri_gambar, galeri_created_at FROM galeri ORDER BY galeri_created_at DESC LIMIT 50');
-$gambarPotensi = fetch_table($pdo, 'SELECT gambar_id, potensi_id, gambar_namafile, gambar_created_at FROM gambar_potensi_desa ORDER BY gambar_created_at DESC LIMIT 50');
+$gambarPotensi = fetch_table($pdo, 'SELECT g.gambar_id, g.potensi_id, g.gambar_namafile, g.gambar_created_at, p.potensi_judul FROM gambar_potensi_desa g LEFT JOIN potensi_desa p ON p.potensi_id = g.potensi_id ORDER BY g.gambar_created_at DESC');
+$gambarPotensiByPotensi = [];
+foreach ($gambarPotensi as $mediaRow) {
+    $potensiId = isset($mediaRow['potensi_id']) ? (int) $mediaRow['potensi_id'] : 0;
+    if ($potensiId <= 0) {
+        continue;
+    }
+    if (!isset($gambarPotensiByPotensi[$potensiId])) {
+        $gambarPotensiByPotensi[$potensiId] = [];
+    }
+    $mediaUrl = resolve_potensi_media_url((string) ($mediaRow['gambar_namafile'] ?? ''));
+    $gambarPotensiByPotensi[$potensiId][] = [
+        'id' => (int) ($mediaRow['gambar_id'] ?? 0),
+        'judul' => (string) ($mediaRow['potensi_judul'] ?? ''),
+        'file' => $mediaUrl,
+        'raw' => (string) ($mediaRow['gambar_namafile'] ?? ''),
+        'created_at' => $mediaRow['gambar_created_at'] ?? null,
+        'created_label' => format_datetime($mediaRow['gambar_created_at'] ?? null),
+    ];
+}
 $potensiDesa = fetch_table($pdo, 'SELECT potensi_id, potensi_judul, potensi_kategori, potensi_gmaps_link, potensi_created_at, potensi_updated_at FROM potensi_desa ORDER BY potensi_updated_at DESC LIMIT 50');
 $pengumuman = fetch_table($pdo, 'SELECT pengumuman_id, pengumuman_valid_hingga, pengumuman_created_at, pengumuman_updated_at FROM pengumuman ORDER BY pengumuman_updated_at DESC LIMIT 50');
 $permohonanInformasi = fetch_table($pdo, 'SELECT pi_id, pi_email, pi_asal_instansi, pi_selesai, pi_created_at, pi_updated_at FROM permohonan_informasi ORDER BY pi_updated_at DESC LIMIT 50');
@@ -1536,12 +1586,30 @@ function render_modal(string $formId, array $definition, array $oldInputs, array
             border: 1px solid rgba(226, 232, 240, 0.85);
         }
 
+        .modal--wide {
+            width: min(720px, 96vw);
+        }
+
         .modal__header {
             display: flex;
             align-items: center;
             justify-content: space-between;
             gap: 16px;
             margin-bottom: 20px;
+        }
+
+        .modal__toolbar {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 12px;
+            flex-wrap: wrap;
+        }
+
+        .modal__subtitle {
+            margin: 0;
+            font-size: 14px;
+            color: #475569;
         }
 
         .modal__title {
@@ -1562,6 +1630,16 @@ function render_modal(string $formId, array $definition, array $oldInputs, array
         .modal__body {
             display: grid;
             gap: 18px;
+        }
+
+        .modal-empty {
+            margin: 0;
+            padding: 16px;
+            text-align: center;
+            font-size: 14px;
+            color: #475569;
+            background: rgba(148, 163, 184, 0.16);
+            border-radius: 12px;
         }
 
         .modal__field label {
@@ -1587,6 +1665,10 @@ function render_modal(string $formId, array $definition, array $oldInputs, array
         .modal__field textarea {
             resize: vertical;
             min-height: 120px;
+        }
+
+        .is-hidden {
+            display: none !important;
         }
 
         .modal__field input:focus,
@@ -1815,7 +1897,6 @@ function render_modal(string $formId, array $definition, array $oldInputs, array
             <a class="sidebar-link" href="#berita" data-section="berita">Berita</a>
             <a class="sidebar-link" href="#fasilitas" data-section="fasilitas">Fasilitas</a>
             <a class="sidebar-link" href="#potensi" data-section="potensi">Potensi Desa</a>
-            <a class="sidebar-link" href="#potensi-media" data-section="potensi-media">Media Potensi</a>
             <a class="sidebar-link" href="#pengumuman" data-section="pengumuman">Pengumuman</a>
             <a class="sidebar-link" href="#permohonan" data-section="permohonan">Permohonan Informasi</a>
             <a class="sidebar-link" href="#ppid" data-section="ppid">PPID Dokumen</a>
@@ -1955,16 +2036,28 @@ function render_modal(string $formId, array $definition, array $oldInputs, array
                 'potensi',
                 'Potensi Desa',
                 'Daftar potensi desa beserta kategori.',
-                ['ID', 'Judul', 'Kategori', 'Google Maps', 'Dibuat', 'Diperbarui'],
+                ['ID', 'Judul', 'Kategori', 'Google Maps', 'Foto', 'Dibuat', 'Diperbarui'],
                 $potensiDesa,
-                static function (array $row): string {
+                static function (array $row) use ($gambarPotensiByPotensi): string {
                     $maps = (string) ($row['potensi_gmaps_link'] ?? '');
                     $mapsHtml = $maps !== '' ? '<a href="' . e($maps) . '" target="_blank" rel="noopener">Lokasi</a>' : '-';
+                    $potensiId = isset($row['potensi_id']) ? (int) $row['potensi_id'] : 0;
+                    $images = $potensiId > 0 && isset($gambarPotensiByPotensi[$potensiId]) ? $gambarPotensiByPotensi[$potensiId] : [];
+                    $payload = [
+                        'id' => $potensiId,
+                        'judul' => (string) ($row['potensi_judul'] ?? ''),
+                        'images' => $images,
+                    ];
+                    $dataAttr = e((string) json_encode($payload, JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_AMP | JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES));
+                    $photosButton = $potensiId > 0
+                        ? '<button type="button" class="btn-outline" data-open-modal="potensi-gallery" data-potensi-gallery="' . $dataAttr . '">Foto (' . count($images) . ')</button>'
+                        : '-';
                     return '<tr>'
                         . '<td>#' . e((string) $row['potensi_id']) . '</td>'
                         . '<td>' . e((string) $row['potensi_judul']) . '</td>'
                         . '<td>' . e((string) $row['potensi_kategori']) . '</td>'
                         . '<td>' . $mapsHtml . '</td>'
+                        . '<td>' . $photosButton . '</td>'
                         . '<td>' . e(format_datetime($row['potensi_created_at'] ?? null)) . '</td>'
                         . '<td>' . e(format_datetime($row['potensi_updated_at'] ?? null)) . '</td>'
                         . '</tr>';
@@ -1986,22 +2079,6 @@ function render_modal(string $formId, array $definition, array $oldInputs, array
                         . '<td>' . e((string) ($row['galeri_keterangan'] ?? '')) . '</td>'
                         . '<td>' . $previewHtml . '</td>'
                         . '<td>' . e(format_datetime($row['galeri_created_at'] ?? null)) . '</td>'
-                        . '</tr>';
-                }
-            ) ?>
-
-            <?= section_card(
-                'potensi-media',
-                'Media Potensi Desa',
-                'Daftar gambar terkait konten potensi.',
-                ['ID', 'Potensi ID', 'Nama File', 'Dibuat'],
-                $gambarPotensi,
-                static function (array $row): string {
-                    return '<tr>'
-                        . '<td>#' . e((string) $row['gambar_id']) . '</td>'
-                        . '<td>' . e((string) ($row['potensi_id'] ?? '-')) . '</td>'
-                        . '<td>' . e((string) $row['gambar_namafile']) . '</td>'
-                        . '<td>' . e(format_datetime($row['gambar_created_at'] ?? null)) . '</td>'
                         . '</tr>';
                 }
             ) ?>
@@ -2106,6 +2183,33 @@ function render_modal(string $formId, array $definition, array $oldInputs, array
     <?php foreach ($tableForms as $modalId => $definition): ?>
         <?= render_modal($modalId, $definition, $formOld[$modalId] ?? [], $formErrors[$modalId] ?? []) ?>
     <?php endforeach; ?>
+    <div class="modal-backdrop" data-modal="potensi-gallery">
+        <div class="modal modal--wide">
+            <div class="modal__header">
+                <h3 class="modal__title" data-potensi-gallery-title>Foto Potensi</h3>
+                <button type="button" class="modal__close" data-close-modal aria-label="Tutup">&times;</button>
+            </div>
+            <div class="modal__body">
+                <div class="modal__toolbar">
+                    <p class="modal__subtitle" data-potensi-gallery-subtitle></p>
+                    <button type="button" class="btn-primary" data-open-modal="potensi-media" data-potensi-media-id="" disabled="disabled">Tambah Foto</button>
+                </div>
+                <div class="table-wrapper is-hidden" data-potensi-gallery-table>
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Potensi</th>
+                                <th>File</th>
+                                <th>Diupload</th>
+                            </tr>
+                        </thead>
+                        <tbody data-potensi-gallery-tbody></tbody>
+                    </table>
+                </div>
+                <p class="modal-empty" data-potensi-gallery-empty>Belum ada foto untuk potensi ini.</p>
+            </div>
+        </div>
+    </div>
     <div class="modal-backdrop" data-modal="apbdes-edit">
         <div class="modal">
             <div class="modal__header">
@@ -2263,6 +2367,13 @@ function render_modal(string $formId, array $definition, array $oldInputs, array
                 }
             });
         }
+        var potensiMediaPotensiInput = null;
+        var potensiGalleryTitle;
+        var potensiGallerySubtitle;
+        var potensiGalleryTable;
+        var potensiGalleryBody;
+        var potensiGalleryEmpty;
+        var potensiGalleryAddButton;
         var navLinks = Array.from(document.querySelectorAll('.sidebar-link[data-section]'));
         var sectionMap = {};
         Array.from(document.querySelectorAll('.section-card[data-section]')).forEach(function (section) {
@@ -2326,6 +2437,24 @@ function render_modal(string $formId, array $definition, array $oldInputs, array
             });
         };
 
+        var potensiGalleryBackdrop = findBackdrop('potensi-gallery');
+        if (potensiGalleryBackdrop) {
+            potensiGalleryTitle = potensiGalleryBackdrop.querySelector('[data-potensi-gallery-title]');
+            potensiGallerySubtitle = potensiGalleryBackdrop.querySelector('[data-potensi-gallery-subtitle]');
+            potensiGalleryTable = potensiGalleryBackdrop.querySelector('[data-potensi-gallery-table]');
+            potensiGalleryBody = potensiGalleryBackdrop.querySelector('[data-potensi-gallery-tbody]');
+            potensiGalleryEmpty = potensiGalleryBackdrop.querySelector('[data-potensi-gallery-empty]');
+            potensiGalleryAddButton = potensiGalleryBackdrop.querySelector('[data-open-modal="potensi-media"]');
+        }
+
+        var potensiMediaBackdrop = findBackdrop('potensi-media');
+        if (potensiMediaBackdrop) {
+            var potensiMediaForm = potensiMediaBackdrop.querySelector('form');
+            if (potensiMediaForm) {
+                potensiMediaPotensiInput = potensiMediaForm.querySelector('input[name="potensi_id"]');
+            }
+        }
+
         var openModal = function (id) {
             var backdrop = findBackdrop(id);
             if (!backdrop) {
@@ -2352,6 +2481,66 @@ function render_modal(string $formId, array $definition, array $oldInputs, array
             activeModal.classList.remove('is-open');
             bodyEl.classList.remove('modal-open');
             activeModal = null;
+        };
+
+        var populatePotensiGallery = function (payload) {
+            if (!potensiGalleryBody || !potensiGalleryTable || !potensiGalleryEmpty) {
+                return;
+            }
+            var safePayload = (payload && typeof payload === 'object') ? payload : {};
+            var potensiTitle = safePayload.judul ? String(safePayload.judul) : 'Potensi Desa';
+            if (potensiGalleryTitle) {
+                potensiGalleryTitle.textContent = 'Foto Potensi — ' + potensiTitle;
+            }
+            if (potensiGallerySubtitle) {
+                var count = Array.isArray(safePayload.images) ? safePayload.images.length : 0;
+                potensiGallerySubtitle.textContent = potensiTitle + ' · ' + (count > 0 ? count + ' foto' : 'belum ada foto');
+            }
+            var images = Array.isArray(safePayload.images) ? safePayload.images : [];
+            potensiGalleryBody.innerHTML = '';
+            images.forEach(function (image) {
+                var tr = document.createElement('tr');
+                var titleTd = document.createElement('td');
+                titleTd.textContent = image && image.judul ? String(image.judul) : potensiTitle;
+                var fileTd = document.createElement('td');
+                var fileUrl = image && image.file ? String(image.file) : '';
+                var fileLabel = image && image.raw ? String(image.raw) : '';
+                if (fileUrl !== '') {
+                    var link = document.createElement('a');
+                    link.href = fileUrl;
+                    link.target = '_blank';
+                    link.rel = 'noopener';
+                    link.textContent = fileLabel !== '' ? fileLabel : fileUrl;
+                    fileTd.appendChild(link);
+                } else {
+                    fileTd.textContent = fileLabel !== '' ? fileLabel : '-';
+                }
+                var createdTd = document.createElement('td');
+                var createdLabel = image && image.created_label ? String(image.created_label) : '';
+                if (createdLabel === '' && image && image.created_at) {
+                    createdLabel = String(image.created_at);
+                }
+                createdTd.textContent = createdLabel !== '' ? createdLabel : '-';
+                tr.appendChild(titleTd);
+                tr.appendChild(fileTd);
+                tr.appendChild(createdTd);
+                potensiGalleryBody.appendChild(tr);
+            });
+            if (potensiGalleryTable) {
+                potensiGalleryTable.classList.toggle('is-hidden', images.length === 0);
+            }
+            if (potensiGalleryEmpty) {
+                potensiGalleryEmpty.classList.toggle('is-hidden', images.length > 0);
+            }
+            if (potensiGalleryAddButton) {
+                if (safePayload.id) {
+                    potensiGalleryAddButton.removeAttribute('disabled');
+                    potensiGalleryAddButton.setAttribute('data-potensi-media-id', String(safePayload.id));
+                } else {
+                    potensiGalleryAddButton.setAttribute('disabled', 'disabled');
+                    potensiGalleryAddButton.removeAttribute('data-potensi-media-id');
+                }
+            }
         };
 
         openButtons.forEach(function (btn) {
@@ -2409,6 +2598,24 @@ function render_modal(string $formId, array $definition, array $oldInputs, array
                     }
                     if (fasilitasEditMapsInput) {
                         fasilitasEditMapsInput.value = fasilitasPayload.gmaps ? String(fasilitasPayload.gmaps) : '';
+                    }
+                }
+                if (targetId === 'potensi-gallery') {
+                    var galleryPayloadRaw = btn.getAttribute('data-potensi-gallery') || '';
+                    var galleryPayload = {};
+                    if (galleryPayloadRaw !== '') {
+                        try {
+                            galleryPayload = JSON.parse(galleryPayloadRaw);
+                        } catch (error) {
+                            galleryPayload = {};
+                        }
+                    }
+                    populatePotensiGallery(galleryPayload);
+                }
+                if (targetId === 'potensi-media') {
+                    var potensiTargetId = btn.getAttribute('data-potensi-media-id') || '';
+                    if (potensiMediaPotensiInput) {
+                        potensiMediaPotensiInput.value = potensiTargetId;
                     }
                 }
                 if (targetId) {
