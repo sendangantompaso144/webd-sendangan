@@ -91,6 +91,29 @@ function resolve_potensi_media_url(string $path): string
     return base_uri($normalized);
 }
 
+// Kamus label untuk menampilkan nama yang mudah dipahami operator
+$dataDictionary = [
+    // ——— DEMOGRAFI ———
+    'demografi.jaga_1_laki'        => ['label' => 'Jaga 1 — Laki-laki',   'hint' => 'Jumlah penduduk laki-laki di Jaga 1 (orang)'],
+    'demografi.jaga_1_perempuan'   => ['label' => 'Jaga 1 — Perempuan',   'hint' => 'Jumlah penduduk perempuan di Jaga 1 (orang)'],
+    'demografi.jaga_2_laki'        => ['label' => 'Jaga 2 — Laki-laki',   'hint' => 'Jumlah penduduk laki-laki di Jaga 2 (orang)'],
+    'demografi.jaga_2_perempuan'   => ['label' => 'Jaga 2 — Perempuan',   'hint' => 'Jumlah penduduk perempuan di Jaga 2 (orang)'],
+    'demografi.jumlah_jaga'        => ['label' => 'Jumlah Jaga',          'hint' => 'Total wilayah jaga/lingkungan'],
+    'demografi.kepala_keluarga'    => ['label' => 'Jumlah KK',            'hint' => 'Jumlah Kepala Keluarga (KK)'],
+    'demografi.luas_wilayah_ha'    => ['label' => 'Luas Wilayah (ha)',    'hint' => 'Satuan hektare (ha)'],
+
+    // ——— SAPAAN/TEKS ———
+    'greeting.hukum_tua'           => ['label' => 'Sambutan Hukum Tua',   'hint' => 'Teks sambutan/kalimat pembuka'],
+
+    // ——— KONTAK ———
+    'kontak.email_desa'            => ['label' => 'Email Resmi Desa',     'hint' => 'Contoh: desa@contoh.go.id'],
+    'kontak.telepon_desa'          => ['label' => 'Telepon Resmi Desa',   'hint' => 'Gunakan format nasional, mis. 0431… atau +62…'],
+
+    // ——— MEDIA ———
+    'media.peta_desa_sendangan'        => ['label' => 'Peta Desa (Jalan)',        'hint' => 'Nama file atau URL gambar peta jalan'],
+    'media.peta_desa_sendangan_citra'  => ['label' => 'Peta Desa (Citra Satelit)','hint' => 'Nama file atau URL gambar peta citra'],
+];
+
 $tableForms = [
     'apbdes' => [
         'table' => 'apbdes',
@@ -2512,19 +2535,32 @@ function render_modal(string $formId, array $definition, array $oldInputs, array
                 'data',
                 'Data Umum',
                 'Penyimpanan key–value untuk konten dinamis (seperti JSON). Setiap baris bisa disunting langsung.',
-                ['Key', 'Tipe', 'Nilai', 'Diubah pada', 'Oleh'],
+                ['Nama Data', 'Key', 'Tipe', 'Nilai', 'Diubah pada', 'Oleh'],
                 $dataRows,
                 static function (array $row): string {
+                    // Ambil key & metadata label/hint yang ramah operator
+                    global $dataDictionary;
+                    $dict = is_array($dataDictionary ?? null) ? $dataDictionary : [];
+
                     $key = (string)($row['data_key'] ?? '');
+                    $meta = $dict[$key] ?? null;
+                    $niceLabel = $meta['label'] ?? ucwords(str_replace(['_', '-'], ' ', $key));
+                    $hint = isset($meta['hint']) ? (string)$meta['hint'] : '';
+
                     $type = strtolower((string)($row['data_type'] ?? 'string'));
                     $val  = (string)($row['data_value'] ?? '');
                     $updatedAt = format_datetime($row['data_updated_at'] ?? null);
                     $updatedBy = (string)($row['data_updated_by'] ?? '-');
 
-                    // Input type: number untuk integer, text untuk lainnya
+                    // Input type: number untuk integer, text untuk lainnya + aksesibilitas
+                    $aria = ' aria-label="Nilai untuk ' . e($niceLabel) . '"';
                     $inputHtml = $type === 'integer'
-                        ? '<input type="number" name="data_value" value="' . e($val) . '" required style="width:220px;">'
-                        : '<input type="text" name="data_value" value="' . e($val) . '" required style="min-width:260px;max-width:520px;width:100%;">';
+                        ? '<input type="number" name="data_value" value="' . e($val) . '" required style="width:220px;"' . $aria . '>'
+                        : '<input type="text" name="data_value" value="' . e($val) . '" required style="min-width:260px;max-width:520px;width:100%;"' . $aria . '>';
+
+                    if ($hint !== '') {
+                        $inputHtml .= '<small class="field-hint">' . e($hint) . '</small>';
+                    }
 
                     $form = '
                         <form method="post" action="admin_management.php#data" class="table-actions__form" style="display:inline-flex;gap:8px;align-items:center;">
@@ -2535,6 +2571,7 @@ function render_modal(string $formId, array $definition, array $oldInputs, array
                         </form>';
 
                     return '<tr>'
+                        . '<td>' . e($niceLabel) . '</td>'
                         . '<td><code>' . e($key) . '</code></td>'
                         . '<td>' . e($type) . '</td>'
                         . '<td>' . $form . '</td>'
