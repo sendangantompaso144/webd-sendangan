@@ -1217,7 +1217,7 @@ if (isset($tableForms['potensi-media']['fields']['potensi_id'])) {
     }
     $tableForms['potensi-media']['fields']['potensi_id']['options'] = $potensiSelectOptions;
 }
-$pengumuman = fetch_table($pdo, 'SELECT pengumuman_id, pengumuman_valid_hingga, pengumuman_created_at, pengumuman_updated_at FROM pengumuman ORDER BY pengumuman_updated_at DESC LIMIT 50');
+$pengumuman = fetch_table($pdo, 'SELECT pengumuman_id, pengumuman_isi, pengumuman_valid_hingga, pengumuman_created_at, pengumuman_updated_at FROM pengumuman ORDER BY pengumuman_updated_at DESC LIMIT 50');
 $permohonanInformasi = fetch_table($pdo, 'SELECT pi_id, pi_email, pi_asal_instansi, pi_selesai, pi_created_at, pi_updated_at FROM permohonan_informasi ORDER BY pi_updated_at DESC LIMIT 50');
 $ppidDokumen = fetch_table($pdo, 'SELECT ppid_id, ppid_judul, ppid_kategori, ppid_namafile, ppid_created_at, ppid_updated_at FROM ppid_dokumen ORDER BY ppid_updated_at DESC LIMIT 50');
 $programDesa = fetch_table($pdo, 'SELECT program_id, program_nama, program_gambar, program_created_at, program_updated_at FROM program_desa ORDER BY program_updated_at DESC LIMIT 50');
@@ -2271,14 +2271,26 @@ function render_modal(string $formId, array $definition, array $oldInputs, array
                 'pengumuman',
                 'Pengumuman',
                 'Informasi dan pengumuman penting desa.',
-                ['ID', 'Berlaku sampai', 'Dibuat', 'Diperbarui'],
+                ['ID', 'Berlaku sampai', 'Dibuat', 'Diperbarui', 'Aksi'],
                 $pengumuman,
                 static function (array $row): string {
+                    $id = (int) ($row['pengumuman_id'] ?? 0);
+                    $payload = [
+                        'id' => $id,
+                        'isi' => (string) ($row['pengumuman_isi'] ?? ''),
+                    ];
+                    $dataAttr = e(json_encode($payload, JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_AMP | JSON_UNESCAPED_UNICODE));
+
+                    $aksi = $id > 0
+                        ? '<button type="button" class="btn-outline" data-open-modal="pengumuman-view" data-pengumuman="' . $dataAttr . '">Lihat Isi</button>'
+                        : '-';
+
                     return '<tr>'
-                        . '<td>#' . e((string) $row['pengumuman_id']) . '</td>'
+                        . '<td>#' . e((string) $id) . '</td>'
                         . '<td>' . e(format_datetime($row['pengumuman_valid_hingga'] ?? null)) . '</td>'
                         . '<td>' . e(format_datetime($row['pengumuman_created_at'] ?? null)) . '</td>'
                         . '<td>' . e(format_datetime($row['pengumuman_updated_at'] ?? null)) . '</td>'
+                        . '<td class="table-actions">' . $aksi . '</td>'
                         . '</tr>';
                 }
             ) ?>
@@ -2392,6 +2404,20 @@ function render_modal(string $formId, array $definition, array $oldInputs, array
                     </table>
                 </div>
                 <p class="modal-empty" data-potensi-gallery-empty>Belum ada foto untuk potensi ini.</p>
+            </div>
+        </div>
+    </div>
+    <div class="modal-backdrop" data-modal="pengumuman-view">
+        <div class="modal modal--wide">
+            <div class="modal__header">
+                <h3 class="modal__title">Isi Pengumuman</h3>
+                <button type="button" class="modal__close" data-close-modal aria-label="Tutup">&times;</button>
+            </div>
+            <div class="modal__body">
+                <div class="modal__field">
+                    <label>Isi Pengumuman</label>
+                    <textarea id="pengumuman_view_isi" rows="10" readonly style="resize:none; background:#f9fafb;"></textarea>
+                </div>
             </div>
         </div>
     </div>
@@ -2885,6 +2911,21 @@ function render_modal(string $formId, array $definition, array $oldInputs, array
                     document.getElementById('potensi_edit_kategori').value = potensiPayload.kategori || 'Wisata';
                     document.getElementById('potensi_edit_isi').value = potensiPayload.isi || '';
                     document.getElementById('potensi_edit_gmaps').value = potensiPayload.gmaps || '';
+                }
+                if (targetId === 'pengumuman-view') {
+                    var pengumumanRaw = btn.getAttribute('data-pengumuman') || '';
+                    var pengumuman = {};
+                    if (pengumumanRaw !== '') {
+                        try {
+                            pengumuman = JSON.parse(pengumumanRaw);
+                        } catch (error) {
+                            pengumuman = {};
+                        }
+                    }
+                    var textArea = document.getElementById('pengumuman_view_isi');
+                    if (textArea) {
+                        textArea.value = pengumuman.isi || '(Belum ada isi pengumuman)';
+                    }
                 }
                 if (targetId === 'potensi-media') {
                     var potensiTargetId = btn.getAttribute('data-potensi-media-id') || '';
