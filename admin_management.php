@@ -307,6 +307,66 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         exit;
     }
 
+        if ($action === 'delete_program') {
+        $programId = isset($_POST['program_id']) ? (int) $_POST['program_id'] : 0;
+        if ($programId <= 0) {
+            $_SESSION['flash_error'][] = 'Data program tidak ditemukan.';
+            header('Location: admin_management.php#program');
+            exit;
+        }
+
+        // 1️⃣ Ambil data gambar program terlebih dahulu
+        try {
+            $stmt = $pdo->prepare('SELECT program_gambar FROM program_desa WHERE program_id = ? LIMIT 1');
+            if ($stmt === false) {
+                throw new RuntimeException('Gagal menyiapkan query.');
+            }
+            $stmt->execute([$programId]);
+            $row = $stmt->fetch(PDO::FETCH_ASSOC);
+        } catch (Throwable $e) {
+            $_SESSION['flash_error'][] = 'Gagal memuat data program: ' . $e->getMessage();
+            header('Location: admin_management.php#program');
+            exit;
+        }
+
+        if (!$row) {
+            $_SESSION['flash_error'][] = 'Data program tidak ditemukan.';
+            header('Location: admin_management.php#program');
+            exit;
+        }
+
+        // 2️⃣ Hapus file gambar (jika ada)
+        $fileName = trim((string) ($row['program_gambar'] ?? ''));
+        if ($fileName !== '') {
+            // Pastikan hanya nama file, bukan URL
+            $fileName = basename($fileName);
+            $filePath = base_path('uploads/program/' . $fileName);
+
+            if (is_file($filePath)) {
+                if (!@unlink($filePath)) {
+                    $_SESSION['flash_error'][] = 'Gagal menghapus file gambar program: ' . e($fileName);
+                    header('Location: admin_management.php#program');
+                    exit;
+                }
+            }
+        }
+
+        // 3️⃣ Hapus data program dari database
+        try {
+            $stmt = $pdo->prepare('DELETE FROM program_desa WHERE program_id = ?');
+            if ($stmt === false) {
+                throw new RuntimeException('Gagal menyiapkan query penghapusan.');
+            }
+            $stmt->execute([$programId]);
+            $_SESSION['flash'][] = 'Program Desa berhasil dihapus.';
+        } catch (Throwable $e) {
+            $_SESSION['flash_error'][] = 'Gagal menghapus data program: ' . $e->getMessage();
+        }
+
+        header('Location: admin_management.php#program');
+        exit;
+    }
+
     if ($action === 'delete_fasilitas') {
         $fasilitasId = isset($_POST['fasilitas_id']) ? (int) $_POST['fasilitas_id'] : 0;
         if ($fasilitasId <= 0) {
@@ -2409,16 +2469,20 @@ function render_modal(string $formId, array $definition, array $oldInputs, array
                 'program',
                 'Program Desa',
                 'Program kerja dan kegiatan desa.',
-                ['ID', 'Nama Program', 'Link Gambar', 'Dibuat', 'Diperbarui'],
+                ['ID', 'Nama Program', 'Gambar', 'Dibuat', 'Diperbarui', 'Aksi'],
                 $programDesa,
                 static function (array $row): string {
-                    $img = trim((string) ($row['program_gambar'] ?? ''));
-                    $imgHtml = '-';
-                    if ($img !== '') {
-                        // pastikan url relatif menuju folder uploads/program/
-                        $fileUrl = base_uri('uploads/program/' . ltrim($img, '/'));
-                        $imgHtml = '<a href="' . e($fileUrl) . '" target="_blank" rel="noopener">' . e($img) . '</a>';
-                    }
+                    $img = (string) ($row['program_gambar'] ?? '');
+                    $imgHtml = $img !== '' ? '<a href="' . e(base_uri('uploads/program/' . ltrim($img, '/'))) . '" target="_blank" rel="noopener">Lihat</a>' : '-';
+                    $rowId = (int) ($row['program_id'] ?? 0);
+
+                    $actionsHtml = $rowId > 0
+                        ? '<form method="post" action="admin_management.php#program" class="table-actions__form" onsubmit="return confirm(\'Hapus program ini?\');">'
+                            . '<input type="hidden" name="action" value="delete_program">'
+                            . '<input type="hidden" name="program_id" value="' . e((string) $rowId) . '">'
+                            . '<button type="submit" class="btn-danger">Hapus</button>'
+                        . '</form>'
+                        : '-';
 
                     return '<tr>'
                         . '<td>#' . e((string) $row['program_id']) . '</td>'
@@ -2426,6 +2490,7 @@ function render_modal(string $formId, array $definition, array $oldInputs, array
                         . '<td>' . $imgHtml . '</td>'
                         . '<td>' . e(format_datetime($row['program_created_at'] ?? null)) . '</td>'
                         . '<td>' . e(format_datetime($row['program_updated_at'] ?? null)) . '</td>'
+                        . '<td class="table-actions">' . $actionsHtml . '</td>'
                         . '</tr>';
                 }
             ) ?>
