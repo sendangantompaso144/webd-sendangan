@@ -922,6 +922,151 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         exit;
     }
 
+        if ($action === 'edit_program') {
+        $programId = isset($_POST['program_id']) ? (int) $_POST['program_id'] : 0;
+        $newName = trim((string) ($_POST['program_nama'] ?? ''));
+        $newDesc = trim((string) ($_POST['program_deskripsi'] ?? ''));
+
+        if ($programId <= 0) {
+            $_SESSION['flash_error'][] = 'Data program tidak ditemukan.';
+            header('Location: admin_management.php#program');
+            exit;
+        }
+
+        if ($newName === '' || $newDesc === '') {
+            $_SESSION['flash_error'][] = 'Nama dan deskripsi program wajib diisi.';
+            header('Location: admin_management.php#program');
+            exit;
+        }
+
+        try {
+            $stmt = $pdo->prepare('SELECT program_gambar FROM program_desa WHERE program_id = ? LIMIT 1');
+            $stmt->execute([$programId]);
+            $row = $stmt->fetch(PDO::FETCH_ASSOC);
+        } catch (Throwable $e) {
+            $_SESSION['flash_error'][] = 'Gagal memuat data program: ' . $e->getMessage();
+            header('Location: admin_management.php#program');
+            exit;
+        }
+
+        if (!$row) {
+            $_SESSION['flash_error'][] = 'Data program tidak ditemukan.';
+            header('Location: admin_management.php#program');
+            exit;
+        }
+
+        $currentImage = trim((string) ($row['program_gambar'] ?? ''));
+        $newImageName = null;
+        $newImagePath = null;
+
+        $fileInfo = $_FILES['program_gambar'] ?? null;
+        $hasNewImage = is_array($fileInfo) && ($fileInfo['error'] ?? UPLOAD_ERR_NO_FILE) !== UPLOAD_ERR_NO_FILE;
+
+        if ($hasNewImage) {
+            if (($fileInfo['error'] ?? UPLOAD_ERR_OK) !== UPLOAD_ERR_OK) {
+                $_SESSION['flash_error'][] = 'Gagal mengunggah gambar baru.';
+                header('Location: admin_management.php#program');
+                exit;
+            }
+
+            $finfo = finfo_open(FILEINFO_MIME_TYPE);
+            $mime = $finfo ? (string) finfo_file($finfo, $fileInfo['tmp_name']) : '';
+            if ($finfo) finfo_close($finfo);
+
+            $ext = strtolower(pathinfo((string) ($fileInfo['name'] ?? ''), PATHINFO_EXTENSION));
+            $allowedExt = ['jpg', 'jpeg', 'png', 'webp'];
+            $allowedMime = ['image/jpeg', 'image/png', 'image/webp'];
+
+            if (!in_array($ext, $allowedExt, true) || !in_array($mime, $allowedMime, true)) {
+                $_SESSION['flash_error'][] = 'Format gambar tidak didukung. Gunakan JPG, JPEG, PNG, atau WEBP.';
+                header('Location: admin_management.php#program');
+                exit;
+            }
+
+            $targetDir = base_path('uploads/program');
+            if (!is_dir($targetDir) && !mkdir($targetDir, 0755, true) && !is_dir($targetDir)) {
+                $_SESSION['flash_error'][] = 'Folder unggahan tidak dapat dibuat.';
+                header('Location: admin_management.php#program');
+                exit;
+            }
+
+            $uniqueName = uniqid('program_', true) . '.webp';
+            $targetPath = $targetDir . DIRECTORY_SEPARATOR . $uniqueName;
+
+            $conversionSuccess = false;
+            if ($mime === 'image/webp') {
+                $conversionSuccess = move_uploaded_file($fileInfo['tmp_name'], $targetPath);
+            } else {
+                if (!function_exists('imagewebp')) {
+                    $_SESSION['flash_error'][] = 'Konversi gambar ke WebP tidak tersedia di server.';
+                    header('Location: admin_management.php#program');
+                    exit;
+                }
+
+                $image = null;
+                switch ($mime) {
+                    case 'image/jpeg':
+                        $image = @imagecreatefromjpeg($fileInfo['tmp_name']);
+                        break;
+                    case 'image/png':
+                        $image = @imagecreatefrompng($fileInfo['tmp_name']);
+                        if ($image !== false) {
+                            imagepalettetotruecolor($image);
+                            imagealphablending($image, false);
+                            imagesavealpha($image, true);
+                        }
+                        break;
+                }
+
+                if ($image !== false && $image !== null) {
+                    $conversionSuccess = imagewebp($image, $targetPath, 90);
+                    imagedestroy($image);
+                }
+            }
+
+            if (!$conversionSuccess) {
+                if (is_file($targetPath)) @unlink($targetPath);
+                $_SESSION['flash_error'][] = 'Gagal memproses gambar baru.';
+                header('Location: admin_management.php#program');
+                exit;
+            }
+
+            $newImageName = $uniqueName;
+            $newImagePath = $targetPath;
+        }
+
+        $setParts = ['program_nama = ?', 'program_deskripsi = ?'];
+        $params = [$newName, $newDesc];
+
+        if ($newImageName !== null) {
+            $setParts[] = 'program_gambar = ?';
+            $params[] = $newImageName;
+        }
+
+        $params[] = $programId;
+        $setClause = implode(', ', $setParts);
+
+        try {
+            $stmt = $pdo->prepare('UPDATE program_desa SET ' . $setClause . ' WHERE program_id = ?');
+            $stmt->execute($params);
+
+            if ($newImageName !== null && $currentImage !== '') {
+                $oldPath = base_path('uploads/program/' . ltrim($currentImage, "/\\"));
+                if (is_file($oldPath)) @unlink($oldPath);
+            }
+
+            $_SESSION['flash'][] = 'Program Desa berhasil diperbarui.';
+        } catch (Throwable $e) {
+            if ($newImagePath !== null && is_file($newImagePath)) {
+                @unlink($newImagePath);
+            }
+            $_SESSION['flash_error'][] = 'Gagal memperbarui data program: ' . $e->getMessage();
+        }
+
+        header('Location: admin_management.php#program');
+        exit;
+    }
+
     if ($action === 'edit_apbdes') {
         $apbdesId = isset($_POST['apbdes_id']) ? (int) $_POST['apbdes_id'] : 0;
         $newTitle = trim((string) ($_POST['apbdes_judul'] ?? ''));
@@ -1342,7 +1487,7 @@ if (isset($tableForms['potensi-media']['fields']['potensi_id'])) {
 $pengumuman = fetch_table($pdo, 'SELECT pengumuman_id, pengumuman_isi, pengumuman_valid_hingga, pengumuman_created_at, pengumuman_updated_at FROM pengumuman ORDER BY pengumuman_updated_at DESC LIMIT 50');
 $permohonanInformasi = fetch_table($pdo, 'SELECT pi_id, pi_email, pi_asal_instansi, pi_selesai, pi_created_at, pi_updated_at FROM permohonan_informasi ORDER BY pi_updated_at DESC LIMIT 50');
 $ppidDokumen = fetch_table($pdo, 'SELECT ppid_id, ppid_judul, ppid_kategori, ppid_namafile, ppid_created_at, ppid_updated_at FROM ppid_dokumen ORDER BY ppid_updated_at DESC LIMIT 50');
-$programDesa = fetch_table($pdo, 'SELECT program_id, program_nama, program_gambar, program_created_at, program_updated_at FROM program_desa ORDER BY program_updated_at DESC LIMIT 50');
+$programDesa = fetch_table($pdo, 'SELECT program_id, program_nama, program_deskripsi, program_gambar, program_created_at, program_updated_at FROM program_desa ORDER BY program_updated_at DESC LIMIT 50');
 $strukturOrganisasi = fetch_table($pdo, 'SELECT struktur_id, struktur_nama, struktur_jabatan, struktur_foto, struktur_created_at, struktur_updated_at FROM struktur_organisasi ORDER BY struktur_updated_at DESC LIMIT 50');
 
 $flashMessages = $_SESSION['flash'] ?? [];
@@ -2475,12 +2620,19 @@ function render_modal(string $formId, array $definition, array $oldInputs, array
                     $img = (string) ($row['program_gambar'] ?? '');
                     $imgHtml = $img !== '' ? '<a href="' . e(base_uri('uploads/program/' . ltrim($img, '/'))) . '" target="_blank" rel="noopener">Lihat</a>' : '-';
                     $rowId = (int) ($row['program_id'] ?? 0);
+                    $payload = [
+                        'id' => $rowId,
+                        'nama' => (string) ($row['program_nama'] ?? ''),
+                        'deskripsi' => (string) ($row['program_deskripsi'] ?? ''), // ✅ pastikan ini ada
+                    ];
+                    $dataAttr = e(json_encode($payload, JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_AMP | JSON_UNESCAPED_UNICODE));
 
                     $actionsHtml = $rowId > 0
-                        ? '<form method="post" action="admin_management.php#program" class="table-actions__form" onsubmit="return confirm(\'Hapus program ini?\');">'
-                            . '<input type="hidden" name="action" value="delete_program">'
-                            . '<input type="hidden" name="program_id" value="' . e((string) $rowId) . '">'
-                            . '<button type="submit" class="btn-danger">Hapus</button>'
+                        ? '<button type="button" class="btn-outline" data-open-modal="program-edit" data-program="' . $dataAttr . '">Ubah</button>'
+                        . '<form method="post" action="admin_management.php#program" class="table-actions__form" onsubmit="return confirm(\'Hapus program ini?\');">'
+                        . '<input type="hidden" name="action" value="delete_program">'
+                        . '<input type="hidden" name="program_id" value="' . e((string) $rowId) . '">'
+                        . '<button type="submit" class="btn-danger">Hapus</button>'
                         . '</form>'
                         : '-';
 
@@ -2672,6 +2824,39 @@ function render_modal(string $formId, array $definition, array $oldInputs, array
             </div>
         </div>
     </div>
+
+    <div class="modal-backdrop" data-modal="program-edit">
+        <div class="modal">
+            <div class="modal__header">
+                <h3 class="modal__title">Ubah Program Desa</h3>
+                <button type="button" class="modal__close" data-close-modal aria-label="Tutup">&times;</button>
+            </div>
+            <div class="modal__body">
+                <form method="post" action="admin_management.php#program" autocomplete="off" enctype="multipart/form-data" id="program-edit-form">
+                    <input type="hidden" name="action" value="edit_program">
+                    <input type="hidden" name="program_id" id="program_edit_id">
+                    <div class="modal__field">
+                        <label for="program_edit_nama">Nama Program <span class="required">*</span></label>
+                        <input type="text" name="program_nama" id="program_edit_nama" required>
+                    </div>
+                    <div class="modal__field">
+                        <label for="program_edit_deskripsi">Deskripsi <span class="required">*</span></label>
+                        <textarea name="program_deskripsi" id="program_edit_deskripsi" rows="5" required></textarea>
+                    </div>
+                    <div class="modal__field">
+                        <label for="program_edit_gambar">Gambar (opsional)</label>
+                        <input type="file" name="program_gambar" id="program_edit_gambar" accept="image/jpeg,image/png,image/webp">
+                        <small class="field-hint">Kosongkan jika tidak ingin mengganti gambar.</small>
+                    </div>
+                    <div class="modal__actions">
+                        <button type="button" class="btn-secondary" data-close-modal>Batal</button>
+                        <button type="submit" class="btn-primary">Simpan Perubahan</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
     <div class="modal-backdrop" data-modal="potensi-edit">
         <div class="modal">
             <div class="modal__header">
@@ -3127,6 +3312,16 @@ function render_modal(string $formId, array $definition, array $oldInputs, array
                         }
                         hidden.value = potensiTargetId;
                     }
+                }
+                if (targetId === 'program-edit') {
+                    const raw = btn.getAttribute('data-program') || '';
+                    let data = {};
+                    try { data = JSON.parse(raw); } catch {}
+                    document.getElementById('program_edit_id').value = data.id || '';
+                    document.getElementById('program_edit_nama').value = data.nama || '';
+                    document.getElementById('program_edit_deskripsi').value = data.deskripsi || '';
+                    const inputFile = document.getElementById('program_edit_gambar');
+                    if (inputFile) inputFile.value = '';
                 }
                 if (targetId) {
                     openModal(targetId);
