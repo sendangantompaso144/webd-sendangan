@@ -487,6 +487,43 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         exit;
     }
 
+    if ($action === 'edit_pengumuman') {
+        $pengumumanId = isset($_POST['pengumuman_id']) ? (int) $_POST['pengumuman_id'] : 0;
+        $isi = trim((string) ($_POST['pengumuman_isi'] ?? ''));
+        $validHinggaRaw = trim((string) ($_POST['pengumuman_valid_hingga'] ?? ''));
+        $validHingga = null;
+
+        if ($validHinggaRaw !== '') {
+            $timestamp = strtotime($validHinggaRaw);
+            if ($timestamp !== false) {
+                $validHingga = date('Y-m-d H:i:s', $timestamp);
+            }
+        }
+
+        if ($pengumumanId <= 0) {
+            $_SESSION['flash_error'][] = 'Data pengumuman tidak ditemukan.';
+            header('Location: admin_management.php#pengumuman');
+            exit;
+        }
+
+        if ($isi === '' || $validHingga === null) {
+            $_SESSION['flash_error'][] = 'Isi pengumuman dan tanggal berlaku wajib diisi.';
+            header('Location: admin_management.php#pengumuman');
+            exit;
+        }
+
+        try {
+            $stmt = $pdo->prepare('UPDATE pengumuman SET pengumuman_isi = ?, pengumuman_valid_hingga = ?, pengumuman_updated_at = NOW() WHERE pengumuman_id = ?');
+            $stmt->execute([$isi, $validHingga, $pengumumanId]);
+            $_SESSION['flash'][] = 'Pengumuman berhasil diperbarui.';
+        } catch (Throwable $exception) {
+            $_SESSION['flash_error'][] = 'Gagal memperbarui pengumuman: ' . $exception->getMessage();
+        }
+
+        header('Location: admin_management.php#pengumuman');
+        exit;
+    }
+
     if ($action === 'edit_fasilitas') {
         $fasilitasId = isset($_POST['fasilitas_id']) ? (int) $_POST['fasilitas_id'] : 0;
         $newName = trim((string) ($_POST['fasilitas_nama'] ?? ''));
@@ -2302,15 +2339,16 @@ function render_modal(string $formId, array $definition, array $oldInputs, array
                     $dataAttr = e(json_encode($payload, JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_AMP | JSON_UNESCAPED_UNICODE));
 
                     $aksi = $id > 0
-                        ? '<div class="table-actions">'
-                            . '<button type="button" class="btn-outline" data-open-modal="pengumuman-view" data-pengumuman="' . $dataAttr . '">Lihat Isi</button>'
-                            . '<form method="post" action="admin_management.php#pengumuman" class="table-actions__form" onsubmit="return confirm(\'Hapus pengumuman ini?\');">'
-                            . '<input type="hidden" name="action" value="delete_pengumuman">'
-                            . '<input type="hidden" name="pengumuman_id" value="' . e((string) $id) . '">'
-                            . '<button type="submit" class="btn-danger">Hapus</button>'
-                            . '</form>'
-                            . '</div>'
-                        : '-';
+                    ? '<div class="table-actions">'
+                        . '<button type="button" class="btn-outline" data-open-modal="pengumuman-view" data-pengumuman="' . $dataAttr . '">Lihat Isi</button>'
+                        . '<button type="button" class="btn-outline" data-open-modal="pengumuman-edit" data-pengumuman=\'' . $dataAttr . '\'>Ubah</button>'
+                        . '<form method="post" action="admin_management.php#pengumuman" class="table-actions__form" onsubmit="return confirm(\'Hapus pengumuman ini?\');">'
+                        . '<input type="hidden" name="action" value="delete_pengumuman">'
+                        . '<input type="hidden" name="pengumuman_id" value="' . e((string) $id) . '">'
+                        . '<button type="submit" class="btn-danger">Hapus</button>'
+                        . '</form>'
+                        . '</div>'
+                    : '-';
 
                     return '<tr>'
                         . '<td>#' . e((string) $id) . '</td>'
@@ -2445,6 +2483,32 @@ function render_modal(string $formId, array $definition, array $oldInputs, array
                     <label>Isi Pengumuman</label>
                     <textarea id="pengumuman_view_isi" rows="10" readonly style="resize:none; background:#f9fafb;"></textarea>
                 </div>
+            </div>
+        </div>
+    </div>
+    <div class="modal-backdrop" data-modal="pengumuman-edit">
+        <div class="modal">
+            <div class="modal__header">
+                <h3 class="modal__title">Ubah Pengumuman</h3>
+                <button type="button" class="modal__close" data-close-modal aria-label="Tutup">&times;</button>
+            </div>
+            <div class="modal__body">
+                <form method="post" action="admin_management.php#pengumuman" autocomplete="off" id="pengumuman-edit-form">
+                    <input type="hidden" name="action" value="edit_pengumuman">
+                    <input type="hidden" name="pengumuman_id" id="pengumuman_edit_id">
+                    <div class="modal__field">
+                        <label for="pengumuman_edit_isi">Isi Pengumuman <span class="required">*</span></label>
+                        <textarea name="pengumuman_isi" id="pengumuman_edit_isi" rows="6" required></textarea>
+                    </div>
+                    <div class="modal__field">
+                        <label for="pengumuman_edit_valid">Berlaku Hingga <span class="required">*</span></label>
+                        <input type="datetime-local" name="pengumuman_valid_hingga" id="pengumuman_edit_valid" required>
+                    </div>
+                    <div class="modal__actions">
+                        <button type="button" class="btn-secondary" data-close-modal>Batal</button>
+                        <button type="submit" class="btn-primary">Simpan Perubahan</button>
+                    </div>
+                </form>
             </div>
         </div>
     </div>
@@ -2952,6 +3016,25 @@ function render_modal(string $formId, array $definition, array $oldInputs, array
                     var textArea = document.getElementById('pengumuman_view_isi');
                     if (textArea) {
                         textArea.value = pengumuman.isi || '(Belum ada isi pengumuman)';
+                    }
+                }
+                if (targetId === 'pengumuman-edit') {
+                    var pengumumanRaw = btn.getAttribute('data-pengumuman') || '';
+                    var pengumuman = {};
+                    if (pengumumanRaw !== '') {
+                        try {
+                            pengumuman = JSON.parse(pengumumanRaw);
+                        } catch (error) {
+                            pengumuman = {};
+                        }
+                    }
+                    document.getElementById('pengumuman_edit_id').value = pengumuman.id || '';
+                    document.getElementById('pengumuman_edit_isi').value = pengumuman.isi || '';
+                    if (pengumuman.valid_hingga) {
+                        var date = new Date(pengumuman.valid_hingga);
+                        if (!isNaN(date)) {
+                            document.getElementById('pengumuman_edit_valid').value = date.toISOString().slice(0, 16);
+                        }
                     }
                 }
                 if (targetId === 'potensi-media') {
