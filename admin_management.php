@@ -187,7 +187,7 @@ $tableForms = [
         'fields' => [
             'struktur_nama' => ['label' => 'Nama', 'type' => 'text', 'required' => true],
             'struktur_jabatan' => ['label' => 'Jabatan', 'type' => 'text', 'required' => true],
-            'struktur_foto' => ['label' => 'URL Foto', 'type' => 'text', 'required' => false],
+            'struktur_foto' => ['label' => 'Foto', 'type' => 'file_image', 'required' => false],
         ],
     ],
 ];
@@ -306,7 +306,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         exit;
     }
 
-        if ($action === 'delete_program') {
+    if ($action === 'delete_program') {
         $programId = isset($_POST['program_id']) ? (int) $_POST['program_id'] : 0;
         if ($programId <= 0) {
             $_SESSION['flash_error'][] = 'Data program tidak ditemukan.';
@@ -563,6 +563,46 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
 
         header('Location: admin_management.php#galeri');
+        exit;
+    }
+
+    if ($action === 'delete_struktur') {
+        $strukturId = isset($_POST['struktur_id']) ? (int)$_POST['struktur_id'] : 0;
+        if ($strukturId <= 0) {
+            $_SESSION['flash_error'][] = 'Data struktur tidak ditemukan.';
+            header('Location: admin_management.php#struktur');
+            exit;
+        }
+
+        try {
+            $stmt = $pdo->prepare('SELECT struktur_foto FROM struktur_organisasi WHERE struktur_id = ? LIMIT 1');
+            $stmt->execute([$strukturId]);
+            $row = $stmt->fetch(PDO::FETCH_ASSOC);
+        } catch (Throwable $e) {
+            $_SESSION['flash_error'][] = 'Gagal memuat data struktur: ' . $e->getMessage();
+            header('Location: admin_management.php#struktur');
+            exit;
+        }
+
+        if ($row) {
+            $fileName = trim((string)($row['struktur_foto'] ?? ''));
+            if ($fileName !== '') {
+                $filePath = base_path('uploads/struktur/' . ltrim($fileName, '/'));
+                if (is_file($filePath)) {
+                    @unlink($filePath);
+                }
+            }
+        }
+
+        try {
+            $stmt = $pdo->prepare('DELETE FROM struktur_organisasi WHERE struktur_id = ?');
+            $stmt->execute([$strukturId]);
+            $_SESSION['flash'][] = 'Data struktur berhasil dihapus.';
+        } catch (Throwable $e) {
+            $_SESSION['flash_error'][] = 'Gagal menghapus data struktur: ' . $e->getMessage();
+        }
+
+        header('Location: admin_management.php#struktur');
         exit;
     }
 
@@ -1527,7 +1567,12 @@ $pengumuman = fetch_table($pdo, 'SELECT pengumuman_id, pengumuman_isi, pengumuma
 $permohonanInformasi = fetch_table($pdo, 'SELECT pi_id, pi_email, pi_asal_instansi, pi_selesai, pi_created_at, pi_updated_at FROM permohonan_informasi ORDER BY pi_updated_at DESC LIMIT 50');
 $ppidDokumen = fetch_table($pdo, 'SELECT ppid_id, ppid_judul, ppid_kategori, ppid_namafile, ppid_created_at, ppid_updated_at FROM ppid_dokumen ORDER BY ppid_updated_at DESC LIMIT 50');
 $programDesa = fetch_table($pdo, 'SELECT program_id, program_nama, program_deskripsi, program_gambar, program_created_at, program_updated_at FROM program_desa ORDER BY program_updated_at DESC LIMIT 50');
-$strukturOrganisasi = fetch_table($pdo, 'SELECT struktur_id, struktur_nama, struktur_jabatan, struktur_foto, struktur_created_at, struktur_updated_at FROM struktur_organisasi ORDER BY struktur_updated_at DESC LIMIT 50');
+$strukturOrganisasi = fetch_table(
+    $pdo,
+    'SELECT struktur_id, struktur_nama, struktur_jabatan, struktur_foto, struktur_created_at, struktur_updated_at 
+     FROM struktur_organisasi 
+     ORDER BY struktur_updated_at DESC LIMIT 50'
+);
 
 $flashMessages = $_SESSION['flash'] ?? [];
 $flashErrors = $_SESSION['flash_error'] ?? [];
@@ -2700,18 +2745,29 @@ function render_modal(string $formId, array $definition, array $oldInputs, array
                 'struktur',
                 'Struktur Organisasi',
                 'Susunan perangkat desa.',
-                ['ID', 'Nama', 'Jabatan', 'Foto', 'Dibuat', 'Diperbarui'],
+                ['ID', 'Nama', 'Jabatan', 'Foto', 'Dibuat', 'Diperbarui', 'Aksi'],
                 $strukturOrganisasi,
                 static function (array $row): string {
                     $foto = (string) ($row['struktur_foto'] ?? '');
-                    $fotoHtml = $foto !== '' ? '<div class="media-thumb"><img src="' . e($foto) . '" alt="struktur"><span>Foto</span></div>' : '-';
+                    $fotoHtml = $foto !== '' 
+                        ? '<a href="' . e(base_uri('uploads/struktur/' . ltrim($foto, '/'))) . '" target="_blank" rel="noopener">Lihat</a>'
+                        : '-';
+                    $id = (int)($row['struktur_id'] ?? 0);
+                    $actionsHtml = $id > 0 ? '
+                        <form method="post" action="admin_management.php#struktur" class="table-actions__form" onsubmit="return confirm(\'Hapus data ini?\');">
+                            <input type="hidden" name="action" value="delete_struktur">
+                            <input type="hidden" name="struktur_id" value="' . e((string)$id) . '">
+                            <button type="submit" class="btn-danger">Hapus</button>
+                        </form>' : '-';
+
                     return '<tr>'
-                        . '<td>#' . e((string) $row['struktur_id']) . '</td>'
-                        . '<td>' . e((string) $row['struktur_nama']) . '</td>'
-                        . '<td>' . e((string) $row['struktur_jabatan']) . '</td>'
+                        . '<td>#' . e((string)$id) . '</td>'
+                        . '<td>' . e((string)($row['struktur_nama'] ?? '')) . '</td>'
+                        . '<td>' . e((string)($row['struktur_jabatan'] ?? '')) . '</td>'
                         . '<td>' . $fotoHtml . '</td>'
                         . '<td>' . e(format_datetime($row['struktur_created_at'] ?? null)) . '</td>'
                         . '<td>' . e(format_datetime($row['struktur_updated_at'] ?? null)) . '</td>'
+                        . '<td>' . $actionsHtml . '</td>'
                         . '</tr>';
                 }
             ) ?>

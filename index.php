@@ -50,12 +50,28 @@ try {
     // Abaikan error, pakai fallback dari data statis
 }
 
+$strukturOrganisasi = [];
+
+try {
+    $pdo = db();
+    $stmt = $pdo->query('
+        SELECT struktur_id, struktur_nama, struktur_jabatan, struktur_foto 
+        FROM struktur_organisasi
+        ORDER BY struktur_id ASC
+    ');
+    if ($stmt !== false) {
+        $strukturOrganisasi = $stmt->fetchAll(PDO::FETCH_ASSOC);
+    }
+} catch (Throwable) {
+    // Jika gagal ambil data, biarkan $strukturOrganisasi kosong
+}
+
 render_base_layout([
     'title' => 'Beranda | ' . app_config('name', 'Desa Sendangan'),
     'description' => 'Beranda Desa Sendangan: sambutan, data singkat, dan layanan utama untuk warga.',
     'activePage' => 'home',
     'bodyClass' => 'page-home',
-    'content' => static function () use ($homeData, $latestNews, $headlines): void {
+    'content' => static function () use ($homeData, $latestNews, $headlines, $strukturOrganisasi): void {
         $profilData = data_source('profil', []);
         $demografiDasar = is_array($profilData['demografi_dasar'] ?? null) ? $profilData['demografi_dasar'] : null;
         $stats = [];
@@ -471,26 +487,34 @@ render_base_layout([
                     <p class="section-description">Perangkat Desa Sendangan yang mengabdi untuk masyarakat</p>
                 </div>
                 <div class="structure-grid">
-                    <?php 
-                    $positions = [
-                        ['name' => 'Johny R. Mandagi', 'role' => 'Kepala Desa'],
-                        ['name' => 'Maria S. Wenas', 'role' => 'Sekretaris Desa'],
-                        ['name' => '', 'role' => 'Kaur Pemerintahan'],
-                        ['name' => '', 'role' => 'Kaur Pembangunan'],
-                        ['name' => '', 'role' => 'Kaur Keuangan'],
-                        ['name' => '', 'role' => 'Kaur Umum']
-                    ];
-                    foreach ($positions as $position): ?>
-                        <div class="structure-card">
-                            <div class="structure-photo">
-                                <img src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='200' height='200'%3E%3Crect fill='%23E3F2FD' width='200' height='200' rx='100'/%3E%3Ctext x='50%25' y='50%25' font-size='60' text-anchor='middle' dominant-baseline='middle'%3EðŸ‘¤%3C/text%3E%3C/svg%3E" alt="<?= e($position['role']) ?>" />
+                    <?php if (!empty($strukturOrganisasi)): ?>
+                        <?php foreach ($strukturOrganisasi as $person): ?>
+                            <?php
+                            $nama = (string)($person['struktur_nama'] ?? '');
+                            $jabatan = (string)($person['struktur_jabatan'] ?? '');
+                            $foto = trim((string)($person['struktur_foto'] ?? ''));
+                            $fotoUrl = $foto !== '' 
+                                ? base_uri('uploads/struktur/' . ltrim($foto, '/')) 
+                                : 'data:image/svg+xml,' . rawurlencode("
+                                    <svg xmlns='http://www.w3.org/2000/svg' width='200' height='200'>
+                                        <rect fill='#E3F2FD' width='200' height='200' rx='100'/>
+                                        <text x='50%' y='50%' font-size='60' fill='#90CAF9' text-anchor='middle' dominant-baseline='middle'>👤</text>
+                                    </svg>
+                                ");
+                            ?>
+                            <div class="structure-card">
+                                <div class="structure-photo">
+                                    <img src="<?= e($fotoUrl) ?>" alt="<?= e($jabatan ?: 'Perangkat Desa') ?>" />
+                                </div>
+                                <?php if ($nama !== ''): ?>
+                                    <div class="structure-name"><?= e($nama) ?></div>
+                                <?php endif; ?>
+                                <div class="structure-role"><?= e($jabatan ?: '-') ?></div>
                             </div>
-                            <?php if (!empty($position['name'])): ?>
-                                <div class="structure-name"><?= e($position['name']) ?></div>
-                            <?php endif; ?>
-                            <div class="structure-role"><?= e($position['role']) ?></div>
-                        </div>
-                    <?php endforeach; ?>
+                        <?php endforeach; ?>
+                    <?php else: ?>
+                        <p style="text-align:center;color:#607D8B;">Belum ada data struktur organisasi yang tersedia.</p>
+                    <?php endif; ?>
                 </div>
             </div>
         </section>
