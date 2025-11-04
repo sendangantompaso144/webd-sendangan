@@ -141,8 +141,8 @@ $tableForms = [
         'table' => 'gambar_potensi_desa',
         'title' => 'Media Potensi Desa',
         'fields' => [
-            'potensi_id' => ['label' => 'ID Potensi', 'type' => 'number', 'required' => false],
-            'gambar_namafile' => ['label' => 'Nama File', 'type' => 'text', 'required' => true],
+            'potensi_id' => ['label' => 'Nama Potensi', 'type' => 'select', 'required' => true, 'options' => []],
+            'gambar_namafile' => ['label' => 'Upload Foto', 'type' => 'file_image', 'required' => true],
         ],
     ],
     'pengumuman' => [
@@ -865,10 +865,22 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         if ($required) {
                             $errors[$fieldName] = 'Pilih salah satu opsi.';
                         }
-                    } elseif (!in_array($raw, $options, true)) {
-                        $errors[$fieldName] = 'Opsi tidak valid.';
                     } else {
-                        $inputData[$fieldName] = $raw;
+                        $allowedValues = [];
+                        $isList = array_is_list($options);
+                        foreach ($options as $optionValue => $optionLabel) {
+                            if ($isList || is_int($optionValue)) {
+                                $allowedValues[] = (string) $optionLabel;
+                            } else {
+                                $allowedValues[] = (string) $optionValue;
+                            }
+                        }
+
+                        if (!in_array($raw, $allowedValues, true)) {
+                            $errors[$fieldName] = 'Opsi tidak valid.';
+                        } else {
+                            $inputData[$fieldName] = ctype_digit($raw) ? (int) $raw : $raw;
+                        }
                     }
                     continue 2;
 
@@ -931,7 +943,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 }
 
                 foreach ($fileUploads as $column => $fileInfo) {
-                    $targetDir = base_path('uploads/' . $formId);
+                    $uploadFolder = 'uploads/' . $formId;
+                    $filenamePrefix = $formId . '_';
+                    $storedPrefix = '';
+
+                    if ($formId === 'potensi-media') {
+                        $uploadFolder = 'uploads/potensi';
+                        $filenamePrefix = 'potensi_';
+                        $storedPrefix = 'potensi/';
+                    }
+
+                    $targetDir = base_path($uploadFolder);
                     if (!is_dir($targetDir) && !mkdir($targetDir, 0755, true) && !is_dir($targetDir)) {
                         $errors['_general'] = 'Folder unggahan tidak dapat dibuat.';
                         break;
@@ -939,7 +961,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
                     $fieldType = $fieldsDefinition[$column]['type'] ?? '';
                     if ($fieldType === 'file_image') {
-                        $uniqueName = uniqid($formId . '_', true) . '.webp';
+                        $uniqueName = uniqid($filenamePrefix, true) . '.webp';
                         $targetPath = $targetDir . DIRECTORY_SEPARATOR . $uniqueName;
                         $mime = (string) ($fileInfo['_mime'] ?? '');
 
@@ -984,19 +1006,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                             @unlink($fileInfo['tmp_name']);
                         }
 
-                        $fileInfo['_stored'] = $uniqueName;
+                        $fileInfo['_stored'] = $storedPrefix !== '' ? $storedPrefix . $uniqueName : $uniqueName;
                         $fileUploads[$column] = $fileInfo;
                         continue;
                     }
 
-                    $uniqueName = uniqid($formId . '_', true) . '.pdf';
+                    $uniqueName = uniqid($filenamePrefix, true) . '.pdf';
                     $targetPath = $targetDir . DIRECTORY_SEPARATOR . $uniqueName;
                     if (!move_uploaded_file($fileInfo['tmp_name'], $targetPath)) {
                         $errors['_general'] = 'Gagal memindahkan file unggahan.';
                         break;
                     }
 
-                    $fileInfo['_stored'] = $uniqueName;
+                    $fileInfo['_stored'] = $storedPrefix !== '' ? $storedPrefix . $uniqueName : $uniqueName;
                     $fileUploads[$column] = $fileInfo;
                 }
 
@@ -1057,6 +1079,21 @@ foreach ($gambarPotensi as $mediaRow) {
     ];
 }
 $potensiDesa = fetch_table($pdo, 'SELECT potensi_id, potensi_judul, potensi_kategori, potensi_gmaps_link, potensi_created_at, potensi_updated_at FROM potensi_desa ORDER BY potensi_updated_at DESC LIMIT 50');
+if (isset($tableForms['potensi-media']['fields']['potensi_id'])) {
+    $potensiSelectOptions = ['' => '-- Pilih Potensi --'];
+    foreach ($potensiDesa as $potensiRow) {
+        $id = isset($potensiRow['potensi_id']) ? (int) $potensiRow['potensi_id'] : 0;
+        if ($id <= 0) {
+            continue;
+        }
+        $title = trim((string) ($potensiRow['potensi_judul'] ?? ''));
+        if ($title === '') {
+            $title = 'Potensi #' . $id;
+        }
+        $potensiSelectOptions[(string) $id] = $title;
+    }
+    $tableForms['potensi-media']['fields']['potensi_id']['options'] = $potensiSelectOptions;
+}
 $pengumuman = fetch_table($pdo, 'SELECT pengumuman_id, pengumuman_valid_hingga, pengumuman_created_at, pengumuman_updated_at FROM pengumuman ORDER BY pengumuman_updated_at DESC LIMIT 50');
 $permohonanInformasi = fetch_table($pdo, 'SELECT pi_id, pi_email, pi_asal_instansi, pi_selesai, pi_created_at, pi_updated_at FROM permohonan_informasi ORDER BY pi_updated_at DESC LIMIT 50');
 $ppidDokumen = fetch_table($pdo, 'SELECT ppid_id, ppid_judul, ppid_kategori, ppid_namafile, ppid_created_at, ppid_updated_at FROM ppid_dokumen ORDER BY ppid_updated_at DESC LIMIT 50');
@@ -1177,11 +1214,21 @@ function render_modal(string $formId, array $definition, array $oldInputs, array
                 $inputHtml = '<textarea name="' . e($name) . '" rows="4"' . $requiredAttr . '>' . e((string) $value) . '</textarea>';
                 break;
             case 'select':
-                $optionsHtml = '';
                 $options = $meta['options'] ?? [];
-                foreach ($options as $option) {
-                    $optionsHtml .= '<option value="' . e($option) . '"' . ((string) $value === (string) $option ? ' selected' : '') . '>' . e($option) . '</option>';
+                $optionsHtml = '';
+                $isList = array_is_list($options);
+
+                foreach ($options as $optionValue => $optionLabel) {
+                    if ($isList || is_int($optionValue)) {
+                        $optionValue = (string) $optionLabel;
+                        $optionLabel = (string) $optionLabel;
+                    } else {
+                        $optionValue = (string) $optionValue;
+                        $optionLabel = (string) $optionLabel;
+                    }
+                    $optionsHtml .= '<option value="' . e($optionValue) . '"' . ((string) $value === $optionValue ? ' selected' : '') . '>' . e($optionLabel) . '</option>';
                 }
+
                 $inputHtml = '<select name="' . e($name) . '"' . $requiredAttr . '>' . $optionsHtml . '</select>';
                 break;
             case 'number':
@@ -2330,7 +2377,7 @@ function render_modal(string $formId, array $definition, array $oldInputs, array
             if (!formIdValue) {
                 return;
             }
-            if (['apbdes', 'berita', 'fasilitas'].indexOf(formIdValue) === -1) {
+            if (['apbdes', 'berita', 'fasilitas', 'potensi-media'].indexOf(formIdValue) === -1) {
                 return;
             }
             form.addEventListener('submit', function () {
@@ -2341,6 +2388,8 @@ function render_modal(string $formId, array $definition, array $oldInputs, array
                     selector = 'input[type="file"][name="berita_gambar"]';
                 } else if (formIdValue === 'fasilitas') {
                     selector = 'input[type="file"][name="fasilitas_gambar"]';
+                } else if (formIdValue === 'potensi-media') {
+                    selector = 'input[type="file"][name="gambar_namafile"]';
                 }
                 var fileInput = form.querySelector(selector);
                 if (fileInput && fileInput.files && fileInput.files.length > 0) {
@@ -2367,7 +2416,7 @@ function render_modal(string $formId, array $definition, array $oldInputs, array
                 }
             });
         }
-        var potensiMediaPotensiInput = null;
+        var potensiMediaPotensiField = null;
         var potensiGalleryTitle;
         var potensiGallerySubtitle;
         var potensiGalleryTable;
@@ -2451,7 +2500,7 @@ function render_modal(string $formId, array $definition, array $oldInputs, array
         if (potensiMediaBackdrop) {
             var potensiMediaForm = potensiMediaBackdrop.querySelector('form');
             if (potensiMediaForm) {
-                potensiMediaPotensiInput = potensiMediaForm.querySelector('input[name="potensi_id"]');
+                potensiMediaPotensiField = potensiMediaForm.querySelector('[name="potensi_id"]');
             }
         }
 
@@ -2614,8 +2663,8 @@ function render_modal(string $formId, array $definition, array $oldInputs, array
                 }
                 if (targetId === 'potensi-media') {
                     var potensiTargetId = btn.getAttribute('data-potensi-media-id') || '';
-                    if (potensiMediaPotensiInput) {
-                        potensiMediaPotensiInput.value = potensiTargetId;
+                    if (potensiMediaPotensiField) {
+                        potensiMediaPotensiField.value = potensiTargetId;
                     }
                 }
                 if (targetId) {
