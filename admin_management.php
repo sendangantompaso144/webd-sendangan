@@ -2120,14 +2120,14 @@ function render_modal(string $formId, array $definition, array $oldInputs, array
             <span><?= e($adminSession['email'] ?? 'admin@desa.id') ?></span>
         </div>
         <nav>
-            <a class="sidebar-link" href="#apbdes" data-section="apbdes">APBDes</a>
+                
             <a class="sidebar-link" href="#berita" data-section="berita">Berita</a>
             <a class="sidebar-link" href="#fasilitas" data-section="fasilitas">Fasilitas</a>
             <a class="sidebar-link" href="#potensi" data-section="potensi">Potensi Desa</a>
             <a class="sidebar-link" href="#pengumuman" data-section="pengumuman">Pengumuman</a>
             <a class="sidebar-link" href="#permohonan" data-section="permohonan">Permohonan Informasi</a>
-            <a class="sidebar-link" href="#ppid" data-section="ppid">PPID Dokumen</a>
-            <a class="sidebar-link" href="#program" data-section="program">Program Desa</a>
+            <!-- <a class="sidebar-link" href="#ppid" data-section="ppid">PPID Dokumen</a> -->
+            <!-- <a class="sidebar-link" href="#program" data-section="program">Program Desa</a> -->
             <a class="sidebar-link" href="#galeri" data-section="galeri">Galeri</a>
             <a class="sidebar-link" href="#struktur" data-section="struktur">Struktur Organisasi</a>
         </nav>
@@ -2360,7 +2360,7 @@ function render_modal(string $formId, array $definition, array $oldInputs, array
                 }
             ) ?>
 
-            <?= section_card(
+            <!-- <?= section_card(
                 'permohonan',
                 'Permohonan Informasi',
                 'Riwayat permintaan informasi publik.',
@@ -2380,9 +2380,9 @@ function render_modal(string $formId, array $definition, array $oldInputs, array
                         . '<td>' . e(format_datetime($row['pi_updated_at'] ?? null)) . '</td>'
                         . '</tr>';
                 }
-            ) ?>
+            ) ?> -->
 
-            <?= section_card(
+            <!-- <?= section_card(
                 'ppid',
                 'Dokumen PPID',
                 'Daftar dokumen layanan informasi publik.',
@@ -2398,7 +2398,7 @@ function render_modal(string $formId, array $definition, array $oldInputs, array
                         . '<td>' . e(format_datetime($row['ppid_updated_at'] ?? null)) . '</td>'
                         . '</tr>';
                 }
-            ) ?>
+            ) ?> -->
 
             <?= section_card(
                 'program',
