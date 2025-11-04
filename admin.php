@@ -61,7 +61,7 @@ if (!$isLoggedIn && $_SERVER['REQUEST_METHOD'] === 'POST') {
                     'logged_in_at' => time(),
                 ];
 
-                header('Location: admin.php');
+                header('Location: admin_management.php');
                 exit;
             }
         } catch (Throwable $exception) {
@@ -327,8 +327,28 @@ if (!$isLoggedIn && $_SERVER['REQUEST_METHOD'] === 'POST') {
             <?= (int) ($currentAdmin['is_superadmin'] ?? 0) === 1 ? 'Status: Superadmin' : 'Status: Admin' ?><br>
             Login terakhir: <?= date('d M Y H:i', (int) ($currentAdmin['logged_in_at'] ?? time())) ?>
         </div>
-        <p class="subtitle">Area manajemen admin sedang dalam tahap pengembangan. Gunakan halaman lain untuk mengelola konten sesuai kebutuhan.</p>
-        <a class="logout-link" href="admin.php?action=logout">Keluar</a>
+        <p class="subtitle">
+            Gunakan tombol di bawah untuk mengelola data website.
+        </p>
+
+        <div style="display:flex; flex-direction:column; gap:10px; margin-top:18px;">
+            <a href="admin_management.php" style="
+                display:inline-block;
+                background:#2563eb;
+                color:#fff;
+                text-align:center;
+                padding:12px 18px;
+                border-radius:10px;
+                font-weight:600;
+                text-decoration:none;
+                letter-spacing:0.03em;
+                box-shadow:0 6px 16px rgba(37,99,235,0.25);
+                transition:transform 0.2s ease, box-shadow 0.2s ease;">
+                Kelola Data
+            </a>
+
+            <a class="logout-link" href="admin.php?action=logout">Keluar</a>
+        </div>
     <?php else: ?>
         <form method="post" autocomplete="off">
             <div class="input-group">
