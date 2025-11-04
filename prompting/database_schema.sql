@@ -104,7 +104,6 @@ create table struktur_organisasi (
 
 create table galeri (
     galeri_id int AUTO_INCREMENT PRIMARY KEY,
-    galeri_namafile VARCHAR(255) NOT NULL,
     galeri_keterangan TEXT,
     galeri_gambar VARCHAR(50),
     galeri_created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP

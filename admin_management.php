@@ -132,9 +132,8 @@ $tableForms = [
         'table' => 'galeri',
         'title' => 'Galeri Desa',
         'fields' => [
-            'galeri_namafile' => ['label' => 'Nama File', 'type' => 'text', 'required' => true],
             'galeri_keterangan' => ['label' => 'Keterangan', 'type' => 'textarea', 'required' => false],
-            'galeri_gambar' => ['label' => 'URL Gambar', 'type' => 'text', 'required' => false],
+            'galeri_gambar' => ['label' => 'Upload Gambar', 'type' => 'file_image', 'required' => true],
         ],
     ],
     'potensi-media' => [
@@ -524,6 +523,46 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
 
         header('Location: admin_management.php#potensi');
+        exit;
+    }
+
+    if ($action === 'delete_galeri') {
+        $galeriId = isset($_POST['galeri_id']) ? (int) $_POST['galeri_id'] : 0;
+        if ($galeriId <= 0) {
+            $_SESSION['flash_error'][] = 'Data galeri tidak ditemukan.';
+            header('Location: admin_management.php#galeri');
+            exit;
+        }
+
+        try {
+            $stmt = $pdo->prepare('SELECT galeri_gambar FROM galeri WHERE galeri_id = ? LIMIT 1');
+            $stmt->execute([$galeriId]);
+            $row = $stmt->fetch(PDO::FETCH_ASSOC);
+        } catch (Throwable $e) {
+            $_SESSION['flash_error'][] = 'Gagal memuat data galeri: ' . $e->getMessage();
+            header('Location: admin_management.php#galeri');
+            exit;
+        }
+
+        if ($row) {
+            $fileName = trim((string)($row['galeri_gambar'] ?? ''));
+            if ($fileName !== '') {
+                $filePath = base_path('uploads/galeri/' . ltrim($fileName, '/'));
+                if (is_file($filePath)) {
+                    @unlink($filePath);
+                }
+            }
+        }
+
+        try {
+            $stmt = $pdo->prepare('DELETE FROM galeri WHERE galeri_id = ?');
+            $stmt->execute([$galeriId]);
+            $_SESSION['flash'][] = 'Data galeri berhasil dihapus.';
+        } catch (Throwable $e) {
+            $_SESSION['flash_error'][] = 'Gagal menghapus data galeri: ' . $e->getMessage();
+        }
+
+        header('Location: admin_management.php#galeri');
         exit;
     }
 
@@ -1447,7 +1486,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 $apbdes = fetch_table($pdo, 'SELECT apbdes_id, apbdes_judul, apbdes_file, apbdes_edited_by, apbdes_created_at, apbdes_updated_at FROM apbdes ORDER BY apbdes_updated_at DESC LIMIT 50');
 $berita = fetch_table($pdo, 'SELECT berita_id, berita_judul, berita_isi, berita_gambar, berita_dilihat, berita_created_at, berita_updated_at FROM berita ORDER BY berita_updated_at DESC LIMIT 50');
 $fasilitas = fetch_table($pdo, 'SELECT fasilitas_id, fasilitas_nama, fasilitas_gambar, fasilitas_gmaps_link, fasilitas_created_at, fasilitas_updated_at FROM fasilitas ORDER BY fasilitas_updated_at DESC LIMIT 50');
-$galeri = fetch_table($pdo, 'SELECT galeri_id, galeri_namafile, galeri_keterangan, galeri_gambar, galeri_created_at FROM galeri ORDER BY galeri_created_at DESC LIMIT 50');
+$galeri = fetch_table($pdo, 'SELECT galeri_id, galeri_keterangan, galeri_gambar, galeri_created_at FROM galeri ORDER BY galeri_created_at DESC LIMIT 50');
 $gambarPotensi = fetch_table($pdo, 'SELECT g.gambar_id, g.potensi_id, g.gambar_namafile, g.gambar_created_at, p.potensi_judul FROM gambar_potensi_desa g LEFT JOIN potensi_desa p ON p.potensi_id = g.potensi_id ORDER BY g.gambar_created_at DESC');
 $gambarPotensiByPotensi = [];
 foreach ($gambarPotensi as $mediaRow) {
@@ -2519,17 +2558,27 @@ function render_modal(string $formId, array $definition, array $oldInputs, array
                 'galeri',
                 'Galeri Desa',
                 'Koleksi media foto galeri.',
-                ['ID', 'Nama File', 'Keterangan', 'Preview', 'Dibuat'],
+                ['ID', 'Keterangan', 'Gambar', 'Dibuat', 'Aksi'],
                 $galeri,
                 static function (array $row): string {
-                    $preview = (string) ($row['galeri_gambar'] ?? '');
-                    $previewHtml = $preview !== '' ? '<div class="media-thumb"><img src="' . e($preview) . '" alt="galeri"><span>Preview</span></div>' : '-';
+                    $img = (string) ($row['galeri_gambar'] ?? '');
+                    $imgHtml = $img !== '' 
+                        ? '<a href="' . e(base_uri('uploads/galeri/' . ltrim($img, '/'))) . '" target="_blank" rel="noopener">Lihat</a>'
+                        : '-';
+                    $rowId = (int) ($row['galeri_id'] ?? 0);
+                    $actionsHtml = $rowId > 0 ? '
+                        <form method="post" action="admin_management.php#galeri" class="table-actions__form" onsubmit="return confirm(\'Hapus gambar ini?\');">
+                            <input type="hidden" name="action" value="delete_galeri">
+                            <input type="hidden" name="galeri_id" value="' . e((string)$rowId) . '">
+                            <button type="submit" class="btn-danger">Hapus</button>
+                        </form>' : '-';
+
                     return '<tr>'
-                        . '<td>#' . e((string) $row['galeri_id']) . '</td>'
-                        . '<td>' . e((string) $row['galeri_namafile']) . '</td>'
-                        . '<td>' . e((string) ($row['galeri_keterangan'] ?? '')) . '</td>'
-                        . '<td>' . $previewHtml . '</td>'
+                        . '<td>#' . e((string)$row['galeri_id']) . '</td>'
+                        . '<td>' . e((string)($row['galeri_keterangan'] ?? '')) . '</td>'
+                        . '<td>' . $imgHtml . '</td>'
                         . '<td>' . e(format_datetime($row['galeri_created_at'] ?? null)) . '</td>'
+                        . '<td>' . $actionsHtml . '</td>'
                         . '</tr>';
                 }
             ) ?>

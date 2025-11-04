@@ -181,9 +181,9 @@ render_base_layout([
                     <div class="gallery-grid gallery-grid--plain" data-gallery-grid>
                         <?php foreach ($galeri as $index => $item): ?>
                             <?php
-                            $galleryCaption = (string) ($item['galeri_keterangan'] ?? $item['judul'] ?? '');
-                            $galleryImage = (string) ($item['gambar'] ?? asset('images/placeholder-gallery.jpg'));
-                            $downloadUrl = (string) ($item['galeri_download'] ?? $galleryImage);
+                            $galleryCaption = (string)($item['galeri_keterangan'] ?? '');
+                            $galleryImage = (string)($item['gambar'] ?? asset('images/placeholder-gallery.jpg'));
+                            $downloadUrl = $galleryImage;
                             ?>
                             <button
                                 class="gallery-plain-card"
