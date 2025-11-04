@@ -20,12 +20,42 @@ try {
     // Abaikan, tampilkan state kosong.
 }
 
+$headlines = [];
+
+try {
+    $pdo = db();
+    $stmt = $pdo->query('
+        SELECT pengumuman_isi, pengumuman_valid_hingga
+        FROM pengumuman
+        WHERE pengumuman_valid_hingga >= NOW()
+        ORDER BY pengumuman_created_at DESC
+        LIMIT 5
+    ');
+
+    if ($stmt !== false) {
+        $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
+        foreach ($rows as $row) {
+            $isi = trim((string) ($row['pengumuman_isi'] ?? ''));
+            if ($isi !== '') {
+                // Potong kalimat jika terlalu panjang (misalnya headline 120 karakter)
+                $excerpt = mb_substr($isi, 0, 120);
+                if (mb_strlen($isi) > 120) {
+                    $excerpt .= '...';
+                }
+                $headlines[] = $excerpt;
+            }
+        }
+    }
+} catch (Throwable) {
+    // Abaikan error, pakai fallback dari data statis
+}
+
 render_base_layout([
     'title' => 'Beranda | ' . app_config('name', 'Desa Sendangan'),
     'description' => 'Beranda Desa Sendangan: sambutan, data singkat, dan layanan utama untuk warga.',
     'activePage' => 'home',
     'bodyClass' => 'page-home',
-    'content' => static function () use ($homeData, $latestNews): void {
+    'content' => static function () use ($homeData, $latestNews, $headlines): void {
         $profilData = data_source('profil', []);
         $demografiDasar = is_array($profilData['demografi_dasar'] ?? null) ? $profilData['demografi_dasar'] : null;
         $stats = [];
@@ -192,11 +222,10 @@ render_base_layout([
             }
         }
         $orderedPotentialCategories = array_slice($orderedPotentialCategories, 0, 4);
-        $headlines = $homeData['headlines'] ?? [
-            'Pelayanan administrasi desa buka Senin-Jumat pukul 08.00 - 15.00 WITA.',
-            'Pengumuman: Kerja bakti lingkungan akan dilaksanakan pada Sabtu, 16 November mulai pukul 07.00 WITA.',
-            'Program bantuan pupuk subsidi dibuka kembali, segera daftar di kantor desa sebelum 25 November.'
-        ];
+        if (!isset($headlines) || $headlines === []) {
+            $headlines = $homeData['headlines'] ?? [
+            ];
+        }
         $newsItems = $latestNews;
         if ($newsItems === []) {
             $newsItems = $homeData['news'] ?? [
