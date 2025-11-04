@@ -1864,3 +1864,31 @@ body.modal-open {
     }
 }
 
+.announcement-cards {
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+}
+
+.announcement-card {
+    background: #fff;
+    border-radius: 12px;
+    padding: 20px 24px;
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.05);
+    border: 1px solid #e0e0e0;
+}
+
+.announcement-meta {
+    font-size: 14px;
+    color: #607D8B;
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: space-between;
+    margin-bottom: 10px;
+}
+
+.announcement-body {
+    font-size: 16px;
+    color: #37474F;
+    line-height: 1.7;
+}

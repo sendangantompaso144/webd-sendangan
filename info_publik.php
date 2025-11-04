@@ -148,21 +148,32 @@ render_base_layout([
                     </div>
                 </div>
             </section>
-        <?php elseif ($tab === 'pengumuman'): ?>
-            <section class="section section-info-content">
-                <div class="container info-content">
-                    <ul class="announcement-list">
-                        <?php foreach ($pengumuman as $item): ?>
-                            <li>
-                                <div>
-                                    <strong><?= e($item['judul'] ?? '') ?></strong>
-                                    <span><?= e($item['tanggal'] ?? '') ?></span>
-                                </div>
-                                <a class="btn btn-secondary" href="<?= e($item['tautan'] ?? '#') ?>">Detail</a>
-                            </li>
-                        <?php endforeach; ?>
-                    </ul>
-                </div>
+            <?php elseif ($tab === 'pengumuman'): ?>
+                <section class="section section-info-content">
+                    <div class="container info-content">
+                        <?php if ($pengumuman === []): ?>
+                            <p>Belum ada pengumuman yang tersedia saat ini.</p>
+                        <?php else: ?>
+                            <div class="announcement-cards">
+                                <?php foreach ($pengumuman as $item): ?>
+                                    <article class="announcement-card">
+                                        <div class="announcement-meta">
+                                            <span class="announcement-updated">
+                                                🕓 Terakhir diubah: <?= e($item['updated_at'] ?? '-') ?>
+                                            </span>
+                                            <span class="announcement-valid">
+                                                📅 Disorot hingga: <?= e($item['valid_hingga'] ?? '-') ?>
+                                            </span>
+                                        </div>
+                                        <div class="announcement-body">
+                                            <p><?= nl2br(e($item['isi'] ?? '')) ?></p>
+                                        </div>
+                                    </article>
+                                <?php endforeach; ?>
+                            </div>
+                        <?php endif; ?>
+                    </div>
+                </section>
             </section>
         <?php elseif ($tab === 'galeri'): ?>
             <section class="section section-info-content">

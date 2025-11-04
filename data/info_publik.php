@@ -2,27 +2,35 @@
 
 declare(strict_types=1);
 
-require_once __DIR__ . '/../config/database.php'; // sesuaikan path config database
+require_once __DIR__ . '/../config/database.php';
 
 try {
     $pdo = db();
-    $stmt = $pdo->query('SELECT pengumuman_id, pengumuman_isi, pengumuman_valid_hingga, pengumuman_created_at FROM pengumuman ORDER BY pengumuman_created_at DESC');
+    $stmt = $pdo->query('
+        SELECT 
+            pengumuman_id, 
+            pengumuman_isi, 
+            pengumuman_valid_hingga, 
+            pengumuman_created_at, 
+            pengumuman_updated_at
+        FROM pengumuman
+        ORDER BY pengumuman_created_at DESC
+    ');
     $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
 } catch (Throwable $e) {
     $rows = [];
 }
 
-// Ubah hasilnya agar cocok dengan format sebelumnya
 $pengumuman = [];
 foreach ($rows as $row) {
     $pengumuman[] = [
-        'judul' => mb_strimwidth(strip_tags((string)($row['pengumuman_isi'] ?? '')), 0, 60, '...'),
-        'tanggal' => date('d F Y', strtotime((string)($row['pengumuman_valid_hingga'] ?? $row['pengumuman_created_at'] ?? 'now'))),
-        'tautan' => '#', // nanti bisa diganti kalau ada halaman detail
+        'id' => (int)($row['pengumuman_id'] ?? 0),
         'isi' => (string)($row['pengumuman_isi'] ?? ''),
+        'valid_hingga' => date('d F Y H:i', strtotime((string)($row['pengumuman_valid_hingga'] ?? ''))),
+        'updated_at' => date('d F Y H:i', strtotime((string)($row['pengumuman_updated_at'] ?? $row['pengumuman_created_at'] ?? ''))),
     ];
 }
 
 return [
-    'pengumuman' => $pengumuman
+    'pengumuman' => $pengumuman,
 ];
