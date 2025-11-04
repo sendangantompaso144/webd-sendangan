@@ -273,9 +273,67 @@ render_base_layout([
             'Melalui website ini, kami berharap dapat meningkatkan transparansi dan komunikasi dengan seluruh warga. Mari bersama-sama membangun Desa Sendangan yang lebih baik.',
         ];
         $greetingData = is_array($homeData['greeting'] ?? null) ? $homeData['greeting'] : [];
+                $defaultGreetingMessages = [
+            'Selamat datang di website resmi Desa Sendangan. Kami berkomitmen untuk memberikan pelayanan terbaik kepada masyarakat dan membangun desa yang lebih maju, sejahtera, dan bermartabat.',
+            'Melalui website ini, kami berharap dapat meningkatkan transparansi dan komunikasi dengan seluruh warga. Mari bersama-sama membangun Desa Sendangan yang lebih baik.',
+        ];
+        $greetingData = is_array($homeData['greeting'] ?? null) ? $homeData['greeting'] : [];
         $greetingBadge = (string) ($greetingData['badge'] ?? 'SAMBUTAN HUKUM TUA');
         $greetingName = trim((string) ($greetingData['name'] ?? 'Johny R. Mandagi'));
         $greetingMessageRaw = $greetingData['message'] ?? $defaultGreetingMessages;
+
+        // ---[ TAMBAHKAN BLOK INI ]-------------------------------------------
+        // Ambil nama & foto Hukum Tua dari tabel `data`
+        try {
+            $pdo = db();
+            $stmt = $pdo->prepare('
+                SELECT data_key, data_value 
+                FROM data 
+                WHERE data_key IN ("profile.hukum_tua_nama", "media.hukum_tua_foto")
+            ');
+            if ($stmt->execute()) {
+                $kv = [];
+                foreach ($stmt->fetchAll(PDO::FETCH_ASSOC) as $row) {
+                    $kv[(string)$row['data_key']] = (string)$row['data_value'];
+                }
+
+                // Override nama jika tersedia di DB
+                if (!empty($kv['profile.hukum_tua_nama'])) {
+                    $greetingName = trim($kv['profile.hukum_tua_nama']);
+                }
+
+                // Simpan raw filename foto (tanpa base_uri) agar bisa di-resolve ke URL
+                $greetingPhotoRawFromDb = trim($kv['media.hukum_tua_foto'] ?? '');
+            }
+        } catch (Throwable) {
+            // Abaikan kalau gagal; tetap pakai fallback dari $homeData
+            $greetingPhotoRawFromDb = '';
+        }
+
+        // Helper untuk resolve path foto ke URL (cek uploads/assets/ dulu, baru uploads/)
+        $resolveGreetingPhoto = static function (string $raw): string {
+            $raw = trim($raw);
+            if ($raw === '') return '';
+            if (str_starts_with($raw, 'http')) return $raw;
+
+            $relative = ltrim(str_replace('\\', '/', $raw), '/');
+
+            // Prioritas di uploads/assets/
+            if (is_file(base_path('uploads/assets/' . $relative))) {
+                return base_uri('uploads/assets/' . $relative);
+            }
+            // Fallback: langsung di uploads/
+            if (is_file(base_path('uploads/' . $relative))) {
+                return base_uri('uploads/' . $relative);
+            }
+            // Jika struktur subfolder sudah disertakan di $raw (mis. "assets/xxx.webp")
+            if (!str_starts_with($relative, 'uploads/')) {
+                return base_uri('uploads/' . $relative);
+            }
+            return base_uri($relative);
+        };
+        // ---[ /TAMBAHKAN BLOK INI ]------------------------------------------
+
         $greetingMessages = [];
         if (is_string($greetingMessageRaw)) {
             $chunks = preg_split("/\r?\n\r?\n|\r?\n/", $greetingMessageRaw) ?: [];
@@ -304,15 +362,30 @@ render_base_layout([
         $greetingCtaHref = $greetingCtaLink !== '' && str_starts_with($greetingCtaLink, 'http')
             ? $greetingCtaLink
             : base_uri($greetingCtaLink !== '' ? ltrim($greetingCtaLink, '/') : 'profil.php');
-        $greetingPhoto = (string) ($greetingData['photo'] ?? '');
-        if ($greetingPhoto !== '') {
-            $greetingPhoto = str_starts_with($greetingPhoto, 'http')
-                ? $greetingPhoto
-                : base_uri('uploads/' . ltrim($greetingPhoto, '/'));
+
+        // ---[ GANTI BAGIAN PENENTU $greetingPhoto MENJADI INI ]--------------
+        // Ambil dari DB (jika ada), jika kosong pakai dari $homeData['greeting']['photo']
+        $greetingPhotoRaw = '';
+        if (!empty($greetingPhotoRawFromDb ?? '')) {
+            $greetingPhotoRaw = $greetingPhotoRawFromDb; // contoh: "hukumtua_690a6df3370235.98424889.webp"
         } else {
-            $greetingPhoto = '';
+            $greetingPhotoRaw = (string) ($greetingData['photo'] ?? '');
         }
+
+        $greetingPhoto = $resolveGreetingPhoto($greetingPhotoRaw);
+        // ---[ /GANTI ]-------------------------------------------------------
+
         $greetingAlt = $greetingName !== '' ? $greetingName : 'Hukum Tua Desa Sendangan';
+
+        // $greetingPhoto = (string) ($greetingData['photo'] ?? '');
+        // if ($greetingPhoto !== '') {
+        //     $greetingPhoto = str_starts_with($greetingPhoto, 'http')
+        //         ? $greetingPhoto
+        //         : base_uri('uploads/' . ltrim($greetingPhoto, '/'));
+        // } else {
+        //     $greetingPhoto = '';
+        // }
+        // $greetingAlt = $greetingName !== '' ? $greetingName : 'Hukum Tua Desa Sendangan';
         $mapData = is_array($homeData['map'] ?? null) ? $homeData['map'] : [];
         $mapTitle = (string) ($mapData['title'] ?? 'Peta Desa Sendangan');
         $mapDescription = (string) ($mapData['description'] ?? 'Lokasi fasilitas umum, batas wilayah, dan potensi desa dalam satu tampilan interaktif.');
