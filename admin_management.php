@@ -2106,6 +2106,7 @@ function render_modal(string $formId, array $definition, array $oldInputs, array
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
+    <link rel="icon" type="image/x-icon" href="assets/images/favicon.ico" />
     <title>Manajemen Konten | Desa Sendangan</title>
     <style>
         :root {

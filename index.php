@@ -163,9 +163,41 @@ render_base_layout([
             ['label' => 'Laki-laki', 'value' => '270'],
             ['label' => 'Perempuan', 'value' => '280'],
         ];
-        $potensiList = data_source('potensi', []);
-        $potentials = [];
+        $potensiList = [];
+        try {
+            $pdo = db();
+            $stmt = $pdo->query("
+                SELECT 
+                    p.potensi_id,
+                    p.potensi_judul,
+                    p.potensi_isi,
+                    p.potensi_kategori,
+                    p.potensi_gmaps_link,
+                    p.potensi_created_at,
+                    gp.gambar_namafile AS potensi_gambar
+                FROM potensi_desa p
+                LEFT JOIN (
+                    SELECT potensi_id, MIN(gambar_id) AS min_id
+                    FROM gambar_potensi_desa
+                    GROUP BY potensi_id
+                ) first_img ON first_img.potensi_id = p.potensi_id
+                LEFT JOIN gambar_potensi_desa gp ON gp.gambar_id = first_img.min_id
+                ORDER BY p.potensi_created_at DESC
+            ");
+            if ($stmt !== false) {
+                $potensiList = $stmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
+            }
+        } catch (Throwable) {
+            // fallback ke data_source kalau DB error
+            $potensiList = [];
+        }
 
+        // Fallback ke data_source bila DB kosong
+        if ($potensiList === []) {
+            $potensiList = data_source('potensi', []);
+        }
+
+        $potentials = [];
         if (is_array($potensiList)) {
             if (array_is_list($potensiList)) {
                 $potentials = $potensiList;
@@ -417,6 +449,34 @@ render_base_layout([
             return base_uri($relativeMedia);
         };
 
+        $resolvePotensiImage = static function (string $raw): string {
+            $raw = trim($raw);
+            if ($raw === '') return '';
+            if (str_starts_with($raw, 'http')) return $raw;
+
+            $relative = ltrim(str_replace('\\', '/', $raw), '/');
+
+            $candidates = [
+                'uploads/potensi/' . $relative,
+                'uploads/assets/potensi/' . $relative,
+                'uploads/assets/' . $relative,
+                'uploads/' . $relative,
+                $relative,
+            ];
+
+            foreach ($candidates as $rel) {
+                $abs = base_path($rel);
+                if (is_file($abs)) {
+                    // versi cache-busting berdasarkan mtime
+                    $ver = (string) @filemtime($abs);
+                    return base_uri($rel) . ($ver ? ('?v=' . $ver) : '');
+                }
+            }
+            // fallback URL (tanpa cek fisik)
+            return base_uri('uploads/' . $relative);
+        };
+
+
         $mapMedia = $resolveMapMedia((string) ($mapData['media'] ?? ''));
         $mapMediaSatellite = $resolveMapMedia((string) ($mapData['media_satellite'] ?? ''));
 
@@ -609,20 +669,37 @@ render_base_layout([
                         <?php foreach ($orderedPotentialCategories as $category): ?>
                             <?php
                             $entries = $potentialsByCategory[$category] ?? [];
-                            if ($entries === []) {
-                                continue;
-                            }
+                            if ($entries === []) continue;
+
+                            // Cari entry pertama yang punya gambar; kalau tidak ada, pakai entries[0]
                             $primary = $entries[0];
+                            foreach ($entries as $cand) {
+                                if (trim((string)($cand['potensi_gambar'] ?? '')) !== '') {
+                                    $primary = $cand;
+                                    break;
+                                }
+                            }
+
                             $title = (string) ($primary['potensi_judul'] ?? '');
                             $description = (string) ($primary['potensi_isi'] ?? '');
-                            $summary = mb_substr($description, 0, 140);
-                            if (mb_strlen($description) > 140) {
-                                $summary .= '...';
-                            }
+                            $summary = mb_substr($description, 0, 140) . (mb_strlen($description) > 140 ? '...' : '');
                             $iconLabel = strtoupper(substr($category, 0, 1));
+
+                            $imgUrl = $resolvePotensiImage((string)($primary['potensi_gambar'] ?? ''));
                             ?>
                             <div class="potential-card">
-                                <div class="potential-icon"><?= e($iconLabel !== '' ? $iconLabel : 'P') ?></div>
+                                <?php
+                                // Ambil nama file gambar pertama dari DB (alias potensi_gambar)
+                                $imgUrl = $resolvePotensiImage((string)($primary['potensi_gambar'] ?? ''));
+                                ?>
+                                <?php if ($imgUrl !== ''): ?>
+                                    <div class="potential-thumb">
+                                        <img src="<?= e($imgUrl) ?>" alt="<?= e($title !== '' ? $title : $category) ?>">
+                                    </div>
+                                <?php else: ?>
+                                    <div class="potential-icon"><?= e($iconLabel !== '' ? $iconLabel : 'P') ?></div>
+                                <?php endif; ?>
+
                                 <div class="potential-category"><?= e($category) ?></div>
                                 <h3 class="potential-title"><?= e($title) ?></h3>
                                 <!-- <?php if ($summary !== ''): ?>
@@ -1472,6 +1549,25 @@ render_base_layout([
                 font-size: 14px;
                 color: #607D8B;
                 font-style: italic;
+            }
+            .potential-thumb {
+                position: relative;
+                width: 100%;
+                padding-top: 56%; /* 16:9 */
+                border-radius: 14px;
+                overflow: hidden;
+                margin-bottom: 16px;
+                background: #f3f6f9;
+                border: 1px solid #e9eef5;
+            }
+
+            .potential-thumb img {
+                position: absolute;
+                inset: 0;
+                width: 100%;
+                height: 100%;
+                object-fit: cover;
+                display: block;
             }
 
             /* News Section */
