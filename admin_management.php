@@ -1201,7 +1201,7 @@ foreach ($gambarPotensi as $mediaRow) {
         'created_label' => format_datetime($mediaRow['gambar_created_at'] ?? null),
     ];
 }
-$potensiDesa = fetch_table($pdo, 'SELECT potensi_id, potensi_judul, potensi_kategori, potensi_gmaps_link, potensi_created_at, potensi_updated_at FROM potensi_desa ORDER BY potensi_updated_at DESC LIMIT 50');
+$potensiDesa = fetch_table($pdo, 'SELECT potensi_id, potensi_judul, potensi_isi, potensi_kategori, potensi_gmaps_link, potensi_created_at, potensi_updated_at FROM potensi_desa ORDER BY potensi_updated_at DESC LIMIT 50');
 if (isset($tableForms['potensi-media']['fields']['potensi_id'])) {
     $potensiSelectOptions = ['' => '-- Pilih Potensi --'];
     foreach ($potensiDesa as $potensiRow) {
@@ -2216,7 +2216,9 @@ function render_modal(string $formId, array $definition, array $oldInputs, array
                 $payload = [
                     'id' => $potensiId,
                     'judul' => (string) ($row['potensi_judul'] ?? ''),
-                    'images' => $images,
+                    'isi' => (string) ($row['potensi_isi'] ?? ''),
+                    'kategori' => (string) ($row['potensi_kategori'] ?? ''),
+                    'gmaps' => (string) ($row['potensi_gmaps_link'] ?? ''),
                 ];
                 $dataAttr = e(json_encode($payload, JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_AMP | JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES));
 
@@ -2225,11 +2227,12 @@ function render_modal(string $formId, array $definition, array $oldInputs, array
                     : '-';
 
                 $actionsHtml = $potensiId > 0
-                    ? '<form method="post" action="admin_management.php#potensi" class="table-actions__form" onsubmit="return confirm(\'Hapus potensi ini beserta semua fotonya?\');">'
+                    ? '<button type="button" class="btn-outline" data-open-modal="potensi-edit" data-potensi=\'' . $dataAttr . '\'>Ubah</button>'
+                        . '<form method="post" action="admin_management.php#potensi" class="table-actions__form" onsubmit="return confirm(\'Hapus potensi ini beserta semua fotonya?\');">'
                         . '<input type="hidden" name="action" value="delete_potensi">'
                         . '<input type="hidden" name="potensi_id" value="' . e((string) $potensiId) . '">'
                         . '<button type="submit" class="btn-danger">Hapus</button>'
-                    . '</form>'
+                        . '</form>'
                     : '-';
 
                 return '<tr>'
@@ -2467,6 +2470,45 @@ function render_modal(string $formId, array $definition, array $oldInputs, array
                         <label for="fasilitas_edit_gambar">Gambar (opsional)</label>
                         <input type="file" name="fasilitas_gambar" id="fasilitas_edit_gambar" accept="image/jpeg,image/png,image/webp">
                         <small class="field-hint">Kosongkan jika tidak ingin mengganti gambar.</small>
+                    </div>
+                    <div class="modal__actions">
+                        <button type="button" class="btn-secondary" data-close-modal>Batal</button>
+                        <button type="submit" class="btn-primary">Simpan Perubahan</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+    <div class="modal-backdrop" data-modal="potensi-edit">
+        <div class="modal">
+            <div class="modal__header">
+                <h3 class="modal__title">Ubah Potensi Desa</h3>
+                <button type="button" class="modal__close" data-close-modal aria-label="Tutup">&times;</button>
+            </div>
+            <div class="modal__body">
+                <form method="post" action="admin_management.php#potensi" autocomplete="off" id="potensi-edit-form">
+                    <input type="hidden" name="action" value="edit_potensi">
+                    <input type="hidden" name="potensi_id" id="potensi_edit_id">
+                    <div class="modal__field">
+                        <label for="potensi_edit_judul">Judul Potensi <span class="required">*</span></label>
+                        <input type="text" name="potensi_judul" id="potensi_edit_judul" required>
+                    </div>
+                    <div class="modal__field">
+                        <label for="potensi_edit_kategori">Kategori <span class="required">*</span></label>
+                        <select name="potensi_kategori" id="potensi_edit_kategori" required>
+                            <option value="Wisata">Wisata</option>
+                            <option value="Budaya">Budaya</option>
+                            <option value="Kuliner">Kuliner</option>
+                            <option value="UMKM">UMKM</option>
+                        </select>
+                    </div>
+                    <div class="modal__field">
+                        <label for="potensi_edit_isi">Deskripsi <span class="required">*</span></label>
+                        <textarea name="potensi_isi" id="potensi_edit_isi" rows="6" required></textarea>
+                    </div>
+                    <div class="modal__field">
+                        <label for="potensi_edit_gmaps">Link Google Maps</label>
+                        <input type="text" name="potensi_gmaps_link" id="potensi_edit_gmaps">
                     </div>
                     <div class="modal__actions">
                         <button type="button" class="btn-secondary" data-close-modal>Batal</button>
@@ -2826,6 +2868,23 @@ function render_modal(string $formId, array $definition, array $oldInputs, array
                         }
                     }
                     populatePotensiGallery(galleryPayload);
+                }
+                if (targetId === 'potensi-edit') {
+                    var potensiPayloadRaw = btn.getAttribute('data-potensi') || '';
+                    var potensiPayload = {};
+                    if (potensiPayloadRaw !== '') {
+                        try {
+                            potensiPayload = JSON.parse(potensiPayloadRaw);
+                        } catch (error) {
+                            potensiPayload = {};
+                        }
+                    }
+                    // Isi value awal form edit potensi
+                    document.getElementById('potensi_edit_id').value = potensiPayload.id || '';
+                    document.getElementById('potensi_edit_judul').value = potensiPayload.judul || '';
+                    document.getElementById('potensi_edit_kategori').value = potensiPayload.kategori || 'Wisata';
+                    document.getElementById('potensi_edit_isi').value = potensiPayload.isi || '';
+                    document.getElementById('potensi_edit_gmaps').value = potensiPayload.gmaps || '';
                 }
                 if (targetId === 'potensi-media') {
                     var potensiTargetId = btn.getAttribute('data-potensi-media-id') || '';
