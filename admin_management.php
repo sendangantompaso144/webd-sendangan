@@ -2489,6 +2489,35 @@ function render_modal(string $formId, array $definition, array $oldInputs, array
                 min-width: 420px;
             }
         }
+        .btn-logout {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            border: none;
+            border-radius: 10px;
+            padding: 10px 14px;
+            font-weight: 700;
+            font-size: 13px;
+            cursor: pointer;
+            text-decoration: none;
+            background: rgba(220, 38, 38, 0.15);
+            color: #b91c1c;
+            transition: background 0.2s ease, color 0.2s ease, transform 0.2s ease;
+        }
+        .btn-logout:hover {
+            background: rgba(220, 38, 38, 0.25);
+            color: #991b1b;
+            transform: translateY(-1px);
+        }
+
+        /* Sembunyikan versi mobile di desktop */
+        .only-mobile { display: none; }
+
+        /* Tampilkan tombol di header saat layar kecil, sidebar tetap punya tombolnya */
+        @media (max-width: 1024px) {
+            .only-mobile { display: inline-flex; }
+        }
+
     </style>
 </head>
 <body>
@@ -2497,6 +2526,10 @@ function render_modal(string $formId, array $definition, array $oldInputs, array
         <div>
             <h1>Admin Desa</h1>
             <span><?= e($adminSession['email'] ?? 'admin@desa.id') ?></span>
+            <div style="margin-top:12px;">
+            <a href="admin.php?action=logout" class="btn-logout">Keluar</a>
+            </div>
+
         </div>
         <nav>
             <a class="sidebar-link" href="#data" data-section="data">Data Umum</a>

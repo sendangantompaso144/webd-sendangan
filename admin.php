@@ -305,6 +305,26 @@ if (!$isLoggedIn && $_SERVER['REQUEST_METHOD'] === 'POST') {
             text-align: center;
             letter-spacing: 0.08em;
         }
+
+        .btn-secondary-link {
+            display: inline-block;
+            text-align: center;
+            padding: 12px 18px;
+            border-radius: 10px;
+            font-weight: 700;
+            text-decoration: none;
+            letter-spacing: 0.03em;
+            background: rgba(148, 163, 184, 0.18);
+            color: #334155;
+            border: 1px solid rgba(148,163,184,0.35);
+            transition: transform 0.2s ease, box-shadow 0.2s ease, background 0.2s ease;
+        }
+        .btn-secondary-link:hover{
+            transform: translateY(-1px);
+            box-shadow: 0 8px 18px rgba(15,23,42,0.12);
+            background: rgba(148, 163, 184, 0.28);
+        }
+
     </style>
 </head>
 <body>
@@ -347,8 +367,12 @@ if (!$isLoggedIn && $_SERVER['REQUEST_METHOD'] === 'POST') {
                 Kelola Data
             </a>
 
+            <!-- ✅ Tambahan -->
+            <a href="<?= e(base_uri('/')) ?>" class="btn-secondary-link">Kembali Ke Website Desa</a>
+
             <a class="logout-link" href="admin.php?action=logout">Keluar</a>
         </div>
+
     <?php else: ?>
         <form method="post" autocomplete="off">
             <div class="input-group">
@@ -384,7 +408,8 @@ if (!$isLoggedIn && $_SERVER['REQUEST_METHOD'] === 'POST') {
                 <span>Butuh bantuan? Hubungi superadmin.</span>
             </div>
             <button type="submit">Masuk</button>
-        </form>
+            <a href="<?= e(base_uri('/')) ?>" class="btn-secondary-link" style="margin-top:8px;">Kembali Ke Website Desa</a>
+        </form   rm>
     <?php endif; ?>
     <footer>&copy; <?= date('Y') ?> Pemerintah Desa Sendangan</footer>
 </div>
