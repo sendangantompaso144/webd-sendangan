@@ -69,7 +69,7 @@ $credit = data_values($creditDefaults) + $creditDefaults;
 
             <span class="footer-sep" aria-hidden="true">•</span>
 
-            <a href="/admin" class="admin-link" rel="nofollow noopener" aria-label="Masuk Panel Admin">Admin</a>
+            <a href="admin.php" class="admin-link" rel="nofollow noopener" aria-label="Masuk Panel Admin">Admin</a>
         </div>
     </div>
 </footer>

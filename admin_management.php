@@ -112,6 +112,15 @@ $dataDictionary = [
     // ——— MEDIA ———
     'media.peta_desa_sendangan'        => ['label' => 'Peta Desa (Jalan)',        'hint' => 'Nama file atau URL gambar peta jalan'],
     'media.peta_desa_sendangan_citra'  => ['label' => 'Peta Desa (Citra Satelit)','hint' => 'Nama file atau URL gambar peta citra'],
+    // ——— PROFIL HUKUM TUA ———
+    'profile.hukum_tua_nama' => [
+        'label' => 'Nama Hukum Tua',
+        'hint'  => 'Nama lengkap Hukum Tua saat ini'
+    ],
+    'media.hukum_tua_foto' => [
+        'label' => 'Foto Hukum Tua (nama file)',
+        'hint'  => 'Diisi otomatis saat upload. Menyimpan nama file .webp di folder uploads/assets/'
+    ],
 ];
 
 $tableForms = [
@@ -1223,6 +1232,259 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
         header('Location: admin_management.php#apbdes');
         exit;
+    }
+
+        if ($action === 'update_hukum_tua_foto') {
+        // Validasi input
+        $file = $_FILES['hukumtua_foto'] ?? null;
+        if (!is_array($file) || ($file['error'] ?? UPLOAD_ERR_NO_FILE) === UPLOAD_ERR_NO_FILE) {
+            $_SESSION['flash_error'][] = 'Pilih foto terlebih dahulu.';
+            header('Location: admin_management.php#data'); exit;
+        }
+        if (($file['error'] ?? UPLOAD_ERR_OK) !== UPLOAD_ERR_OK) {
+            $_SESSION['flash_error'][] = 'Upload gagal.'; 
+            header('Location: admin_management.php#data'); exit;
+        }
+
+        // Cek MIME
+        $finfo = finfo_open(FILEINFO_MIME_TYPE);
+        $mime  = $finfo ? (string) finfo_file($finfo, $file['tmp_name']) : '';
+        if ($finfo) finfo_close($finfo);
+        if (!in_array($mime, ['image/jpeg','image/png','image/webp'], true)) {
+            $_SESSION['flash_error'][] = 'Format harus JPG/PNG/WEBP.';
+            header('Location: admin_management.php#data'); exit;
+        }
+
+        // Siapkan folder
+        $dir = base_path('uploads/assets');
+        if (!is_dir($dir) && !mkdir($dir, 0755, true) && !is_dir($dir)) {
+            $_SESSION['flash_error'][] = 'Folder uploads/assets tidak bisa dibuat.';
+            header('Location: admin_management.php#data'); exit;
+        }
+
+        // Nama unik
+        $newName = 'hukumtua_' . uniqid('', true) . '.webp';
+        $target  = $dir . DIRECTORY_SEPARATOR . $newName;
+
+        // Convert → WebP
+        $ok = false;
+        if ($mime === 'image/webp') {
+            $ok = move_uploaded_file($file['tmp_name'], $target);
+        } else {
+            if (!function_exists('imagewebp')) {
+                $_SESSION['flash_error'][] = 'Konversi ke WebP tidak tersedia di server.';
+                header('Location: admin_management.php#data'); exit;
+            }
+            $im = null;
+            if ($mime === 'image/jpeg') $im = @imagecreatefromjpeg($file['tmp_name']);
+            if ($mime === 'image/png')  { $im = @imagecreatefrompng($file['tmp_name']); if ($im) { imagepalettetotruecolor($im); imagealphablending($im,false); imagesavealpha($im,true); } }
+            if ($im) { $ok = imagewebp($im, $target, 90); imagedestroy($im); }
+        }
+
+        if (!$ok) {
+            if (is_file($target)) @unlink($target);
+            $_SESSION['flash_error'][] = 'Gagal memproses gambar.';
+            header('Location: admin_management.php#data'); exit;
+        }
+
+        // Ambil file lama (jika ada)
+        try {
+            $stmt = $pdo->prepare('SELECT data_value FROM data WHERE data_key = ? LIMIT 1');
+            $stmt->execute(['media.hukum_tua_foto']);
+            $old = $stmt->fetch(PDO::FETCH_ASSOC);
+        } catch (Throwable $e) {
+            $old = null;
+        }
+
+        // Update DB
+        try {
+            $by = (string)($adminSession['name'] ?? $adminSession['email'] ?? 'admin#'.$adminSession['id'] ?? '');
+            $stmt = $pdo->prepare('UPDATE data SET data_value = ?, data_updated_at = NOW(), data_updated_by = ? WHERE data_key = ? LIMIT 1');
+            $stmt->execute([$newName, $by !== '' ? $by : null, 'media.hukum_tua_foto']);
+            $_SESSION['flash'][] = 'Foto Hukum Tua berhasil diperbarui.';
+        } catch (Throwable $e) {
+            @unlink($target);
+            $_SESSION['flash_error'][] = 'Gagal menyimpan nama file: ' . $e->getMessage();
+            header('Location: admin_management.php#data'); exit;
+        }
+
+        // Hapus file lama
+        $oldFile = trim((string)($old['data_value'] ?? ''));
+        if ($oldFile !== '') {
+            $oldPath = base_path('uploads/assets/' . ltrim($oldFile, "/\\"));
+            if (is_file($oldPath)) @unlink($oldPath);
+        }
+
+        header('Location: admin_management.php#data'); exit;
+    }
+
+    if ($action === 'upload_media_data') {
+        $dataKey = trim((string)($_POST['data_key'] ?? ''));
+        if ($dataKey === '' || !str_starts_with($dataKey, 'media.')) {
+            $_SESSION['flash_error'][] = 'Key media tidak valid.';
+            header('Location: admin_management.php#data'); exit;
+        }
+
+        $file = $_FILES['media_file'] ?? null;
+        if (!is_array($file) || ($file['error'] ?? UPLOAD_ERR_NO_FILE) === UPLOAD_ERR_NO_FILE) {
+            $_SESSION['flash_error'][] = 'Pilih gambar terlebih dahulu.';
+            header('Location: admin_management.php#data'); exit;
+        }
+        if (($file['error'] ?? UPLOAD_ERR_OK) !== UPLOAD_ERR_OK) {
+            $_SESSION['flash_error'][] = 'Upload gagal.'; 
+            header('Location: admin_management.php#data'); exit;
+        }
+
+        $finfo = finfo_open(FILEINFO_MIME_TYPE);
+        $mime  = $finfo ? (string) finfo_file($finfo, $file['tmp_name']) : '';
+        if ($finfo) finfo_close($finfo);
+        if (!in_array($mime, ['image/jpeg','image/png','image/webp'], true)) {
+            $_SESSION['flash_error'][] = 'Format harus JPG/PNG/WEBP.';
+            header('Location: admin_management.php#data'); exit;
+        }
+
+        $dir = base_path('uploads/assets');
+        if (!is_dir($dir) && !mkdir($dir, 0755, true) && !is_dir($dir)) {
+            $_SESSION['flash_error'][] = 'Folder uploads/assets tidak bisa dibuat.';
+            header('Location: admin_management.php#data'); exit;
+        }
+
+        // Gunakan slug dari key untuk prefix nama file.
+        $slug = preg_replace('~[^a-z0-9]+~i', '_', str_replace('media.', '', $dataKey));
+        $newName = $slug . '_' . uniqid('', true) . '.webp';
+        $target  = $dir . DIRECTORY_SEPARATOR . $newName;
+
+        $ok = false;
+        if ($mime === 'image/webp') {
+            $ok = move_uploaded_file($file['tmp_name'], $target);
+        } else {
+            if (!function_exists('imagewebp')) {
+                $_SESSION['flash_error'][] = 'Konversi ke WebP tidak tersedia di server.';
+                header('Location: admin_management.php#data'); exit;
+            }
+            $im = null;
+            if ($mime === 'image/jpeg') $im = @imagecreatefromjpeg($file['tmp_name']);
+            if ($mime === 'image/png')  { $im = @imagecreatefrompng($file['tmp_name']); if ($im) { imagepalettetotruecolor($im); imagealphablending($im,false); imagesavealpha($im,true); } }
+            if ($im) { $ok = imagewebp($im, $target, 90); imagedestroy($im); }
+        }
+        if (!$ok) {
+            if (is_file($target)) @unlink($target);
+            $_SESSION['flash_error'][] = 'Gagal memproses gambar.';
+            header('Location: admin_management.php#data'); exit;
+        }
+
+        // Ambil file lama
+        $old = null;
+        try {
+            $stmt = $pdo->prepare('SELECT data_value FROM data WHERE data_key = ? LIMIT 1');
+            $stmt->execute([$dataKey]);
+            $old = $stmt->fetch(PDO::FETCH_ASSOC);
+        } catch (Throwable $e) {}
+
+        // Update DB
+        try {
+            $by = (string)($adminSession['name'] ?? $adminSession['email'] ?? 'admin#'.$adminSession['id'] ?? '');
+            $stmt = $pdo->prepare('UPDATE data SET data_value = ?, data_updated_at = NOW(), data_updated_by = ? WHERE data_key = ? LIMIT 1');
+            $stmt->execute([$newName, $by !== '' ? $by : null, $dataKey]);
+            $_SESSION['flash'][] = 'Media berhasil diperbarui untuk key: ' . $dataKey;
+        } catch (Throwable $e) {
+            @unlink($target);
+            $_SESSION['flash_error'][] = 'Gagal menyimpan nama file: ' . $e->getMessage();
+            header('Location: admin_management.php#data'); exit;
+        }
+
+        // Hapus lama
+        $oldFile = trim((string)($old['data_value'] ?? ''));
+        if ($oldFile !== '') {
+            $oldPath = base_path('uploads/assets/' . ltrim($oldFile, "/\\"));
+            if (is_file($oldPath)) @unlink($oldPath);
+        }
+
+        header('Location: admin_management.php#data'); exit;
+    }
+
+        if ($action === 'update_hukum_tua_foto') {
+        // Validasi input
+        $file = $_FILES['hukumtua_foto'] ?? null;
+        if (!is_array($file) || ($file['error'] ?? UPLOAD_ERR_NO_FILE) === UPLOAD_ERR_NO_FILE) {
+            $_SESSION['flash_error'][] = 'Pilih foto terlebih dahulu.';
+            header('Location: admin_management.php#data'); exit;
+        }
+        if (($file['error'] ?? UPLOAD_ERR_OK) !== UPLOAD_ERR_OK) {
+            $_SESSION['flash_error'][] = 'Upload gagal.'; 
+            header('Location: admin_management.php#data'); exit;
+        }
+
+        // Cek MIME
+        $finfo = finfo_open(FILEINFO_MIME_TYPE);
+        $mime  = $finfo ? (string) finfo_file($finfo, $file['tmp_name']) : '';
+        if ($finfo) finfo_close($finfo);
+        if (!in_array($mime, ['image/jpeg','image/png','image/webp'], true)) {
+            $_SESSION['flash_error'][] = 'Format harus JPG/PNG/WEBP.';
+            header('Location: admin_management.php#data'); exit;
+        }
+
+        // Siapkan folder
+        $dir = base_path('uploads/assets');
+        if (!is_dir($dir) && !mkdir($dir, 0755, true) && !is_dir($dir)) {
+            $_SESSION['flash_error'][] = 'Folder uploads/assets tidak bisa dibuat.';
+            header('Location: admin_management.php#data'); exit;
+        }
+
+        // Nama unik
+        $newName = 'hukumtua_' . uniqid('', true) . '.webp';
+        $target  = $dir . DIRECTORY_SEPARATOR . $newName;
+
+        // Convert → WebP
+        $ok = false;
+        if ($mime === 'image/webp') {
+            $ok = move_uploaded_file($file['tmp_name'], $target);
+        } else {
+            if (!function_exists('imagewebp')) {
+                $_SESSION['flash_error'][] = 'Konversi ke WebP tidak tersedia di server.';
+                header('Location: admin_management.php#data'); exit;
+            }
+            $im = null;
+            if ($mime === 'image/jpeg') $im = @imagecreatefromjpeg($file['tmp_name']);
+            if ($mime === 'image/png')  { $im = @imagecreatefrompng($file['tmp_name']); if ($im) { imagepalettetotruecolor($im); imagealphablending($im,false); imagesavealpha($im,true); } }
+            if ($im) { $ok = imagewebp($im, $target, 90); imagedestroy($im); }
+        }
+
+        if (!$ok) {
+            if (is_file($target)) @unlink($target);
+            $_SESSION['flash_error'][] = 'Gagal memproses gambar.';
+            header('Location: admin_management.php#data'); exit;
+        }
+
+        // Ambil file lama (jika ada)
+        try {
+            $stmt = $pdo->prepare('SELECT data_value FROM data WHERE data_key = ? LIMIT 1');
+            $stmt->execute(['media.hukum_tua_foto']);
+            $old = $stmt->fetch(PDO::FETCH_ASSOC);
+        } catch (Throwable $e) {
+            $old = null;
+        }
+
+        // Update DB
+        try {
+            $by = (string)($adminSession['name'] ?? $adminSession['email'] ?? 'admin#'.$adminSession['id'] ?? '');
+            $stmt = $pdo->prepare('UPDATE data SET data_value = ?, data_updated_at = NOW(), data_updated_by = ? WHERE data_key = ? LIMIT 1');
+            $stmt->execute([$newName, $by !== '' ? $by : null, 'media.hukum_tua_foto']);
+            $_SESSION['flash'][] = 'Foto Hukum Tua berhasil diperbarui.';
+        } catch (Throwable $e) {
+            @unlink($target);
+            $_SESSION['flash_error'][] = 'Gagal menyimpan nama file: ' . $e->getMessage();
+            header('Location: admin_management.php#data'); exit;
+        }
+
+        // Hapus file lama
+        $oldFile = trim((string)($old['data_value'] ?? ''));
+        if ($oldFile !== '') {
+            $oldPath = base_path('uploads/assets/' . ltrim($oldFile, "/\\"));
+            if (is_file($oldPath)) @unlink($oldPath);
+        }
+
+        header('Location: admin_management.php#data'); exit;
     }
 
     if ($action === 'update_data_value') {
@@ -2551,8 +2813,8 @@ function render_modal(string $formId, array $definition, array $oldInputs, array
         <div class="content-header">
             <div>
                 <h2>Ringkasan Konten</h2>
-                <span>Versi baca saja. Silakan kembangkan CRUD sesuai kebutuhan.</span>
-            </div>
+                <span>Manajemen Data dari Konten Website Desa Sendangan</span>
+            </div>  
             <span>Total sumber konten: 10 tabel</span>
         </div>
             <?php foreach ($flashErrors as $msg): ?>
@@ -2586,22 +2848,43 @@ function render_modal(string $formId, array $definition, array $oldInputs, array
                     $updatedBy = (string)($row['data_updated_by'] ?? '-');
 
                     // Input type: number untuk integer, text untuk lainnya + aksesibilitas
-                    $aria = ' aria-label="Nilai untuk ' . e($niceLabel) . '"';
-                    $inputHtml = $type === 'integer'
-                        ? '<input type="number" name="data_value" value="' . e($val) . '" required style="width:220px;"' . $aria . '>'
-                        : '<input type="text" name="data_value" value="' . e($val) . '" required style="min-width:260px;max-width:520px;width:100%;"' . $aria . '>';
+                                        // Jika key diawali "media." maka TIDAK ada tombol simpan; tampilkan upload saja
+                    $isMedia = str_starts_with($key, 'media.');
+                    if ($isMedia) {
+                        $isHukumTua = ($key === 'media.hukum_tua_foto');
+                        $valSafe = e($val);
+                        $preview = $val !== '' 
+                            ? '<div class="media-thumb">'
+                                . '<img src="' . e(base_uri('uploads/assets/' . ltrim($val, '/'))) . '" alt="preview" onerror="this.style.display=\'none\'">'
+                                . '<span>' . $valSafe . '</span>'
+                              . '</div>'
+                            : '<em class="empty-state">belum ada file</em>';
 
-                    if ($hint !== '') {
-                        $inputHtml .= '<small class="field-hint">' . e($hint) . '</small>';
+                        $btn = $isHukumTua
+                            ? '<button type="button" class="btn-outline" data-open-modal="upload-hukumtua-foto">Upload</button>'
+                            : '<button type="button" class="btn-outline" data-open-modal="upload-media" data-media-key="' . e($key) . '">Upload</button>';
+
+                        $form = '<div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;">' . $preview . $btn . '</div>';
+                    } else {
+                        // Default: tetap ada form simpan
+                        $aria = ' aria-label="Nilai untuk ' . e($niceLabel) . '"';
+                        $inputHtml = $type === 'integer'
+                            ? '<input type="number" name="data_value" value="' . e($val) . '" required style="width:220px;"' . $aria . '>'
+                            : '<input type="text" name="data_value" value="' . e($val) . '" required style="min-width:260px;max-width:520px;width:100%;"' . $aria . '>';
+
+                        if ($hint !== '') {
+                            $inputHtml .= '<small class="field-hint">' . e($hint) . '</small>';
+                        }
+
+                        $form = '
+                            <form method="post" action="admin_management.php#data" class="table-actions__form" style="display:inline-flex;gap:8px;align-items:center;">
+                                <input type="hidden" name="action" value="update_data_value">
+                                <input type="hidden" name="data_key" value="' . e($key) . '">
+                                ' . $inputHtml . '
+                                <button type="submit" class="btn-outline">Simpan</button>
+                            </form>';
                     }
 
-                    $form = '
-                        <form method="post" action="admin_management.php#data" class="table-actions__form" style="display:inline-flex;gap:8px;align-items:center;">
-                            <input type="hidden" name="action" value="update_data_value">
-                            <input type="hidden" name="data_key" value="' . e($key) . '">
-                            ' . $inputHtml . '
-                            <button type="submit" class="btn-outline">Simpan</button>
-                        </form>';
 
                     return '<tr>'
                         . '<td>' . e($niceLabel) . '</td>'
@@ -2614,6 +2897,13 @@ function render_modal(string $formId, array $definition, array $oldInputs, array
                         . '</tr>';
                 }
             ) ?>
+
+            <!-- Aksi khusus Data Umum: Upload Foto Hukum Tua
+            <div class="card" style="margin-top:-12px; padding:12px; display:flex; justify-content:flex-end;">
+            <button type="button" class="btn-outline" data-open-modal="upload-hukumtua-foto">
+                Upload / Ganti Foto Hukum Tua
+            </button>
+            </div> -->
 
             <?= section_card(
                 'apbdes',
@@ -2975,6 +3265,56 @@ function render_modal(string $formId, array $definition, array $oldInputs, array
             </div>
         </div>
     </div>
+    <div class="modal-backdrop" data-modal="upload-hukumtua-foto">
+    <div class="modal">
+        <div class="modal__header">
+        <h3 class="modal__title">Upload Foto Hukum Tua</h3>
+        <button type="button" class="modal__close" data-close-modal aria-label="Tutup">&times;</button>
+        </div>
+        <div class="modal__body">
+        <form method="post" action="admin_management.php#data" autocomplete="off" enctype="multipart/form-data">
+            <input type="hidden" name="action" value="update_hukum_tua_foto">
+            <div class="modal__field">
+            <label for="hukumtua_foto">Pilih Foto (JPG/PNG/WEBP) <span class="required">*</span></label>
+            <input type="file" id="hukumtua_foto" name="hukumtua_foto" accept="image/jpeg,image/png,image/webp" required>
+            <small class="field-hint">
+                File akan dikonversi ke .webp dan disimpan di <code>uploads/assets/</code>.
+                File lama akan dihapus otomatis.
+            </small>
+            </div>
+            <div class="modal__actions">
+            <button type="button" class="btn-secondary" data-close-modal>Batal</button>
+            <button type="submit" class="btn-primary">Simpan</button>
+            </div>
+        </form>
+        </div>
+    </div>
+    </div>
+
+    <div class="modal-backdrop" data-modal="upload-media">
+    <div class="modal">
+        <div class="modal__header">
+        <h3 class="modal__title">Upload Media</h3>
+        <button type="button" class="modal__close" data-close-modal aria-label="Tutup">&times;</button>
+        </div>
+        <div class="modal__body">
+        <form method="post" action="admin_management.php#data" autocomplete="off" enctype="multipart/form-data" id="upload-media-form">
+            <input type="hidden" name="action" value="upload_media_data">
+            <input type="hidden" name="data_key" id="upload_media_key">
+            <div class="modal__field">
+            <label for="upload_media_file">Pilih Gambar (JPG/PNG/WEBP) <span class="required">*</span></label>
+            <input type="file" id="upload_media_file" name="media_file" accept="image/jpeg,image/png,image/webp" required>
+            <small class="field-hint">File akan dikonversi ke .webp dan disimpan di <code>uploads/assets/</code>.</small>
+            </div>
+            <div class="modal__actions">
+            <button type="button" class="btn-secondary" data-close-modal>Batal</button>
+            <button type="submit" class="btn-primary">Upload</button>
+            </div>
+        </form>
+        </div>
+    </div>
+    </div>
+
     <div class="modal-backdrop" data-modal="pengumuman-view">
         <div class="modal modal--wide">
             <div class="modal__header">
@@ -3631,6 +3971,21 @@ function render_modal(string $formId, array $definition, array $oldInputs, array
             initialModal.removeAttribute('data-open-on-load');
         }
     });
+    // Tampilkan overlay saat upload foto Hukum Tua
+    document.addEventListener('DOMContentLoaded', function () {
+    var uploadOverlay = document.getElementById('upload-overlay');
+    var hukumtuaForm = document.querySelector('form[action="admin_management.php#data"] input[name="action"][value="update_hukum_tua_foto"]')
+                        ? document.querySelector('form[action="admin_management.php#data"]').closest('form') : null;
+    if (hukumtuaForm) {
+        hukumtuaForm.addEventListener('submit', function () {
+        if (uploadOverlay) {
+            uploadOverlay.classList.add('is-visible');
+            uploadOverlay.setAttribute('aria-hidden', 'false');
+        }
+        });
+    }
+    });
+
 </script>
 </body>
 </html>
