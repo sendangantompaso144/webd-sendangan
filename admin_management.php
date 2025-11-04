@@ -467,6 +467,26 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         exit;
     }
 
+    if ($action === 'delete_pengumuman') {
+        $pengumumanId = isset($_POST['pengumuman_id']) ? (int) $_POST['pengumuman_id'] : 0;
+        if ($pengumumanId <= 0) {
+            $_SESSION['flash_error'][] = 'Data pengumuman tidak ditemukan.';
+            header('Location: admin_management.php#pengumuman');
+            exit;
+        }
+
+        try {
+            $stmt = $pdo->prepare('DELETE FROM pengumuman WHERE pengumuman_id = ?');
+            $stmt->execute([$pengumumanId]);
+            $_SESSION['flash'][] = 'Pengumuman berhasil dihapus.';
+        } catch (Throwable $exception) {
+            $_SESSION['flash_error'][] = 'Gagal menghapus pengumuman: ' . $exception->getMessage();
+        }
+
+        header('Location: admin_management.php#pengumuman');
+        exit;
+    }
+
     if ($action === 'edit_fasilitas') {
         $fasilitasId = isset($_POST['fasilitas_id']) ? (int) $_POST['fasilitas_id'] : 0;
         $newName = trim((string) ($_POST['fasilitas_nama'] ?? ''));
@@ -2282,7 +2302,14 @@ function render_modal(string $formId, array $definition, array $oldInputs, array
                     $dataAttr = e(json_encode($payload, JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_AMP | JSON_UNESCAPED_UNICODE));
 
                     $aksi = $id > 0
-                        ? '<button type="button" class="btn-outline" data-open-modal="pengumuman-view" data-pengumuman="' . $dataAttr . '">Lihat Isi</button>'
+                        ? '<div class="table-actions">'
+                            . '<button type="button" class="btn-outline" data-open-modal="pengumuman-view" data-pengumuman="' . $dataAttr . '">Lihat Isi</button>'
+                            . '<form method="post" action="admin_management.php#pengumuman" class="table-actions__form" onsubmit="return confirm(\'Hapus pengumuman ini?\');">'
+                            . '<input type="hidden" name="action" value="delete_pengumuman">'
+                            . '<input type="hidden" name="pengumuman_id" value="' . e((string) $id) . '">'
+                            . '<button type="submit" class="btn-danger">Hapus</button>'
+                            . '</form>'
+                            . '</div>'
                         : '-';
 
                     return '<tr>'
