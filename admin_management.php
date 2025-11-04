@@ -363,6 +363,60 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         exit;
     }
 
+    if ($action === 'delete_potensi') {
+        $potensiId = isset($_POST['potensi_id']) ? (int) $_POST['potensi_id'] : 0;
+        if ($potensiId <= 0) {
+            $_SESSION['flash_error'][] = 'Data potensi tidak ditemukan.';
+            header('Location: admin_management.php#potensi');
+            exit;
+        }
+
+        // 1️⃣ Ambil semua gambar yang terkait
+        try {
+            $stmt = $pdo->prepare('SELECT gambar_namafile FROM gambar_potensi_desa WHERE potensi_id = ?');
+            $stmt->execute([$potensiId]);
+            $images = $stmt->fetchAll(PDO::FETCH_COLUMN);
+        } catch (Throwable $e) {
+            $_SESSION['flash_error'][] = 'Gagal memuat gambar potensi: ' . $e->getMessage();
+            header('Location: admin_management.php#potensi');
+            exit;
+        }
+
+        // 2️⃣ Hapus file di folder uploads/potensi/
+        if (is_array($images)) {
+            foreach ($images as $img) {
+                $file = basename(trim((string)$img));
+                if ($file === '') continue;
+                $path = base_path('uploads/potensi/' . $file);
+                if (is_file($path)) {
+                    @unlink($path);
+                }
+            }
+        }
+
+        // 3️⃣ Hapus gambar dari tabel gambar_potensi_desa
+        try {
+            $stmt = $pdo->prepare('DELETE FROM gambar_potensi_desa WHERE potensi_id = ?');
+            $stmt->execute([$potensiId]);
+        } catch (Throwable $e) {
+            $_SESSION['flash_error'][] = 'Gagal menghapus foto potensi: ' . $e->getMessage();
+            header('Location: admin_management.php#potensi');
+            exit;
+        }
+
+        // 4️⃣ Hapus data potensi
+        try {
+            $stmt = $pdo->prepare('DELETE FROM potensi_desa WHERE potensi_id = ?');
+            $stmt->execute([$potensiId]);
+            $_SESSION['flash'][] = 'Data potensi dan semua foto terkait berhasil dihapus.';
+        } catch (Throwable $e) {
+            $_SESSION['flash_error'][] = 'Gagal menghapus data potensi: ' . $e->getMessage();
+        }
+
+        header('Location: admin_management.php#potensi');
+        exit;
+    }
+
     if ($action === 'delete_gambar_potensi') {
         $gambarId = isset($_POST['gambar_id']) ? (int) $_POST['gambar_id'] : 0;
         if ($gambarId <= 0) {
@@ -2152,32 +2206,43 @@ function render_modal(string $formId, array $definition, array $oldInputs, array
                 'potensi',
                 'Potensi Desa',
                 'Daftar potensi desa beserta kategori.',
-                ['ID', 'Judul', 'Kategori', 'Google Maps', 'Foto', 'Dibuat', 'Diperbarui'],
+                ['ID', 'Judul', 'Kategori', 'Google Maps', 'Foto', 'Dibuat', 'Diperbarui', 'Aksi'],
                 $potensiDesa,
                 static function (array $row) use ($gambarPotensiByPotensi): string {
-                    $maps = (string) ($row['potensi_gmaps_link'] ?? '');
-                    $mapsHtml = $maps !== '' ? '<a href="' . e($maps) . '" target="_blank" rel="noopener">Lokasi</a>' : '-';
-                    $potensiId = isset($row['potensi_id']) ? (int) $row['potensi_id'] : 0;
-                    $images = $potensiId > 0 && isset($gambarPotensiByPotensi[$potensiId]) ? $gambarPotensiByPotensi[$potensiId] : [];
-                    $payload = [
-                        'id' => $potensiId,
-                        'judul' => (string) ($row['potensi_judul'] ?? ''),
-                        'images' => $images,
-                    ];
-                    $dataAttr = e((string) json_encode($payload, JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_AMP | JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES));
-                    $photosButton = $potensiId > 0
-                        ? '<button type="button" class="btn-outline" data-open-modal="potensi-gallery" data-potensi-gallery="' . $dataAttr . '">Foto (' . count($images) . ')</button>'
-                        : '-';
-                    return '<tr>'
-                        . '<td>#' . e((string) $row['potensi_id']) . '</td>'
-                        . '<td>' . e((string) $row['potensi_judul']) . '</td>'
-                        . '<td>' . e((string) $row['potensi_kategori']) . '</td>'
-                        . '<td>' . $mapsHtml . '</td>'
-                        . '<td>' . $photosButton . '</td>'
-                        . '<td>' . e(format_datetime($row['potensi_created_at'] ?? null)) . '</td>'
-                        . '<td>' . e(format_datetime($row['potensi_updated_at'] ?? null)) . '</td>'
-                        . '</tr>';
-                }
+                $maps = (string) ($row['potensi_gmaps_link'] ?? '');
+                $mapsHtml = $maps !== '' ? '<a href="' . e($maps) . '" target="_blank" rel="noopener">Lokasi</a>' : '-';
+                $potensiId = isset($row['potensi_id']) ? (int) $row['potensi_id'] : 0;
+                $images = $potensiId > 0 && isset($gambarPotensiByPotensi[$potensiId]) ? $gambarPotensiByPotensi[$potensiId] : [];
+                $payload = [
+                    'id' => $potensiId,
+                    'judul' => (string) ($row['potensi_judul'] ?? ''),
+                    'images' => $images,
+                ];
+                $dataAttr = e(json_encode($payload, JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_AMP | JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES));
+
+                $photosButton = $potensiId > 0
+                    ? '<button type="button" class="btn-outline" data-open-modal="potensi-gallery" data-potensi-gallery="' . $dataAttr . '">Foto (' . count($images) . ')</button>'
+                    : '-';
+
+                $actionsHtml = $potensiId > 0
+                    ? '<form method="post" action="admin_management.php#potensi" class="table-actions__form" onsubmit="return confirm(\'Hapus potensi ini beserta semua fotonya?\');">'
+                        . '<input type="hidden" name="action" value="delete_potensi">'
+                        . '<input type="hidden" name="potensi_id" value="' . e((string) $potensiId) . '">'
+                        . '<button type="submit" class="btn-danger">Hapus</button>'
+                    . '</form>'
+                    : '-';
+
+                return '<tr>'
+                    . '<td>#' . e((string) $row['potensi_id']) . '</td>'
+                    . '<td>' . e((string) $row['potensi_judul']) . '</td>'
+                    . '<td>' . e((string) $row['potensi_kategori']) . '</td>'
+                    . '<td>' . $mapsHtml . '</td>'
+                    . '<td>' . $photosButton . '</td>'
+                    . '<td>' . e(format_datetime($row['potensi_created_at'] ?? null)) . '</td>'
+                    . '<td>' . e(format_datetime($row['potensi_updated_at'] ?? null)) . '</td>'
+                    . '<td class="table-actions">' . $actionsHtml . '</td>'
+                    . '</tr>';
+            }
             ) ?>
 
             <?= section_card(
