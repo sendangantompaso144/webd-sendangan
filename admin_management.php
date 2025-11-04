@@ -23,6 +23,9 @@ try {
     $pdo = db();
     // === Current admin ===
     $currentAdminId = (int) ($adminSession['id'] ?? 0);
+    // setelah $currentAdmin terisi
+    $isSuperadmin = ((int)($currentAdmin['admin_is_superadmin'] ?? 0) === 1);
+
     $currentAdmin = [];
     if ($currentAdminId > 0) {
         try {
@@ -2033,14 +2036,17 @@ $strukturOrganisasi = fetch_table(
      FROM struktur_organisasi 
      ORDER BY struktur_updated_at DESC LIMIT 50'
 );
-$otherAdmins = fetch_table(
-    $pdo,
-    'SELECT admin_id, admin_nama, admin_no_hp, admin_email, admin_created_at, admin_updated_at, admin_is_deleted, admin_is_superadmin 
-     FROM admin 
-     WHERE admin_id <> ?
-     ORDER BY admin_updated_at DESC',
-    [$currentAdminId]
-);
+$otherAdmins = [];
+if ($isSuperadmin) {
+    $otherAdmins = fetch_table(
+        $pdo,
+        'SELECT admin_id, admin_nama, admin_no_hp, admin_email, admin_created_at, admin_updated_at, admin_is_deleted, admin_is_superadmin 
+         FROM admin 
+         WHERE admin_id <> ?
+         ORDER BY admin_updated_at DESC',
+        [$currentAdminId]
+    );
+}
 
 
 $flashMessages = $_SESSION['flash'] ?? [];
@@ -2962,131 +2968,139 @@ function render_modal(string $formId, array $definition, array $oldInputs, array
 
 
         <div class="cards-grid">
-            <?php
-            // ——— Section: Admin (Pengaturan Akun) ———
-            echo '
-            <section class="card section-card is-active" data-section="admin" id="admin">
-            <header class="card__header">
-                <div>
-                <h2>Pengaturan Akun</h2>
-                <p>Kelola data diri akun yang sedang login.</p>
-                </div>
-            </header>
+    <?php
+    // ——— Section: Admin (Pengaturan Akun) ———
+    echo '
+    <section class="card section-card is-active" data-section="admin" id="admin">
+    <header class="card__header">
+        <div>
+        <h2>Pengaturan Akun</h2>
+        <p>Kelola data diri akun yang sedang login.</p>
+        </div>
+    </header>
 
-            <div class="table-wrapper" style="margin-bottom:18px;">
-                <table>
-                <thead>
-                    <tr><th>Field</th><th>Nilai</th><th>Aksi</th></tr>
-                </thead>
-                <tbody>';
+    <div class="table-wrapper" style="margin-bottom:18px;">
+        <table>
+        <thead>
+            <tr><th>Field</th><th>Nilai</th><th>Aksi</th></tr>
+        </thead>
+        <tbody>';
 
-            $roleLabel = ((int)($currentAdmin['admin_is_superadmin'] ?? 0) === 1) ? 'Superadmin' : 'Regular Admin';
-            $createdAt = format_datetime($currentAdmin['admin_created_at'] ?? null);
-            $updatedAt = format_datetime($currentAdmin['admin_updated_at'] ?? null);
+    $roleLabel    = ((int)($currentAdmin['admin_is_superadmin'] ?? 0) === 1) ? 'Superadmin' : 'Regular Admin';
+    $createdAt    = format_datetime($currentAdmin['admin_created_at'] ?? null);
+    $updatedAt    = format_datetime($currentAdmin['admin_updated_at'] ?? null);
+    $isSuperadmin = ((int)($currentAdmin['admin_is_superadmin'] ?? 0) === 1);
 
-            echo '
-            <tr>
-            <td>ID</td>
-            <td>#' . e((string)($currentAdmin['admin_id'] ?? '-')) . '</td>
-            <td>—</td>
-            </tr>
+    echo '
+    <tr>
+    <td>ID</td>
+    <td>#' . e((string)($currentAdmin['admin_id'] ?? '-')) . '</td>
+    <td>—</td>
+    </tr>
 
-            <tr>
-            <td>Peran</td>
-            <td><span class="badge">' . e($roleLabel) . '</span></td>
-            <td>—</td>
-            </tr>
+    <tr>
+    <td>Peran</td>
+    <td><span class="badge">' . e($roleLabel) . '</span></td>
+    <td>—</td>
+    </tr>
 
-            <tr>
-            <td>Nama</td>
-            <td>
-                <form method="post" action="admin_management.php#admin" class="table-actions__form" style="display:inline-flex;gap:8px;align-items:center;">
-                <input type="hidden" name="action" value="update_admin_nama">
-                <input type="text" name="admin_nama" value="' . e((string)($currentAdmin['admin_nama'] ?? '')) . '" required style="min-width:260px;max-width:520px;width:100%;">
-                <button type="submit" class="btn-outline">Submit</button>
-                </form>
-            </td>
-            <td></td>
-            </tr>
+    <tr>
+    <td>Nama</td>
+    <td>
+        <form method="post" action="admin_management.php#admin" class="table-actions__form" style="display:inline-flex;gap:8px;align-items:center;">
+        <input type="hidden" name="action" value="update_admin_nama">
+        <input type="text" name="admin_nama" value="' . e((string)($currentAdmin['admin_nama'] ?? '')) . '" required style="min-width:260px;max-width:520px;width:100%;">
+        <button type="submit" class="btn-outline">Submit</button>
+        </form>
+    </td>
+    <td></td>
+    </tr>
 
-            <tr>
-            <td>Password</td>
-            <td>••••••••</td>
-            <td><button type="button" class="btn-outline" data-open-modal="password-change">Ganti Password</button></td>
-            </tr>
+    <tr>
+    <td>Password</td>
+    <td>••••••••</td>
+    <td><button type="button" class="btn-outline" data-open-modal="password-change">Ganti Password</button></td>
+    </tr>
 
-            <tr>
-            <td>No. HP</td>
-            <td>
-                <form method="post" action="admin_management.php#admin" class="table-actions__form" style="display:inline-flex;gap:8px;align-items:center;">
-                <input type="hidden" name="action" value="update_admin_no_hp">
-                <input type="text" name="admin_no_hp" value="' . e((string)($currentAdmin['admin_no_hp'] ?? '')) . '" placeholder="+62…" style="min-width:220px;">
-                <button type="submit" class="btn-outline">Submit</button>
-                </form>
-            </td>
-            <td></td>
-            </tr>
+    <tr>
+    <td>No. HP</td>
+    <td>
+        <form method="post" action="admin_management.php#admin" class="table-actions__form" style="display:inline-flex;gap:8px;align-items:center;">
+        <input type="hidden" name="action" value="update_admin_no_hp">
+        <input type="text" name="admin_no_hp" value="' . e((string)($currentAdmin['admin_no_hp'] ?? '')) . '" placeholder="+62…" style="min-width:220px;">
+        <button type="submit" class="btn-outline">Submit</button>
+        </form>
+    </td>
+    <td></td>
+    </tr>
 
-            <tr>
-            <td>Email</td>
-            <td>
-                <form method="post" action="admin_management.php#admin" class="table-actions__form" style="display:inline-flex;gap:8px;align-items:center;">
-                <input type="hidden" name="action" value="update_admin_email">
-                <input type="email" name="admin_email" value="' . e((string)($currentAdmin['admin_email'] ?? '')) . '" placeholder="nama@contoh.com" style="min-width:260px;max-width:520px;width:100%;">
-                <button type="submit" class="btn-outline">Submit</button>
-                </form>
-            </td>
-            <td></td>
-            </tr>
+    <tr>
+    <td>Email</td>
+    <td>
+        <form method="post" action="admin_management.php#admin" class="table-actions__form" style="display:inline-flex;gap:8px;align-items:center;">
+        <input type="hidden" name="action" value="update_admin_email">
+        <input type="email" name="admin_email" value="' . e((string)($currentAdmin['admin_email'] ?? '')) . '" placeholder="nama@contoh.com" style="min-width:260px;max-width:520px;width:100%;">
+        <button type="submit" class="btn-outline">Submit</button>
+        </form>
+    </td>
+    <td></td>
+    </tr>
 
-            <tr>
-            <td>Dibuat</td>
-            <td><span class="badge">' . e($createdAt) . '</span></td>
-            <td>—</td>
-            </tr>
+    <tr>
+    <td>Dibuat</td>
+    <td><span class="badge">' . e($createdAt) . '</span></td>
+    <td>—</td>
+    </tr>
 
-            <tr>
-            <td>Diperbarui</td>
-            <td><span class="badge">' . e($updatedAt) . '</span></td>
-            <td>—</td>
-            </tr>';
+    <tr>
+    <td>Diperbarui</td>
+    <td><span class="badge">' . e($updatedAt) . '</span></td>
+    <td>—</td>
+    </tr>';
 
-            echo '
-                </tbody>
-                </table>
+    echo '
+        </tbody>
+        </table>
+    </div>
+    ';
+
+    // ——— Tampilkan "Daftar Admin Lain" hanya untuk superadmin ———
+    if ($isSuperadmin) {
+        // Pastikan $otherAdmins aman (opsional, kalau belum didefinisikan di atas)
+        $otherAdmins = $otherAdmins ?? [];
+
+        echo '
+        <header class="card__header" style="margin-top:8px;">
+            <div>
+            <h2>Daftar Admin Lain</h2>
+            <p>Seluruh admin kecuali akun yang sedang login (read-only).</p>
             </div>
+            <div class="card__tools"><span class="badge">' . count($otherAdmins) . ' akun</span></div>
+        </header>
 
-            <header class="card__header" style="margin-top:8px;">
-                <div>
-                <h2>Daftar Admin Lain</h2>
-                <p>Seluruh admin kecuali akun yang sedang login (read-only).</p>
-                </div>
-                <div class="card__tools"><span class="badge">' . count($otherAdmins) . ' akun</span></div>
-            </header>
+        <div class="table-wrapper">
+            <table>
+            <thead>
+                <tr>
+                <th>ID</th>
+                <th>Nama</th>
+                <th>No. HP</th>
+                <th>Email</th>
+                <th>Peran</th>
+                <th>Deleted?</th>
+                <th>Dibuat</th>
+                <th>Diperbarui</th>
+                </tr>
+            </thead>
+            <tbody>';
 
-            <div class="table-wrapper">
-                <table>
-                <thead>
-                    <tr>
-                    <th>ID</th>
-                    <th>Nama</th>
-                    <th>No. HP</th>
-                    <th>Email</th>
-                    <th>Peran</th>
-                    <th>Deleted?</th>
-                    <th>Dibuat</th>
-                    <th>Diperbarui</th>
-                    </tr>
-                </thead>
-                <tbody>';
-
-            if ($otherAdmins === []) {
-                echo '<tr><td colspan="8" class="empty-state">Belum ada admin lain.</td></tr>';
-            } else {
-                foreach ($otherAdmins as $a) {
-                    $role = ((int)($a['admin_is_superadmin'] ?? 0) === 1) ? 'Superadmin' : 'Regular';
-                    $del  = ((int)($a['admin_is_deleted'] ?? 0) === 1) ? 'Ya' : 'Tidak';
-                    echo '<tr>'
+        if ($otherAdmins === []) {
+            echo '<tr><td colspan="8" class="empty-state">Belum ada admin lain.</td></tr>';
+        } else {
+            foreach ($otherAdmins as $a) {
+                $role = ((int)($a['admin_is_superadmin'] ?? 0) === 1) ? 'Superadmin' : 'Regular';
+                $del  = ((int)($a['admin_is_deleted'] ?? 0) === 1) ? 'Ya' : 'Tidak';
+                echo '<tr>'
                     . '<td>#' . e((string)$a['admin_id']) . '</td>'
                     . '<td>' . e((string)$a['admin_nama']) . '</td>'
                     . '<td>' . e((string)($a['admin_no_hp'] ?? '-')) . '</td>'
@@ -3095,16 +3109,21 @@ function render_modal(string $formId, array $definition, array $oldInputs, array
                     . '<td>' . e($del) . '</td>'
                     . '<td>' . e(format_datetime($a['admin_created_at'] ?? null)) . '</td>'
                     . '<td>' . e(format_datetime($a['admin_updated_at'] ?? null)) . '</td>'
-                    . '</tr>';
-                }
+                . '</tr>';
             }
+        }
 
-            echo '
-                </tbody>
-                </table>
-            </div>
-            </section>';
-            ?>
+        echo '
+            </tbody>
+            </table>
+        </div>
+        ';
+    }
+
+    echo '
+    </section>';
+    ?>
+
 
             <?= section_card(
                 'data',
