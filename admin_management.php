@@ -179,7 +179,7 @@ $tableForms = [
         'fields' => [
             'program_nama' => ['label' => 'Nama Program', 'type' => 'text', 'required' => true],
             'program_deskripsi' => ['label' => 'Deskripsi', 'type' => 'textarea', 'required' => true],
-            'program_gambar' => ['label' => 'URL Gambar', 'type' => 'text', 'required' => false],
+            'program_gambar' => ['label' => 'Gambar Program', 'type' => 'file_image', 'required' => false],
         ],
     ],
     'struktur' => [
@@ -1112,6 +1112,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         $uploadFolder = 'uploads/potensi';
                         $filenamePrefix = 'potensi_';
                         $storedPrefix = '';
+                    }
+
+                    if ($formId === 'program') {
+                        $uploadFolder = 'uploads/program';
+                        $filenamePrefix = 'program_';
                     }
 
                     $targetDir = base_path($uploadFolder);
@@ -2404,11 +2409,17 @@ function render_modal(string $formId, array $definition, array $oldInputs, array
                 'program',
                 'Program Desa',
                 'Program kerja dan kegiatan desa.',
-                ['ID', 'Nama Program', 'Gambar', 'Dibuat', 'Diperbarui'],
+                ['ID', 'Nama Program', 'Link Gambar', 'Dibuat', 'Diperbarui'],
                 $programDesa,
                 static function (array $row): string {
-                    $img = (string) ($row['program_gambar'] ?? '');
-                    $imgHtml = $img !== '' ? '<div class="media-thumb"><img src="' . e($img) . '" alt="program"><span>Media</span></div>' : '-';
+                    $img = trim((string) ($row['program_gambar'] ?? ''));
+                    $imgHtml = '-';
+                    if ($img !== '') {
+                        // pastikan url relatif menuju folder uploads/program/
+                        $fileUrl = base_uri('uploads/program/' . ltrim($img, '/'));
+                        $imgHtml = '<a href="' . e($fileUrl) . '" target="_blank" rel="noopener">' . e($img) . '</a>';
+                    }
+
                     return '<tr>'
                         . '<td>#' . e((string) $row['program_id']) . '</td>'
                         . '<td>' . e((string) $row['program_nama']) . '</td>'
