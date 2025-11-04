@@ -363,6 +363,56 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         exit;
     }
 
+    if ($action === 'delete_gambar_potensi') {
+        $gambarId = isset($_POST['gambar_id']) ? (int) $_POST['gambar_id'] : 0;
+        if ($gambarId <= 0) {
+            $_SESSION['flash_error'][] = 'Data foto potensi tidak ditemukan.';
+            header('Location: admin_management.php#potensi');
+            exit;
+        }
+
+        try {
+            $stmt = $pdo->prepare('SELECT gambar_namafile FROM gambar_potensi_desa WHERE gambar_id = ? LIMIT 1');
+            $stmt->execute([$gambarId]);
+            $row = $stmt->fetch(PDO::FETCH_ASSOC);
+        } catch (Throwable $exception) {
+            $_SESSION['flash_error'][] = 'Gagal memuat data foto potensi: ' . $exception->getMessage();
+            header('Location: admin_management.php#potensi');
+            exit;
+        }
+
+        if (!$row) {
+            $_SESSION['flash_error'][] = 'Data foto potensi tidak ditemukan di database.';
+            header('Location: admin_management.php#potensi');
+            exit;
+        }
+
+        $fileName = trim((string) ($row['gambar_namafile'] ?? ''));
+        if ($fileName !== '') {
+            // pastikan hanya nama file, bukan path
+            $fileName = basename($fileName);
+            $filePath = base_path('uploads/potensi/' . $fileName);
+            if (is_file($filePath)) {
+                if (!@unlink($filePath)) {
+                    $_SESSION['flash_error'][] = 'Gagal menghapus file gambar: ' . e($fileName);
+                    header('Location: admin_management.php#potensi');
+                    exit;
+                }
+            }
+        }
+
+        try {
+            $stmt = $pdo->prepare('DELETE FROM gambar_potensi_desa WHERE gambar_id = ?');
+            $stmt->execute([$gambarId]);
+            $_SESSION['flash'][] = 'Foto potensi berhasil dihapus.';
+        } catch (Throwable $exception) {
+            $_SESSION['flash_error'][] = 'Gagal menghapus data foto potensi: ' . $exception->getMessage();
+        }
+
+        header('Location: admin_management.php#potensi');
+        exit;
+    }
+
     if ($action === 'edit_fasilitas') {
         $fasilitasId = isset($_POST['fasilitas_id']) ? (int) $_POST['fasilitas_id'] : 0;
         $newName = trim((string) ($_POST['fasilitas_nama'] ?? ''));
@@ -950,7 +1000,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     if ($formId === 'potensi-media') {
                         $uploadFolder = 'uploads/potensi';
                         $filenamePrefix = 'potensi_';
-                        $storedPrefix = 'potensi/';
+                        $storedPrefix = '';
                     }
 
                     $targetDir = base_path($uploadFolder);
@@ -1050,8 +1100,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     $stmt->execute(array_values($inputData));
                     $_SESSION['flash'][] = $definition['title'] . ' berhasil ditambahkan.';
                     unset($_SESSION['form_errors'][$formId], $_SESSION['form_old'][$formId]);
-                    header('Location: admin_management.php#' . rawurlencode($formId));
+
+                    // Jika form yang dikirim adalah potensi-media, arahkan kembali ke tab Potensi Desa
+                    $redirectSection = $formId;
+                    if ($formId === 'potensi-media') {
+                        $redirectSection = 'potensi';
+                    }
+
+                    header('Location: admin_management.php#' . rawurlencode($redirectSection));
                     exit;
+
                 } catch (Throwable $exception) {
                     $errors['_general'] = 'Gagal menyimpan data: ' . $exception->getMessage();
                 }
@@ -1273,7 +1331,7 @@ function render_modal(string $formId, array $definition, array $oldInputs, array
     <div ' . $backdropAttr . '>
         <div class="modal">
             <div class="modal__header">
-                <h3 class="modal__title">Tambah ' . e($definition['title'] ?? 'Data') . '</h3>
+                <h3 class="modal__title">' . e($definition['title'] ?? 'Data') . '</h3>
                 <button type="button" class="modal__close" data-close-modal aria-label="Tutup">&times;</button>
             </div>
             <div class="modal__body">
@@ -2259,6 +2317,7 @@ function render_modal(string $formId, array $definition, array $oldInputs, array
                                 <th>Potensi</th>
                                 <th>File</th>
                                 <th>Diupload</th>
+                                <th>Aksi</th>
                             </tr>
                         </thead>
                         <tbody data-potensi-gallery-tbody></tbody>
@@ -2584,6 +2643,37 @@ function render_modal(string $formId, array $definition, array $oldInputs, array
                 tr.appendChild(titleTd);
                 tr.appendChild(fileTd);
                 tr.appendChild(createdTd);
+                    // Tambahkan tombol hapus
+                var actionsTd = document.createElement('td');
+                var form = document.createElement('form');
+                form.method = 'post';
+                form.action = 'admin_management.php#potensi';
+                form.className = 'table-actions__form'; 
+                form.onsubmit = function() {
+                    return confirm('Hapus foto ini?');
+                };
+
+                var actionInput = document.createElement('input');
+                actionInput.type = 'hidden';
+                actionInput.name = 'action';
+                actionInput.value = 'delete_gambar_potensi';
+                form.appendChild(actionInput);
+
+                var idInput = document.createElement('input');
+                idInput.type = 'hidden';
+                idInput.name = 'gambar_id';
+                idInput.value = image && image.id ? String(image.id) : '';
+                form.appendChild(idInput);
+
+                var button = document.createElement('button');
+                button.type = 'submit';
+                button.className = 'btn-danger';
+                button.textContent = 'Hapus';
+                form.appendChild(button);
+
+                actionsTd.appendChild(form);
+                tr.appendChild(actionsTd);
+
                 potensiGalleryBody.appendChild(tr);
             });
             if (potensiGalleryTable) {
