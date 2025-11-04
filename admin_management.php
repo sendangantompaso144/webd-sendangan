@@ -1202,6 +1202,61 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         exit;
     }
 
+    if ($action === 'update_data_value') {
+        $dataKey = trim((string)($_POST['data_key'] ?? ''));
+        $rawValue = (string)($_POST['data_value'] ?? '');
+
+        if ($dataKey === '') {
+            $_SESSION['flash_error'][] = 'Kunci data tidak valid.';
+            header('Location: admin_management.php#data');
+            exit;
+        }
+
+        try {
+            // Ambil tipe untuk validasi
+            $stmt = $pdo->prepare('SELECT data_type FROM data WHERE data_key = ? LIMIT 1');
+            $stmt->execute([$dataKey]);
+            $row = $stmt->fetch(PDO::FETCH_ASSOC);
+            if (!$row) {
+                $_SESSION['flash_error'][] = 'Data dengan key tersebut tidak ditemukan.';
+                header('Location: admin_management.php#data');
+                exit;
+            }
+
+            $type = strtolower((string)($row['data_type'] ?? 'string'));
+            $value = null;
+
+            if ($type === 'integer') {
+                $filtered = filter_var(trim($rawValue), FILTER_VALIDATE_INT);
+                if ($filtered === false) {
+                    $_SESSION['flash_error'][] = 'Nilai harus berupa angka untuk key: ' . $dataKey;
+                    header('Location: admin_management.php#data');
+                    exit;
+                }
+                $value = (string)$filtered; // simpan tetap sebagai string di kolom data_value
+            } else {
+                $value = trim($rawValue);
+            }
+
+            $updatedBy = '';
+            if (is_array($adminSession ?? null)) {
+                $updatedBy = (string)($adminSession['name'] ?? '');
+                if ($updatedBy === '') $updatedBy = (string)($adminSession['email'] ?? '');
+                if ($updatedBy === '') $updatedBy = 'admin#'.$adminSession['id'];
+            }
+
+            $stmt = $pdo->prepare('UPDATE data SET data_value = ?, data_updated_at = NOW(), data_updated_by = ? WHERE data_key = ? LIMIT 1');
+            $stmt->execute([$value, $updatedBy !== '' ? $updatedBy : null, $dataKey]);
+
+            $_SESSION['flash'][] = 'Data "' . $dataKey . '" berhasil diperbarui.';
+        } catch (Throwable $e) {
+            $_SESSION['flash_error'][] = 'Gagal memperbarui data: ' . $e->getMessage();
+        }
+
+        header('Location: admin_management.php#data');
+        exit;
+    }
+
     $formId = (string) ($_POST['form_id'] ?? '');
     if (isset($tableForms[$formId])) {
         $definition = $tableForms[$formId];
@@ -1522,6 +1577,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         exit;
     }
 }}
+
+$dataRows = fetch_table(
+    $pdo,
+    'SELECT data_key, data_value, data_type, data_updated_at, data_updated_by
+     FROM data
+     ORDER BY data_key ASC'
+);
 
 $apbdes = fetch_table($pdo, 'SELECT apbdes_id, apbdes_judul, apbdes_file, apbdes_edited_by, apbdes_created_at, apbdes_updated_at FROM apbdes ORDER BY apbdes_updated_at DESC LIMIT 50');
 $berita = fetch_table($pdo, 'SELECT berita_id, berita_judul, berita_isi, berita_gambar, berita_dilihat, berita_created_at, berita_updated_at FROM berita ORDER BY berita_updated_at DESC LIMIT 50');
@@ -2414,6 +2476,7 @@ function render_modal(string $formId, array $definition, array $oldInputs, array
             <span><?= e($adminSession['email'] ?? 'admin@desa.id') ?></span>
         </div>
         <nav>
+            <a class="sidebar-link" href="#data" data-section="data">Data Umum</a>
             <a class="sidebar-link" href="#apbdes" data-section="apbdes">APBDes</a>
             <a class="sidebar-link" href="#berita" data-section="berita">Berita</a>
             <a class="sidebar-link" href="#fasilitas" data-section="fasilitas">Fasilitas</a>
@@ -2445,6 +2508,43 @@ function render_modal(string $formId, array $definition, array $oldInputs, array
 
 
         <div class="cards-grid">
+            <?= section_card(
+                'data',
+                'Data Umum',
+                'Penyimpanan key–value untuk konten dinamis (seperti JSON). Setiap baris bisa disunting langsung.',
+                ['Key', 'Tipe', 'Nilai', 'Diubah pada', 'Oleh'],
+                $dataRows,
+                static function (array $row): string {
+                    $key = (string)($row['data_key'] ?? '');
+                    $type = strtolower((string)($row['data_type'] ?? 'string'));
+                    $val  = (string)($row['data_value'] ?? '');
+                    $updatedAt = format_datetime($row['data_updated_at'] ?? null);
+                    $updatedBy = (string)($row['data_updated_by'] ?? '-');
+
+                    // Input type: number untuk integer, text untuk lainnya
+                    $inputHtml = $type === 'integer'
+                        ? '<input type="number" name="data_value" value="' . e($val) . '" required style="width:220px;">'
+                        : '<input type="text" name="data_value" value="' . e($val) . '" required style="min-width:260px;max-width:520px;width:100%;">';
+
+                    $form = '
+                        <form method="post" action="admin_management.php#data" class="table-actions__form" style="display:inline-flex;gap:8px;align-items:center;">
+                            <input type="hidden" name="action" value="update_data_value">
+                            <input type="hidden" name="data_key" value="' . e($key) . '">
+                            ' . $inputHtml . '
+                            <button type="submit" class="btn-outline">Simpan</button>
+                        </form>';
+
+                    return '<tr>'
+                        . '<td><code>' . e($key) . '</code></td>'
+                        . '<td>' . e($type) . '</td>'
+                        . '<td>' . $form . '</td>'
+                        . '<td>' . e($updatedAt) . '</td>'
+                        . '<td>' . e($updatedBy !== '' ? $updatedBy : '-') . '</td>'
+                        . '<td><!-- no extra actions --></td>'
+                        . '</tr>';
+                }
+            ) ?>
+
             <?= section_card(
                 'apbdes',
                 'Dokumen APBDes',
