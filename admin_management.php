@@ -21,6 +21,19 @@ if (!$isAuthorized) {
 
 try {
     $pdo = db();
+    // === Current admin ===
+    $currentAdminId = (int) ($adminSession['id'] ?? 0);
+    $currentAdmin = [];
+    if ($currentAdminId > 0) {
+        try {
+            $stmt = $pdo->prepare('SELECT admin_id, admin_nama, admin_password, admin_no_hp, admin_email, admin_created_at, admin_updated_at, admin_is_superadmin FROM admin WHERE admin_id = ? LIMIT 1');
+            $stmt->execute([$currentAdminId]);
+            $currentAdmin = $stmt->fetch(PDO::FETCH_ASSOC) ?: [];
+        } catch (Throwable) {
+            $currentAdmin = [];
+        }
+    }
+
 } catch (Throwable $exception) {
     http_response_code(500);
     echo '<h1>Kesalahan Server</h1>';
@@ -226,6 +239,106 @@ $tableForms = [
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $action = (string) ($_POST['action'] ?? '');
+        // ————— ACCOUNT ACTIONS —————
+    if ($action === 'update_admin_nama') {
+        $new = trim((string)($_POST['admin_nama'] ?? ''));
+        if ($new === '') {
+            $_SESSION['flash_error'][] = 'Nama tidak boleh kosong.';
+            header('Location: admin_management.php#admin'); exit;
+        }
+        try {
+            $stmt = $pdo->prepare('UPDATE admin SET admin_nama = ?, admin_updated_at = NOW() WHERE admin_id = ?');
+            $stmt->execute([$new, $currentAdminId]);
+            $_SESSION['admin']['name'] = $new; // sinkron sesi
+            $_SESSION['flash'][] = 'Nama berhasil diperbarui.';
+        } catch (Throwable $e) {
+            $_SESSION['flash_error'][] = 'Gagal memperbarui nama: ' . $e->getMessage();
+        }
+        header('Location: admin_management.php#admin'); exit;
+    }
+
+    if ($action === 'update_admin_no_hp') {
+        $raw = trim((string)($_POST['admin_no_hp'] ?? ''));
+        $phone = $raw === '' ? null : $raw;
+        if ($phone !== null && !preg_match('~^\+?\d{8,15}$~', $phone)) {
+            $_SESSION['flash_error'][] = 'Format nomor HP tidak valid.';
+            header('Location: admin_management.php#admin'); exit;
+        }
+        try {
+            if ($phone !== null) {
+                $stmt = $pdo->prepare('SELECT COUNT(*) FROM admin WHERE admin_no_hp = ? AND admin_id <> ?');
+                $stmt->execute([$phone, $currentAdminId]);
+                if ((int)$stmt->fetchColumn() > 0) {
+                    $_SESSION['flash_error'][] = 'Nomor HP sudah digunakan admin lain.';
+                    header('Location: admin_management.php#admin'); exit;
+                }
+            }
+            $stmt = $pdo->prepare('UPDATE admin SET admin_no_hp = ?, admin_updated_at = NOW() WHERE admin_id = ?');
+            $stmt->execute([$phone, $currentAdminId]);
+            $_SESSION['flash'][] = 'Nomor HP berhasil diperbarui.';
+        } catch (Throwable $e) {
+            $_SESSION['flash_error'][] = 'Gagal memperbarui nomor HP: ' . $e->getMessage();
+        }
+        header('Location: admin_management.php#admin'); exit;
+    }
+
+    if ($action === 'update_admin_email') {
+        $raw = trim((string)($_POST['admin_email'] ?? ''));
+        $email = $raw === '' ? null : $raw;
+        if ($email !== null && !filter_var($email, FILTER_VALIDATE_EMAIL)) {
+            $_SESSION['flash_error'][] = 'Format email tidak valid.';
+            header('Location: admin_management.php#admin'); exit;
+        }
+        try {
+            if ($email !== null) {
+                $stmt = $pdo->prepare('SELECT COUNT(*) FROM admin WHERE admin_email = ? AND admin_id <> ?');
+                $stmt->execute([$email, $currentAdminId]);
+                if ((int)$stmt->fetchColumn() > 0) {
+                    $_SESSION['flash_error'][] = 'Email sudah digunakan admin lain.';
+                    header('Location: admin_management.php#admin'); exit;
+                }
+            }
+            $stmt = $pdo->prepare('UPDATE admin SET admin_email = ?, admin_updated_at = NOW() WHERE admin_id = ?');
+            $stmt->execute([$email, $currentAdminId]);
+            $_SESSION['flash'][] = 'Email berhasil diperbarui.';
+        } catch (Throwable $e) {
+            $_SESSION['flash_error'][] = 'Gagal memperbarui email: ' . $e->getMessage();
+        }
+        header('Location: admin_management.php#admin'); exit;
+    }
+
+    if ($action === 'change_admin_password') {
+        $old = (string)($_POST['password_lama'] ?? '');
+        $new = (string)($_POST['password_baru'] ?? '');
+        $rep = (string)($_POST['password_baru_repeat'] ?? '');
+
+        if ($new === '' || strlen($new) < 8) {
+            $_SESSION['flash_error'][] = 'Password baru minimal 8 karakter.';
+            header('Location: admin_management.php#admin'); exit;
+        }
+        if ($new !== $rep) {
+            $_SESSION['flash_error'][] = 'Ketik ulang password tidak sama.';
+            header('Location: admin_management.php#admin'); exit;
+        }
+
+        try {
+            $stmt = $pdo->prepare('SELECT admin_password FROM admin WHERE admin_id = ? LIMIT 1');
+            $stmt->execute([$currentAdminId]);
+            $row = $stmt->fetch(PDO::FETCH_ASSOC);
+            if (!$row || !password_verify($old, (string)$row['admin_password'])) {
+                $_SESSION['flash_error'][] = 'Password lama salah.';
+                header('Location: admin_management.php#admin'); exit;
+            }
+            $hash = password_hash($new, PASSWORD_DEFAULT);
+            $stmt = $pdo->prepare('UPDATE admin SET admin_password = ?, admin_updated_at = NOW() WHERE admin_id = ?');
+            $stmt->execute([$hash, $currentAdminId]);
+            $_SESSION['flash'][] = 'Password berhasil diganti.';
+        } catch (Throwable $e) {
+            $_SESSION['flash_error'][] = 'Gagal mengganti password: ' . $e->getMessage();
+        }
+        header('Location: admin_management.php#admin'); exit;
+    }
+
     if ($action === 'delete_apbdes') {
         $apbdesId = isset($_POST['apbdes_id']) ? (int) $_POST['apbdes_id'] : 0;
         if ($apbdesId <= 0) {
@@ -1920,6 +2033,15 @@ $strukturOrganisasi = fetch_table(
      FROM struktur_organisasi 
      ORDER BY struktur_updated_at DESC LIMIT 50'
 );
+$otherAdmins = fetch_table(
+    $pdo,
+    'SELECT admin_id, admin_nama, admin_no_hp, admin_email, admin_created_at, admin_updated_at, admin_is_deleted, admin_is_superadmin 
+     FROM admin 
+     WHERE admin_id <> ?
+     ORDER BY admin_updated_at DESC',
+    [$currentAdminId]
+);
+
 
 $flashMessages = $_SESSION['flash'] ?? [];
 $flashErrors = $_SESSION['flash_error'] ?? [];
@@ -2187,6 +2309,9 @@ function render_modal(string $formId, array $definition, array $oldInputs, array
             font-size: 12px;
             color: rgba(255, 255, 255, 0.65);
         }
+        /* opsional */
+        .badge--super { background: rgba(34,197,94,.15); color:#15803d; }
+        .badge--regular { background: rgba(59,130,246,.12); color:#1d4ed8; }
 
         .content {
             margin-left: calc(280px + 20px);
@@ -2795,6 +2920,16 @@ function render_modal(string $formId, array $definition, array $oldInputs, array
 
         </div>
         <nav>
+            <a class="sidebar-link" href="#admin" data-section="admin" title="Akun">
+                <!-- ikon akun sederhana -->
+                <span style="display:inline-flex;align-items:center;gap:10px;">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                    <circle cx="12" cy="8" r="4" stroke="currentColor" stroke-width="2"></circle>
+                    <path d="M4 20c0-4 4-6 8-6s8 2 8 6" stroke="currentColor" stroke-width="2" stroke-linecap="round"></path>
+                </svg>
+                Akun
+                </span>
+            </a>
             <a class="sidebar-link" href="#data" data-section="data">Data Umum</a>
             <a class="sidebar-link" href="#apbdes" data-section="apbdes">APBDes</a>
             <a class="sidebar-link" href="#berita" data-section="berita">Berita</a>
@@ -2827,6 +2962,150 @@ function render_modal(string $formId, array $definition, array $oldInputs, array
 
 
         <div class="cards-grid">
+            <?php
+            // ——— Section: Admin (Pengaturan Akun) ———
+            echo '
+            <section class="card section-card is-active" data-section="admin" id="admin">
+            <header class="card__header">
+                <div>
+                <h2>Pengaturan Akun</h2>
+                <p>Kelola data diri akun yang sedang login.</p>
+                </div>
+            </header>
+
+            <div class="table-wrapper" style="margin-bottom:18px;">
+                <table>
+                <thead>
+                    <tr><th>Field</th><th>Nilai</th><th>Aksi</th></tr>
+                </thead>
+                <tbody>';
+
+            $roleLabel = ((int)($currentAdmin['admin_is_superadmin'] ?? 0) === 1) ? 'Superadmin' : 'Regular Admin';
+            $createdAt = format_datetime($currentAdmin['admin_created_at'] ?? null);
+            $updatedAt = format_datetime($currentAdmin['admin_updated_at'] ?? null);
+
+            echo '
+            <tr>
+            <td>ID</td>
+            <td>#' . e((string)($currentAdmin['admin_id'] ?? '-')) . '</td>
+            <td>—</td>
+            </tr>
+
+            <tr>
+            <td>Peran</td>
+            <td><span class="badge">' . e($roleLabel) . '</span></td>
+            <td>—</td>
+            </tr>
+
+            <tr>
+            <td>Nama</td>
+            <td>
+                <form method="post" action="admin_management.php#admin" class="table-actions__form" style="display:inline-flex;gap:8px;align-items:center;">
+                <input type="hidden" name="action" value="update_admin_nama">
+                <input type="text" name="admin_nama" value="' . e((string)($currentAdmin['admin_nama'] ?? '')) . '" required style="min-width:260px;max-width:520px;width:100%;">
+                <button type="submit" class="btn-outline">Submit</button>
+                </form>
+            </td>
+            <td></td>
+            </tr>
+
+            <tr>
+            <td>Password</td>
+            <td>••••••••</td>
+            <td><button type="button" class="btn-outline" data-open-modal="password-change">Ganti Password</button></td>
+            </tr>
+
+            <tr>
+            <td>No. HP</td>
+            <td>
+                <form method="post" action="admin_management.php#admin" class="table-actions__form" style="display:inline-flex;gap:8px;align-items:center;">
+                <input type="hidden" name="action" value="update_admin_no_hp">
+                <input type="text" name="admin_no_hp" value="' . e((string)($currentAdmin['admin_no_hp'] ?? '')) . '" placeholder="+62…" style="min-width:220px;">
+                <button type="submit" class="btn-outline">Submit</button>
+                </form>
+            </td>
+            <td></td>
+            </tr>
+
+            <tr>
+            <td>Email</td>
+            <td>
+                <form method="post" action="admin_management.php#admin" class="table-actions__form" style="display:inline-flex;gap:8px;align-items:center;">
+                <input type="hidden" name="action" value="update_admin_email">
+                <input type="email" name="admin_email" value="' . e((string)($currentAdmin['admin_email'] ?? '')) . '" placeholder="nama@contoh.com" style="min-width:260px;max-width:520px;width:100%;">
+                <button type="submit" class="btn-outline">Submit</button>
+                </form>
+            </td>
+            <td></td>
+            </tr>
+
+            <tr>
+            <td>Dibuat</td>
+            <td><span class="badge">' . e($createdAt) . '</span></td>
+            <td>—</td>
+            </tr>
+
+            <tr>
+            <td>Diperbarui</td>
+            <td><span class="badge">' . e($updatedAt) . '</span></td>
+            <td>—</td>
+            </tr>';
+
+            echo '
+                </tbody>
+                </table>
+            </div>
+
+            <header class="card__header" style="margin-top:8px;">
+                <div>
+                <h2>Daftar Admin Lain</h2>
+                <p>Seluruh admin kecuali akun yang sedang login (read-only).</p>
+                </div>
+                <div class="card__tools"><span class="badge">' . count($otherAdmins) . ' akun</span></div>
+            </header>
+
+            <div class="table-wrapper">
+                <table>
+                <thead>
+                    <tr>
+                    <th>ID</th>
+                    <th>Nama</th>
+                    <th>No. HP</th>
+                    <th>Email</th>
+                    <th>Peran</th>
+                    <th>Deleted?</th>
+                    <th>Dibuat</th>
+                    <th>Diperbarui</th>
+                    </tr>
+                </thead>
+                <tbody>';
+
+            if ($otherAdmins === []) {
+                echo '<tr><td colspan="8" class="empty-state">Belum ada admin lain.</td></tr>';
+            } else {
+                foreach ($otherAdmins as $a) {
+                    $role = ((int)($a['admin_is_superadmin'] ?? 0) === 1) ? 'Superadmin' : 'Regular';
+                    $del  = ((int)($a['admin_is_deleted'] ?? 0) === 1) ? 'Ya' : 'Tidak';
+                    echo '<tr>'
+                    . '<td>#' . e((string)$a['admin_id']) . '</td>'
+                    . '<td>' . e((string)$a['admin_nama']) . '</td>'
+                    . '<td>' . e((string)($a['admin_no_hp'] ?? '-')) . '</td>'
+                    . '<td>' . e((string)($a['admin_email'] ?? '-')) . '</td>'
+                    . '<td>' . e($role) . '</td>'
+                    . '<td>' . e($del) . '</td>'
+                    . '<td>' . e(format_datetime($a['admin_created_at'] ?? null)) . '</td>'
+                    . '<td>' . e(format_datetime($a['admin_updated_at'] ?? null)) . '</td>'
+                    . '</tr>';
+                }
+            }
+
+            echo '
+                </tbody>
+                </table>
+            </div>
+            </section>';
+            ?>
+
             <?= section_card(
                 'data',
                 'Data Umum',
@@ -3238,6 +3517,36 @@ function render_modal(string $formId, array $definition, array $oldInputs, array
     <?php foreach ($tableForms as $modalId => $definition): ?>
         <?= render_modal($modalId, $definition, $formOld[$modalId] ?? [], $formErrors[$modalId] ?? []) ?>
     <?php endforeach; ?>
+    <div class="modal-backdrop" data-modal="password-change">
+        <div class="modal">
+            <div class="modal__header">
+            <h3 class="modal__title">Ganti Password</h3>
+            <button type="button" class="modal__close" data-close-modal aria-label="Tutup">&times;</button>
+            </div>
+            <div class="modal__body">
+            <form method="post" action="admin_management.php#admin" autocomplete="off">
+                <input type="hidden" name="action" value="change_admin_password">
+                <div class="modal__field">
+                <label for="pw_lama">Password Lama <span class="required">*</span></label>
+                <input type="password" id="pw_lama" name="password_lama" required>
+                </div>
+                <div class="modal__field">
+                <label for="pw_baru">Password Baru <span class="required">*</span></label>
+                <input type="password" id="pw_baru" name="password_baru" minlength="8" required>
+                </div>
+                <div class="modal__field">
+                <label for="pw_baru_repeat">Ketik ulang Password Baru <span class="required">*</span></label>
+                <input type="password" id="pw_baru_repeat" name="password_baru_repeat" minlength="8" required>
+                </div>
+                <div class="modal__actions">
+                <button type="button" class="btn-secondary" data-close-modal>Batal</button>
+                <button type="submit" class="btn-primary">Submit</button>
+                </div>
+            </form>
+            </div>
+        </div>
+    </div>
+
     <div class="modal-backdrop" data-modal="potensi-gallery">
         <div class="modal modal--wide">
             <div class="modal__header">
