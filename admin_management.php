@@ -2120,7 +2120,7 @@ function render_modal(string $formId, array $definition, array $oldInputs, array
             <span><?= e($adminSession['email'] ?? 'admin@desa.id') ?></span>
         </div>
         <nav>
-            <a class="sidebar-link" href="#apbdes" data-section="apbdes">APBDes</a>    
+            <a class="sidebar-link" href="#apbdes" data-section="apbdes">APBDes</a>
             <a class="sidebar-link" href="#berita" data-section="berita">Berita</a>
             <a class="sidebar-link" href="#fasilitas" data-section="fasilitas">Fasilitas</a>
             <a class="sidebar-link" href="#potensi" data-section="potensi">Potensi Desa</a>
