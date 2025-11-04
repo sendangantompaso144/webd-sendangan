@@ -139,9 +139,9 @@ $tableForms = [
     ],
     'potensi-media' => [
         'table' => 'gambar_potensi_desa',
-        'title' => 'Media Potensi Desa',
+        'title' => 'Tambah Foto Potensi',
         'fields' => [
-            'potensi_id' => ['label' => 'Nama Potensi', 'type' => 'select', 'required' => true, 'options' => []],
+            // potensi_id tidak tampil di form, dikirim otomatis dari JS
             'gambar_namafile' => ['label' => 'Upload Foto', 'type' => 'file_image', 'required' => true],
         ],
     ],
@@ -1026,6 +1026,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     if ($formId === 'apbdes' && isset($adminSession['name'])) {
                         $inputData['apbdes_edited_by'] = (string) $adminSession['name'];
                     }
+                    // Pastikan potensi_id ikut tersimpan saat upload foto potensi
+                    if ($formId === 'potensi-media') {
+                        $potensiId = isset($_POST['potensi_id']) ? (int) $_POST['potensi_id'] : 0;
+                        if ($potensiId > 0) {
+                            $inputData['potensi_id'] = $potensiId;
+                        } else {
+                            // Jika tidak dikirim, beri peringatan agar tidak null
+                            $errors['_general'] = 'Potensi ID tidak ditemukan. Silakan ulangi dari tombol "Foto".';
+                        }
+                    }
+
 
                     foreach ($fileUploads as $column => $fileInfo) {
                         $inputData[$column] = $fileInfo['_stored'] ?? '';
@@ -2663,8 +2674,17 @@ function render_modal(string $formId, array $definition, array $oldInputs, array
                 }
                 if (targetId === 'potensi-media') {
                     var potensiTargetId = btn.getAttribute('data-potensi-media-id') || '';
-                    if (potensiMediaPotensiField) {
-                        potensiMediaPotensiField.value = potensiTargetId;
+                    // tambahkan hidden input potensi_id agar ikut terkirim saat submit
+                    var potensiMediaForm = potensiMediaBackdrop.querySelector('form');
+                    if (potensiMediaForm) {
+                        var hidden = potensiMediaForm.querySelector('input[name="potensi_id"]');
+                        if (!hidden) {
+                            hidden = document.createElement('input');
+                            hidden.type = 'hidden';
+                            hidden.name = 'potensi_id';
+                            potensiMediaForm.appendChild(hidden);
+                        }
+                        hidden.value = potensiTargetId;
                     }
                 }
                 if (targetId) {
