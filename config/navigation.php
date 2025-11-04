@@ -41,12 +41,12 @@ return [
             'href' => 'https://minahasa.go.id',
         ],
         [
-            'label' => 'SIPADES',
-            'href' => '#',
+            'label' => 'Universitas Sam Ratulangi',
+            'href' => 'https://www.unsrat.ac.id/',
         ],
         [
-            'label' => 'PPID Kabupaten',
-            'href' => '#',
+            'label' => 'IG KKT 144 Sendangan-Tompaso',
+            'href' => 'https://www.instagram.com/kkt144.sendangan_tompaso/',
         ],
     ],
 ];
