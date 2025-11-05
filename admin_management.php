@@ -3033,7 +3033,6 @@ function render_modal(string $formId, array $definition, array $oldInputs, array
                 <h2>Ringkasan Konten</h2>
                 <span>Manajemen Data dari Konten Website Desa Sendangan</span>
             </div>  
-            <span>Total sumber konten: 10 tabel</span>
         </div>
             <?php foreach ($flashErrors as $msg): ?>
                 <div class="flash flash--error"><?= e($msg) ?></div>
