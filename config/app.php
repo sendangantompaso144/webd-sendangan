@@ -16,7 +16,7 @@ return [
         ],
     ],
     'contact' => [
-        'address' => 'Desa Sendangan, Tompaso, Minahasa',
+        'address' => 'Sekretaris Desa Sendangan',
         'email' => 'desa@sendangan.id',
         'phone' => '+62 812 3456 7890',
     ],
