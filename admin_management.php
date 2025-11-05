@@ -21,21 +21,28 @@ if (!$isAuthorized) {
 
 try {
     $pdo = db();
-    // === Current admin ===
-    $currentAdminId = (int) ($adminSession['id'] ?? 0);
-    // setelah $currentAdmin terisi
-    $isSuperadmin = ((int)($currentAdmin['admin_is_superadmin'] ?? 0) === 1);
 
-    $currentAdmin = [];
-    if ($currentAdminId > 0) {
-        try {
-            $stmt = $pdo->prepare('SELECT admin_id, admin_nama, admin_password, admin_no_hp, admin_email, admin_created_at, admin_updated_at, admin_is_superadmin FROM admin WHERE admin_id = ? LIMIT 1');
-            $stmt->execute([$currentAdminId]);
-            $currentAdmin = $stmt->fetch(PDO::FETCH_ASSOC) ?: [];
-        } catch (Throwable) {
-            $currentAdmin = [];
-        }
+// === Current admin ===
+$currentAdminId = (int)($adminSession['id'] ?? 0);
+
+$currentAdmin = [];
+if ($currentAdminId > 0) {
+    try {
+        $stmt = $pdo->prepare('
+            SELECT admin_id, admin_nama, admin_password, admin_no_hp, admin_email,
+                   admin_created_at, admin_updated_at, admin_is_superadmin
+            FROM admin
+            WHERE admin_id = ? LIMIT 1
+        ');
+        $stmt->execute([$currentAdminId]);
+        $currentAdmin = $stmt->fetch(PDO::FETCH_ASSOC) ?: [];
+    } catch (Throwable) {
+        $currentAdmin = [];
     }
+}
+
+// ✅ Baru hitung setelah $currentAdmin terisi
+$isSuperadmin = ((int)($currentAdmin['admin_is_superadmin'] ?? 0) === 1);
 
 } catch (Throwable $exception) {
     http_response_code(500);
@@ -2989,7 +2996,6 @@ function render_modal(string $formId, array $definition, array $oldInputs, array
     $roleLabel    = ((int)($currentAdmin['admin_is_superadmin'] ?? 0) === 1) ? 'Superadmin' : 'Regular Admin';
     $createdAt    = format_datetime($currentAdmin['admin_created_at'] ?? null);
     $updatedAt    = format_datetime($currentAdmin['admin_updated_at'] ?? null);
-    $isSuperadmin = ((int)($currentAdmin['admin_is_superadmin'] ?? 0) === 1);
 
     echo '
     <tr>
@@ -3238,7 +3244,7 @@ function render_modal(string $formId, array $definition, array $oldInputs, array
                 }
             ) ?>
 
-            <?= section_card(
+            <?= section_card(   
                 'berita',
                 'Berita Desa',
                 'Artikel dan berita dari info publik.',
