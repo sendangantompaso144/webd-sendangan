@@ -64,12 +64,21 @@ $articleImage = isset($article['berita_gambar']) && $article['berita_gambar'] !=
 $protocol = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? 'https' : 'http';
 $host = $_SERVER['HTTP_HOST'] ?? 'localhost';
 $path = rtrim(dirname($_SERVER['SCRIPT_NAME']), '/\\');
-$articleUrl = $protocol . '://' . $host . $path . '/baca_berita.php?id=' . urlencode((string) $articleId);
+$articleUrl = $protocol . '://' . $host . $path . '/baca_berita.php?id=' . urlencode((string)$articleId);
+
 
 render_base_layout([
     'title' => $articleTitle . ' | ' . app_config('name', 'Desa Sendangan'),
     'description' => $articleDescription,
     'activePage' => 'informasi',
+    'meta' => [
+        // Open Graph dinamis untuk preview
+        'og:title' => $articleTitle,
+        'og:description' => $articleDescription,
+        'og:image' => $articleImage,
+        'og:url' => $articleUrl,
+        'og:type' => 'article',
+    ],
     'content' => static function () use ($article, $relatedNews, $articleError, $articleUrl, $articleTitle, $articleImage): void {
         $formatTanggal = static function (string $value): string {
             $value = trim($value);
