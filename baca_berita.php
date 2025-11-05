@@ -54,11 +54,23 @@ if (mb_strlen($articleDescriptionSource) > 150) {
     $articleDescription .= '...';
 }
 
+$articleImage = isset($article['berita_gambar']) && $article['berita_gambar'] !== ''
+    ? base_uri('uploads/berita/' . ltrim($article['berita_gambar'], '/'))
+    : base_uri('assets/images/favicon.ico');
+
+/**
+ * ✅ Buat URL absolut agar link bagikan valid di semua host
+ */
+$protocol = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? 'https' : 'http';
+$host = $_SERVER['HTTP_HOST'] ?? 'localhost';
+$path = rtrim(dirname($_SERVER['SCRIPT_NAME']), '/\\');
+$articleUrl = $protocol . '://' . $host . $path . '/baca_berita.php?id=' . urlencode((string) $articleId);
+
 render_base_layout([
     'title' => $articleTitle . ' | ' . app_config('name', 'Desa Sendangan'),
     'description' => $articleDescription,
     'activePage' => 'informasi',
-    'content' => static function () use ($article, $relatedNews, $articleError): void {
+    'content' => static function () use ($article, $relatedNews, $articleError, $articleUrl, $articleTitle, $articleImage): void {
         $formatTanggal = static function (string $value): string {
             $value = trim($value);
             if ($value === '') {
@@ -69,18 +81,9 @@ render_base_layout([
                 return $value;
             }
             $bulan = [
-                1 => 'Januari',
-                2 => 'Februari',
-                3 => 'Maret',
-                4 => 'April',
-                5 => 'Mei',
-                6 => 'Juni',
-                7 => 'Juli',
-                8 => 'Agustus',
-                9 => 'September',
-                10 => 'Oktober',
-                11 => 'November',
-                12 => 'Desember',
+                1 => 'Januari', 2 => 'Februari', 3 => 'Maret', 4 => 'April',
+                5 => 'Mei', 6 => 'Juni', 7 => 'Juli', 8 => 'Agustus',
+                9 => 'September', 10 => 'Oktober', 11 => 'November', 12 => 'Desember',
             ];
             $nomorBulan = (int) date('n', $timestamp);
             $namaBulan = $bulan[$nomorBulan] ?? date('F', $timestamp);
@@ -114,21 +117,21 @@ render_base_layout([
             }
         }
         ?>
+
         <section class="section article-hero">
             <div class="container">
                 <a class="article-back-link" href="<?= e(base_uri('info_publik.php?tab=berita')) ?>">&larr; Kembali ke daftar berita</a>
                 <?php if (!is_array($article)): ?>
                     <h1 class="article-title">Berita tidak ditemukan</h1>
-                    <p class="article-empty-text">Maaf, kami tidak menemukan berita yang Anda cari. Silakan kembali ke halaman informasi publik untuk melihat berita lainnya.</p>
+                    <p class="article-empty-text">Maaf, kami tidak menemukan berita yang Anda cari.</p>
                     <?php if ($articleError !== ''): ?>
                         <p class="article-empty-text article-empty-text--muted"><?= e($articleError) ?></p>
                     <?php endif; ?>
                 <?php else: ?>
                     <h1 class="article-title"><?= e((string) $article['berita_judul']) ?></h1>
                     <div class="article-meta">
-                        <?php
-                        $publishedAt = $formatTanggal((string) ($article['berita_created_at'] ?? ''));
-                        if ($publishedAt !== ''): ?>
+                        <?php $publishedAt = $formatTanggal((string) ($article['berita_created_at'] ?? '')); ?>
+                        <?php if ($publishedAt !== ''): ?>
                             <span class="article-meta__item">Dipublikasikan <?= e($publishedAt) ?></span>
                         <?php endif; ?>
                         <?php $views = (int) ($article['berita_dilihat'] ?? 0); ?>
@@ -140,17 +143,9 @@ render_base_layout([
             </div>
         </section>
 
-        <?php if (!is_array($article)): ?>
-            <section class="section">
-                <div class="container article-layout">
-                    <aside class="article-sidebar">
-                        <h2>Berita Terbaru</h2>
-                        <p>Kembali ke halaman <a href="<?= e(base_uri('info_publik.php?tab=berita')) ?>">Informasi Publik</a> untuk membaca kabar terbaru lainnya.</p>
-                    </aside>
-                </div>
-            </section>
-            <?php return; ?>
-        <?php endif; ?>
+        <?php if (!is_array($article)) {
+            return;
+        } ?>
 
         <section class="section article-media">
             <div class="container">
@@ -164,7 +159,35 @@ render_base_layout([
             <div class="container article-layout">
                 <article class="article-content">
                     <?= implode("\n", $contentBlocks) ?>
+
+                    <!-- Fitur Bagikan -->
+                    <div class="share-section" style="margin-top:2rem;">
+                        <h3>Bagikan Artikel Ini</h3>
+                        <div class="share-buttons" style="display:flex;gap:10px;flex-wrap:wrap;">
+                            <a href="https://www.facebook.com/sharer/sharer.php?u=<?= urlencode($articleUrl) ?>"
+                               target="_blank" rel="noopener noreferrer" class="btn-share"
+                               style="background:#1877F2;color:white;padding:8px 14px;border-radius:6px;text-decoration:none;">
+                                Facebook
+                            </a>
+                            <a href="https://twitter.com/intent/tweet?url=<?= urlencode($articleUrl) ?>&text=<?= urlencode($articleTitle) ?>"
+                               target="_blank" rel="noopener noreferrer" class="btn-share"
+                               style="background:#1DA1F2;color:white;padding:8px 14px;border-radius:6px;text-decoration:none;">
+                                Twitter (X)
+                            </a>
+                            <a href="https://api.whatsapp.com/send?text=<?= urlencode($articleTitle . ' - ' . $articleUrl) ?>"
+                               target="_blank" rel="noopener noreferrer" class="btn-share"
+                               style="background:#25D366;color:white;padding:8px 14px;border-radius:6px;text-decoration:none;">
+                                WhatsApp
+                            </a>
+                            <button onclick="copyArticleLink('<?= e($articleUrl) ?>')"
+                                    style="background:#607D8B;color:white;padding:8px 14px;border:none;border-radius:6px;cursor:pointer;">
+                                Salin Tautan
+                            </button>
+                        </div>
+                        <p id="copy-msg" style="font-size:0.9rem;color:green;margin-top:5px;display:none;">Tautan disalin!</p>
+                    </div>
                 </article>
+
                 <?php if ($relatedNews !== []): ?>
                     <aside class="article-sidebar">
                         <h2 class="article-sidebar__title">Berita lain</h2>
@@ -192,6 +215,16 @@ render_base_layout([
                 <?php endif; ?>
             </div>
         </section>
+
+        <script>
+            function copyArticleLink(link) {
+                navigator.clipboard.writeText(link).then(() => {
+                    const msg = document.getElementById('copy-msg');
+                    msg.style.display = 'block';
+                    setTimeout(() => msg.style.display = 'none', 2000);
+                });
+            }
+        </script>
         <?php
     },
     'styles' => [
