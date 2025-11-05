@@ -47,6 +47,7 @@ $logoUnsrat = asset('images/logo-unsrat.png');
                         $isActive = $active === ($item['page'] ?? '');
                         $hasChildren = isset($item['children']) && is_array($item['children']);
                         $itemHref = base_uri($item['href'] ?? '#');
+                        $isInfoPublik = strtolower($item['label'] ?? '') === 'informasi publik';
                     ?>
                     <li class="<?= $isActive ? 'active' : '' ?><?= $hasChildren ? ' has-children' : '' ?>">
                         <a href="<?= e($itemHref) ?>">
@@ -54,7 +55,7 @@ $logoUnsrat = asset('images/logo-unsrat.png');
                         </a>
 
                         <?php if ($hasChildren): ?>
-                            <ul class="dropdown">
+                            <ul class="dropdown<?= $isInfoPublik ? ' dropdown--info-publik' : '' ?>">
                                 <?php foreach ($item['children'] as $child): ?>
                                     <li>
                                         <a href="<?= e(base_uri($child['href'] ?? '#')) ?>">

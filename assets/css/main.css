@@ -2276,3 +2276,15 @@ body.modal-open {
         box-shadow: 0 4px 12px rgba(30, 136, 229, 0.2);
     }
 }
+
+@media (max-width: 960px) {
+    /* Sembunyikan dropdown Informasi Publik di mobile */
+    .main-navigation .dropdown--info-publik {
+        display: none !important;
+    }
+
+    /* Pastikan link utama tetap bisa diklik */
+    .main-navigation li.has-children > a {
+        pointer-events: auto;
+    }
+}
