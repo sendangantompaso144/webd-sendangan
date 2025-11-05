@@ -45,7 +45,7 @@ render_base_layout([
                                 <?php if (!empty($item['apbdes_edited_by'])): ?>
                                     <p class="card-meta">Disunting oleh <?= e((string) $item['apbdes_edited_by']) ?></p>
                                 <?php endif; ?>
-                                <a class="btn btn-primary" href="<?= e((string) ($item['apbdes_file'] ?? '#')) ?>" target="_blank" rel="noopener">
+                                <a class="btn btn-primary" href="uploads/apbdes/<?= e((string) ($item['apbdes_file'] ?? '#')) ?>" target="_blank" rel="noopener">
                                     Unduh Dokumen
                                 </a>
                             </article>
