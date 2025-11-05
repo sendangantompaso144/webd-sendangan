@@ -365,6 +365,140 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
         header('Location: admin_management.php#admin'); exit;
     }
+        // ——— ACCOUNT ACTIONS ———
+    // EDIT ADMIN LAIN (Superadmin only)
+    if ($action === 'edit_other_admin') {
+        if (!$isSuperadmin) {
+            $_SESSION['flash_error'][] = 'Akses ditolak.';
+            header('Location: admin_management.php#admin'); exit;
+        }
+
+        $targetId = (int)($_POST['target_admin_id'] ?? 0);
+        $nama     = trim((string)($_POST['admin_nama'] ?? ''));
+        $emailRaw = trim((string)($_POST['admin_email'] ?? ''));
+        $hpRaw    = trim((string)($_POST['admin_no_hp'] ?? ''));
+        $isSup    = isset($_POST['admin_is_superadmin']) ? 1 : 0;
+        $isDel    = isset($_POST['admin_is_deleted']) ? 1 : 0;
+
+        if ($targetId <= 0) {
+            $_SESSION['flash_error'][] = 'Target tidak valid.';
+            header('Location: admin_management.php#admin'); exit;
+        }
+        if ($nama === '') {
+            $_SESSION['flash_error'][] = 'Nama wajib diisi.';
+            header('Location: admin_management.php#admin'); exit;
+        }
+
+        $email = ($emailRaw === '') ? null : $emailRaw;
+        if ($email !== null && !filter_var($email, FILTER_VALIDATE_EMAIL)) {
+            $_SESSION['flash_error'][] = 'Format email tidak valid.';
+            header('Location: admin_management.php#admin'); exit;
+        }
+
+        $hp = ($hpRaw === '') ? null : $hpRaw;
+        if ($hp !== null && !preg_match('~^\+?\d{8,15}$~', $hp)) {
+            $_SESSION['flash_error'][] = 'Format nomor HP tidak valid.';
+            header('Location: admin_management.php#admin'); exit;
+        }
+
+        try {
+            // Ambil status sebelumnya
+            $st = $pdo->prepare('SELECT admin_is_superadmin FROM admin WHERE admin_id = ? LIMIT 1');
+            $st->execute([$targetId]);
+            $prev = $st->fetch(PDO::FETCH_ASSOC);
+            if (!$prev) {
+                $_SESSION['flash_error'][] = 'Akun tidak ditemukan.';
+                header('Location: admin_management.php#admin'); exit;
+            }
+
+            // Cek unik email/HP (abaikan NULL) untuk admin lain
+            if ($email !== null) {
+                $st = $pdo->prepare('SELECT COUNT(*) FROM admin WHERE admin_email = ? AND admin_id <> ?');
+                $st->execute([$email, $targetId]);
+                if ((int)$st->fetchColumn() > 0) {
+                    $_SESSION['flash_error'][] = 'Email sudah digunakan admin lain.';
+                    header('Location: admin_management.php#admin'); exit;
+                }
+            }
+            if ($hp !== null) {
+                $st = $pdo->prepare('SELECT COUNT(*) FROM admin WHERE admin_no_hp = ? AND admin_id <> ?');
+                $st->execute([$hp, $targetId]);
+                if ((int)$st->fetchColumn() > 0) {
+                    $_SESSION['flash_error'][] = 'No. HP sudah digunakan admin lain.';
+                    header('Location: admin_management.php#admin'); exit;
+                }
+            }
+
+            // Larangan menonaktifkan / menurunkan pangkat superadmin terakhir
+            $wasSuper = (int)($prev['admin_is_superadmin'] ?? 0) === 1;
+            if ($wasSuper && ($isSup === 0 || $isDel === 1)) {
+                $st = $pdo->query('SELECT COUNT(*) FROM admin WHERE admin_is_superadmin = 1');
+                $totalSuper = (int)$st->fetchColumn();
+                if ($totalSuper <= 1) {
+                    $_SESSION['flash_error'][] = 'Tidak dapat menonaktifkan atau menurunkan superadmin terakhir.';
+                    header('Location: admin_management.php#admin'); exit;
+                }
+            }
+
+            $stmt = $pdo->prepare('
+                UPDATE admin
+                SET admin_nama = ?, admin_email = ?, admin_no_hp = ?, admin_is_superadmin = ?, admin_is_deleted = ?, admin_updated_at = NOW()
+                WHERE admin_id = ?
+            ');
+            $stmt->execute([$nama, $email, $hp, $isSup, $isDel, $targetId]);
+
+            $_SESSION['flash'][] = 'Akun admin #' . $targetId . ' berhasil diperbarui.';
+        } catch (Throwable $e) {
+            $_SESSION['flash_error'][] = 'Gagal memperbarui akun: ' . $e->getMessage();
+        }
+
+        header('Location: admin_management.php#admin'); exit;
+    }
+
+    // RESET PASSWORD ADMIN LAIN (Superadmin only)
+    if ($action === 'reset_admin_password') {
+        if (!$isSuperadmin) {
+            $_SESSION['flash_error'][] = 'Akses ditolak.';
+            header('Location: admin_management.php#admin'); exit;
+        }
+
+        $targetId = (int)($_POST['target_admin_id'] ?? 0);
+        $pass1 = (string)($_POST['new_password'] ?? '');
+        $pass2 = (string)($_POST['new_password_repeat'] ?? '');
+
+        if ($targetId <= 0) {
+            $_SESSION['flash_error'][] = 'Target tidak valid.';
+            header('Location: admin_management.php#admin'); exit;
+        }
+        if ($pass1 === '' || strlen($pass1) < 8) {
+            $_SESSION['flash_error'][] = 'Password minimal 8 karakter.';
+            header('Location: admin_management.php#admin'); exit;
+        }
+        if ($pass1 !== $pass2) {
+            $_SESSION['flash_error'][] = 'Ketik ulang password tidak sama.';
+            header('Location: admin_management.php#admin'); exit;
+        }
+
+        try {
+            // Pastikan target ada
+            $st = $pdo->prepare('SELECT admin_id FROM admin WHERE admin_id = ? LIMIT 1');
+            $st->execute([$targetId]);
+            if (!$st->fetch(PDO::FETCH_ASSOC)) {
+                $_SESSION['flash_error'][] = 'Akun tidak ditemukan.';
+                header('Location: admin_management.php#admin'); exit;
+            }
+
+            $hash = password_hash($pass1, PASSWORD_DEFAULT);
+            $up = $pdo->prepare('UPDATE admin SET admin_password = ?, admin_updated_at = NOW() WHERE admin_id = ?');
+            $up->execute([$hash, $targetId]);
+
+            $_SESSION['flash'][] = 'Password untuk akun #' . $targetId . ' berhasil direset.';
+        } catch (Throwable $e) {
+            $_SESSION['flash_error'][] = 'Gagal reset password: ' . $e->getMessage();
+        }
+
+        header('Location: admin_management.php#admin'); exit;
+    }
 
     // RESTORE ADMIN (Superadmin only)
     if ($action === 'restore_admin') {
@@ -3179,41 +3313,63 @@ function render_modal(string $formId, array $definition, array $oldInputs, array
                 <th>Aksi</th>
             </tr>
             </thead>
-            <tbody>
+                        <tbody>
             <?php if ($otherAdmins === []): ?>
                 <tr><td colspan="9" class="empty-state">Belum ada admin lain.</td></tr>
             <?php else: ?>
-                <?php foreach ($otherAdmins as $a): 
-                    $role = ((int)($a['admin_is_superadmin'] ?? 0) === 1) ? 'Superadmin' : 'Regular';
-                    $del  = ((int)($a['admin_is_deleted'] ?? 0) === 1) ? 'Ya' : 'Tidak';
+                <?php foreach ($otherAdmins as $a):
+                    $aid  = (int)($a['admin_id'] ?? 0);
+                    $isSupRow = (int)($a['admin_is_superadmin'] ?? 0) === 1;
+                    $isDelRow = (int)($a['admin_is_deleted'] ?? 0) === 1;
+
+                    $payload = [
+                        'id'            => $aid,
+                        'nama'          => (string)($a['admin_nama'] ?? ''),
+                        'email'         => (string)($a['admin_email'] ?? ''),
+                        'nohp'          => (string)($a['admin_no_hp'] ?? ''),
+                        'is_superadmin' => $isSupRow ? 1 : 0,
+                        'is_deleted'    => $isDelRow ? 1 : 0,
+                    ];
+                    $dataAttr = e(json_encode($payload, JSON_HEX_TAG|JSON_HEX_APOS|JSON_HEX_QUOT|JSON_HEX_AMP|JSON_UNESCAPED_UNICODE));
                 ?>
                     <tr>
-                        <td>#<?= e((string)$a['admin_id']) ?></td>
+                        <td>#<?= e((string)$aid) ?></td>
                         <td><?= e((string)$a['admin_nama']) ?></td>
                         <td><?= e((string)($a['admin_no_hp'] ?? '-')) ?></td>
                         <td><?= e((string)($a['admin_email'] ?? '-')) ?></td>
-                        <td><?= ((int)($a['admin_is_superadmin'] ?? 0) === 1) ? 'Superadmin' : 'Regular' ?></td>
-                        <td><?= ((int)($a['admin_is_deleted'] ?? 0) === 1) ? 'Ya' : 'Tidak' ?></td>
+                        <td><?= $isSupRow ? 'Superadmin' : 'Regular' ?></td>
+                        <td><?= $isDelRow ? 'Ya' : 'Tidak' ?></td>
                         <td><?= e(format_datetime($a['admin_created_at'] ?? null)) ?></td>
                         <td><?= e(format_datetime($a['admin_updated_at'] ?? null)) ?></td>
                         <td>
-                            <?php if ((int)($a['admin_is_superadmin'] ?? 0) === 1): ?>
-                                —
-                            <?php else: ?>
-                                <?php if ((int)($a['admin_is_deleted'] ?? 0) === 1): ?>
-                                    <form method="post" action="admin_management.php#admin" class="table-actions__form" onsubmit="return confirm('Pulihkan akun <?= e((string)($a['admin_nama'] ?? '')) ?> ?');">
-                                        <input type="hidden" name="action" value="restore_admin">
-                                        <input type="hidden" name="target_admin_id" value="<?= e((string)$a['admin_id']) ?>">
-                                        <button type="submit" class="btn-outline">Pulihkan</button>
-                                    </form>
+                            <div class="table-actions" style="gap:6px; flex-wrap:wrap;">
+                                <button type="button" class="btn-outline"
+                                        data-open-modal="admin-edit"
+                                        data-admin='<?= $dataAttr ?>'>Edit</button>
+
+                                <button type="button" class="btn-outline"
+                                        data-open-modal="admin-reset"
+                                        data-admin-id="<?= e((string)$aid) ?>">Reset Password</button>
+
+                                <?php if (!$isSupRow): ?>
+                                    <?php if ($isDelRow): ?>
+                                        <form method="post" action="admin_management.php#admin" class="table-actions__form" onsubmit="return confirm('Pulihkan akun <?= e((string)($a['admin_nama'] ?? '')) ?> ?');">
+                                            <input type="hidden" name="action" value="restore_admin">
+                                            <input type="hidden" name="target_admin_id" value="<?= e((string)$aid) ?>">
+                                            <button type="submit" class="btn-outline">Pulihkan</button>
+                                        </form>
+                                    <?php else: ?>
+                                        <form method="post" action="admin_management.php#admin" class="table-actions__form" onsubmit="return confirm('Tandai hapus akun <?= e((string)($a['admin_nama'] ?? '')) ?> ?');">
+                                            <input type="hidden" name="action" value="soft_delete_admin">
+                                            <input type="hidden" name="target_admin_id" value="<?= e((string)$aid) ?>">
+                                            <button type="submit" class="btn-danger">Soft Delete</button>
+                                        </form>
+                                    <?php endif; ?>
                                 <?php else: ?>
-                                    <form method="post" action="admin_management.php#admin" class="table-actions__form" onsubmit="return confirm('Tandai hapus akun <?= e((string)($a['admin_nama'] ?? '')) ?> ?');">
-                                        <input type="hidden" name="action" value="soft_delete_admin">
-                                        <input type="hidden" name="target_admin_id" value="<?= e((string)$a['admin_id']) ?>">
-                                        <button type="submit" class="btn-danger">Soft Delete</button>
-                                    </form>
+                                    <!-- Superadmin lain: tidak ada soft delete -->
+                                    —
                                 <?php endif; ?>
-                            <?php endif; ?>
+                            </div>
                         </td>
                     </tr>
                 <?php endforeach; ?>
@@ -3638,6 +3794,70 @@ function render_modal(string $formId, array $definition, array $oldInputs, array
     <?php foreach ($tableForms as $modalId => $definition): ?>
         <?= render_modal($modalId, $definition, $formOld[$modalId] ?? [], $formErrors[$modalId] ?? []) ?>
     <?php endforeach; ?>
+        <div class="modal-backdrop" data-modal="admin-edit">
+        <div class="modal">
+            <div class="modal__header">
+                <h3 class="modal__title">Edit Akun Admin</h3>
+                <button type="button" class="modal__close" data-close-modal aria-label="Tutup">&times;</button>
+            </div>
+            <div class="modal__body">
+                <form method="post" action="admin_management.php#admin" autocomplete="off" id="admin-edit-form">
+                    <input type="hidden" name="action" value="edit_other_admin">
+                    <input type="hidden" name="target_admin_id" id="admin_edit_id">
+                    <div class="modal__field">
+                        <label for="admin_edit_nama">Nama <span class="required">*</span></label>
+                        <input type="text" name="admin_nama" id="admin_edit_nama" required>
+                    </div>
+                    <div class="modal__field">
+                        <label for="admin_edit_email">Email</label>
+                        <input type="email" name="admin_email" id="admin_edit_email" placeholder="opsional">
+                    </div>
+                    <div class="modal__field">
+                        <label for="admin_edit_hp">No. HP</label>
+                        <input type="text" name="admin_no_hp" id="admin_edit_hp" placeholder="+62… (opsional)">
+                        <small class="field-hint">Format: 8–15 digit, boleh diawali +62.</small>
+                    </div>
+                    <div class="modal__field modal__field--checkbox">
+                        <label><input type="checkbox" name="admin_is_superadmin" id="admin_edit_is_super"> Jadikan Superadmin</label>
+                    </div>
+                    <div class="modal__field modal__field--checkbox">
+                        <label><input type="checkbox" name="admin_is_deleted" id="admin_edit_is_deleted"> Tandai terhapus (soft delete)</label>
+                    </div>
+                    <div class="modal__actions">
+                        <button type="button" class="btn-secondary" data-close-modal>Batal</button>
+                        <button type="submit" class="btn-primary">Simpan Perubahan</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+        <div class="modal-backdrop" data-modal="admin-reset">
+        <div class="modal">
+            <div class="modal__header">
+                <h3 class="modal__title">Reset Password Admin</h3>
+                <button type="button" class="modal__close" data-close-modal aria-label="Tutup">&times;</button>
+            </div>
+            <div class="modal__body">
+                <form method="post" action="admin_management.php#admin" autocomplete="off" id="admin-reset-form">
+                    <input type="hidden" name="action" value="reset_admin_password">
+                    <input type="hidden" name="target_admin_id" id="admin_reset_id">
+                    <div class="modal__field">
+                        <label for="admin_reset_pass1">Password Baru <span class="required">*</span></label>
+                        <input type="password" name="new_password" id="admin_reset_pass1" minlength="8" required>
+                    </div>
+                    <div class="modal__field">
+                        <label for="admin_reset_pass2">Ketik Ulang Password Baru <span class="required">*</span></label>
+                        <input type="password" name="new_password_repeat" id="admin_reset_pass2" minlength="8" required>
+                    </div>
+                    <div class="modal__actions">
+                        <button type="button" class="btn-secondary" data-close-modal>Batal</button>
+                        <button type="submit" class="btn-primary">Reset Password</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
     <div class="modal-backdrop" data-modal="admin-create">
         <div class="modal">
             <div class="modal__header">
@@ -4461,5 +4681,50 @@ function render_modal(string $formId, array $definition, array $oldInputs, array
     });
 
 </script>
+<script>
+document.addEventListener('click', function (e) {
+  // Modal Edit Admin
+  const btnEdit = e.target.closest('[data-open-modal="admin-edit"]');
+  if (btnEdit) {
+    try {
+      const payload = JSON.parse(btnEdit.getAttribute('data-admin') || '{}');
+      const m = document.querySelector('.modal-backdrop[data-modal="admin-edit"]');
+      if (m) {
+        m.classList.add('is-open');
+        document.body.classList.add('modal-open');
+        m.querySelector('#admin_edit_id').value = payload.id || '';
+        m.querySelector('#admin_edit_nama').value = payload.nama || '';
+        m.querySelector('#admin_edit_email').value = payload.email || '';
+        m.querySelector('#admin_edit_hp').value = payload.nohp || '';
+        m.querySelector('#admin_edit_is_super').checked = (payload.is_superadmin === 1);
+        m.querySelector('#admin_edit_is_deleted').checked = (payload.is_deleted === 1);
+      }
+    } catch (_) {}
+  }
+
+  // Modal Reset Password
+  const btnReset = e.target.closest('[data-open-modal="admin-reset"]');
+  if (btnReset) {
+    const id = btnReset.getAttribute('data-admin-id') || '';
+    const m = document.querySelector('.modal-backdrop[data-modal="admin-reset"]');
+    if (m) {
+      m.classList.add('is-open');
+      document.body.classList.add('modal-open');
+      m.querySelector('#admin_reset_id').value = id;
+    }
+  }
+
+  // Close modal generic (pakai atribut yang sudah ada)
+  const btnClose = e.target.closest('[data-close-modal]');
+  if (btnClose) {
+    const mb = btnClose.closest('.modal-backdrop');
+    if (mb) {
+      mb.classList.remove('is-open');
+      document.body.classList.remove('modal-open');
+    }
+  }
+});
+</script>
+
 </body>
 </html>
