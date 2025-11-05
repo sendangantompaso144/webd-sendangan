@@ -322,6 +322,72 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
         header('Location: admin_management.php#admin'); exit;
     }
+        // ——— ACCOUNT ACTIONS ———
+    // SOFT DELETE ADMIN (Superadmin only)
+    if ($action === 'soft_delete_admin') {
+        if (!$isSuperadmin) {
+            $_SESSION['flash_error'][] = 'Akses ditolak.';
+            header('Location: admin_management.php#admin'); exit;
+        }
+
+        $targetId = (int)($_POST['target_admin_id'] ?? 0);
+        if ($targetId <= 0 || $targetId === $currentAdminId) {
+            $_SESSION['flash_error'][] = 'Target tidak valid.';
+            header('Location: admin_management.php#admin'); exit;
+        }
+
+        try {
+            $st = $pdo->prepare('SELECT admin_is_superadmin FROM admin WHERE admin_id = ? LIMIT 1');
+            $st->execute([$targetId]);
+            $row = $st->fetch(PDO::FETCH_ASSOC);
+
+            if (!$row) {
+                $_SESSION['flash_error'][] = 'Akun tidak ditemukan.';
+            } elseif ((int)$row['admin_is_superadmin'] === 1) {
+                $_SESSION['flash_error'][] = 'Tidak dapat menghapus superadmin.';
+            } else {
+                $up = $pdo->prepare('UPDATE admin SET admin_is_deleted = 1, admin_updated_at = NOW() WHERE admin_id = ?');
+                $up->execute([$targetId]);
+                $_SESSION['flash'][] = 'Akun ditandai terhapus.';
+            }
+        } catch (Throwable $e) {
+            $_SESSION['flash_error'][] = 'Gagal menghapus: ' . $e->getMessage();
+        }
+
+        header('Location: admin_management.php#admin'); exit;
+    }
+
+    // RESTORE ADMIN (Superadmin only)
+    if ($action === 'restore_admin') {
+        if (!$isSuperadmin) {
+            $_SESSION['flash_error'][] = 'Akses ditolak.';
+            header('Location: admin_management.php#admin'); exit;
+        }
+
+        $targetId = (int)($_POST['target_admin_id'] ?? 0);
+        if ($targetId <= 0 || $targetId === $currentAdminId) {
+            $_SESSION['flash_error'][] = 'Target tidak valid.';
+            header('Location: admin_management.php#admin'); exit;
+        }
+
+        try {
+            $st = $pdo->prepare('SELECT admin_is_superadmin FROM admin WHERE admin_id = ? LIMIT 1');
+            $st->execute([$targetId]);
+            $row = $st->fetch(PDO::FETCH_ASSOC);
+
+            if (!$row) {
+                $_SESSION['flash_error'][] = 'Akun tidak ditemukan.';
+            } else {
+                $up = $pdo->prepare('UPDATE admin SET admin_is_deleted = 0, admin_updated_at = NOW() WHERE admin_id = ?');
+                $up->execute([$targetId]);
+                $_SESSION['flash'][] = 'Akun dipulihkan.';
+            }
+        } catch (Throwable $e) {
+            $_SESSION['flash_error'][] = 'Gagal memulihkan: ' . $e->getMessage();
+        }
+
+        header('Location: admin_management.php#admin'); exit;
+    }
 
         // ————— ACCOUNT ACTIONS —————
     if ($action === 'update_admin_nama') {
@@ -3065,7 +3131,7 @@ function render_modal(string $formId, array $definition, array $oldInputs, array
     <header class="card__header" style="margin-top:8px;">
         <div>
             <h2>Daftar Admin Lain</h2>
-            <p>Seluruh admin kecuali akun yang sedang login (read-only).</p>
+            <p>Seluruh admin kecuali akun yang sedang login. Anda dapat menandai hapus (soft delete) atau memulihkan akun.</p>
         </div>
         <div class="card__tools">
             <span class="badge"><?= count($otherAdmins) ?> akun</span>
@@ -3085,11 +3151,12 @@ function render_modal(string $formId, array $definition, array $oldInputs, array
                 <th>Deleted?</th>
                 <th>Dibuat</th>
                 <th>Diperbarui</th>
+                <th>Aksi</th>
             </tr>
             </thead>
             <tbody>
             <?php if ($otherAdmins === []): ?>
-                <tr><td colspan="8" class="empty-state">Belum ada admin lain.</td></tr>
+                <tr><td colspan="9" class="empty-state">Belum ada admin lain.</td></tr>
             <?php else: ?>
                 <?php foreach ($otherAdmins as $a): 
                     $role = ((int)($a['admin_is_superadmin'] ?? 0) === 1) ? 'Superadmin' : 'Regular';
@@ -3100,10 +3167,29 @@ function render_modal(string $formId, array $definition, array $oldInputs, array
                         <td><?= e((string)$a['admin_nama']) ?></td>
                         <td><?= e((string)($a['admin_no_hp'] ?? '-')) ?></td>
                         <td><?= e((string)($a['admin_email'] ?? '-')) ?></td>
-                        <td><?= e($role) ?></td>
-                        <td><?= e($del) ?></td>
+                        <td><?= ((int)($a['admin_is_superadmin'] ?? 0) === 1) ? 'Superadmin' : 'Regular' ?></td>
+                        <td><?= ((int)($a['admin_is_deleted'] ?? 0) === 1) ? 'Ya' : 'Tidak' ?></td>
                         <td><?= e(format_datetime($a['admin_created_at'] ?? null)) ?></td>
                         <td><?= e(format_datetime($a['admin_updated_at'] ?? null)) ?></td>
+                        <td>
+                            <?php if ((int)($a['admin_is_superadmin'] ?? 0) === 1): ?>
+                                —
+                            <?php else: ?>
+                                <?php if ((int)($a['admin_is_deleted'] ?? 0) === 1): ?>
+                                    <form method="post" action="admin_management.php#admin" class="table-actions__form" onsubmit="return confirm('Pulihkan akun <?= e((string)($a['admin_nama'] ?? '')) ?> ?');">
+                                        <input type="hidden" name="action" value="restore_admin">
+                                        <input type="hidden" name="target_admin_id" value="<?= e((string)$a['admin_id']) ?>">
+                                        <button type="submit" class="btn-outline">Pulihkan</button>
+                                    </form>
+                                <?php else: ?>
+                                    <form method="post" action="admin_management.php#admin" class="table-actions__form" onsubmit="return confirm('Tandai hapus akun <?= e((string)($a['admin_nama'] ?? '')) ?> ?');">
+                                        <input type="hidden" name="action" value="soft_delete_admin">
+                                        <input type="hidden" name="target_admin_id" value="<?= e((string)$a['admin_id']) ?>">
+                                        <button type="submit" class="btn-danger">Soft Delete</button>
+                                    </form>
+                                <?php endif; ?>
+                            <?php endif; ?>
+                        </td>
                     </tr>
                 <?php endforeach; ?>
             <?php endif; ?>
