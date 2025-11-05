@@ -249,6 +249,80 @@ $tableForms = [
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $action = (string) ($_POST['action'] ?? '');
+    // ————— ACCOUNT ACTIONS —————
+    // CREATE ADMIN (SUPERADMIN ONLY)
+    if ($action === 'create_admin') {
+        if (!$isSuperadmin) {
+            $_SESSION['flash_error'][] = 'Anda tidak berwenang membuat akun baru.';
+            header('Location: admin_management.php#admin'); exit;
+        }
+
+        $nama     = trim((string)($_POST['admin_nama'] ?? ''));
+        $emailRaw = trim((string)($_POST['admin_email'] ?? ''));
+        $hpRaw    = trim((string)($_POST['admin_no_hp'] ?? ''));
+        $password = (string)($_POST['admin_password'] ?? '');
+        $isSup    = isset($_POST['admin_is_superadmin']) ? 1 : 0;
+
+        $errors = [];
+        if ($nama === '')                          $errors[] = 'Nama wajib diisi.';
+        if ($password === '' || strlen($password) < 8) $errors[] = 'Password minimal 8 karakter.';
+
+        $email = $emailRaw === '' ? null : $emailRaw;
+        if ($email !== null && !filter_var($email, FILTER_VALIDATE_EMAIL)) {
+            $errors[] = 'Format email tidak valid.';
+        }
+
+        $hp = $hpRaw === '' ? null : $hpRaw;
+        if ($hp !== null && !preg_match('~^\+?\d{8,15}$~', $hp)) {
+            $errors[] = 'Format nomor HP tidak valid.';
+        }
+
+        if ($errors !== []) {
+            foreach ($errors as $err) $_SESSION['flash_error'][] = $err;
+            header('Location: admin_management.php#admin'); exit;
+        }
+
+        try {
+            // Cek unik email (jika diisi)
+            if ($email !== null) {
+                $st = $pdo->prepare('SELECT COUNT(*) FROM admin WHERE admin_email = ?');
+                $st->execute([$email]);
+                if ((int)$st->fetchColumn() > 0) {
+                    $_SESSION['flash_error'][] = 'Email sudah digunakan.';
+                    header('Location: admin_management.php#admin'); exit;
+                }
+            }
+            // Cek unik no HP (jika diisi)
+            if ($hp !== null) {
+                $st = $pdo->prepare('SELECT COUNT(*) FROM admin WHERE admin_no_hp = ?');
+                $st->execute([$hp]);
+                if ((int)$st->fetchColumn() > 0) {
+                    $_SESSION['flash_error'][] = 'No. HP sudah digunakan.';
+                    header('Location: admin_management.php#admin'); exit;
+                }
+            }
+
+            $hash = password_hash($password, PASSWORD_DEFAULT);
+            $stmt = $pdo->prepare('
+                INSERT INTO admin (admin_nama, admin_password, admin_no_hp, admin_email, admin_is_deleted, admin_is_superadmin)
+                VALUES (?, ?, ?, ?, 0, ?)
+            ');
+            $stmt->execute([$nama, $hash, $hp, $email, $isSup]);
+
+            $_SESSION['flash'][] = 'Akun admin berhasil dibuat.';
+        } catch (Throwable $e) {
+            // fallback untuk duplicate key dari DB
+            $msg = (string)$e->getMessage();
+            if (str_contains($msg, 'Duplicate') || str_contains($msg, '1062')) {
+                $_SESSION['flash_error'][] = 'Email atau No. HP sudah terdaftar.';
+            } else {
+                $_SESSION['flash_error'][] = 'Gagal membuat akun: ' . $e->getMessage();
+            }
+        }
+
+        header('Location: admin_management.php#admin'); exit;
+    }
+
         // ————— ACCOUNT ACTIONS —————
     if ($action === 'update_admin_nama') {
         $new = trim((string)($_POST['admin_nama'] ?? ''));
@@ -1355,90 +1429,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
         header('Location: admin_management.php#apbdes');
         exit;
-    }
-
-        if ($action === 'update_hukum_tua_foto') {
-        // Validasi input
-        $file = $_FILES['hukumtua_foto'] ?? null;
-        if (!is_array($file) || ($file['error'] ?? UPLOAD_ERR_NO_FILE) === UPLOAD_ERR_NO_FILE) {
-            $_SESSION['flash_error'][] = 'Pilih foto terlebih dahulu.';
-            header('Location: admin_management.php#data'); exit;
-        }
-        if (($file['error'] ?? UPLOAD_ERR_OK) !== UPLOAD_ERR_OK) {
-            $_SESSION['flash_error'][] = 'Upload gagal.'; 
-            header('Location: admin_management.php#data'); exit;
-        }
-
-        // Cek MIME
-        $finfo = finfo_open(FILEINFO_MIME_TYPE);
-        $mime  = $finfo ? (string) finfo_file($finfo, $file['tmp_name']) : '';
-        if ($finfo) finfo_close($finfo);
-        if (!in_array($mime, ['image/jpeg','image/png','image/webp'], true)) {
-            $_SESSION['flash_error'][] = 'Format harus JPG/PNG/WEBP.';
-            header('Location: admin_management.php#data'); exit;
-        }
-
-        // Siapkan folder
-        $dir = base_path('uploads/assets');
-        if (!is_dir($dir) && !mkdir($dir, 0755, true) && !is_dir($dir)) {
-            $_SESSION['flash_error'][] = 'Folder uploads/assets tidak bisa dibuat.';
-            header('Location: admin_management.php#data'); exit;
-        }
-
-        // Nama unik
-        $newName = 'hukumtua_' . uniqid('', true) . '.webp';
-        $target  = $dir . DIRECTORY_SEPARATOR . $newName;
-
-        // Convert → WebP
-        $ok = false;
-        if ($mime === 'image/webp') {
-            $ok = move_uploaded_file($file['tmp_name'], $target);
-        } else {
-            if (!function_exists('imagewebp')) {
-                $_SESSION['flash_error'][] = 'Konversi ke WebP tidak tersedia di server.';
-                header('Location: admin_management.php#data'); exit;
-            }
-            $im = null;
-            if ($mime === 'image/jpeg') $im = @imagecreatefromjpeg($file['tmp_name']);
-            if ($mime === 'image/png')  { $im = @imagecreatefrompng($file['tmp_name']); if ($im) { imagepalettetotruecolor($im); imagealphablending($im,false); imagesavealpha($im,true); } }
-            if ($im) { $ok = imagewebp($im, $target, 90); imagedestroy($im); }
-        }
-
-        if (!$ok) {
-            if (is_file($target)) @unlink($target);
-            $_SESSION['flash_error'][] = 'Gagal memproses gambar.';
-            header('Location: admin_management.php#data'); exit;
-        }
-
-        // Ambil file lama (jika ada)
-        try {
-            $stmt = $pdo->prepare('SELECT data_value FROM data WHERE data_key = ? LIMIT 1');
-            $stmt->execute(['media.hukum_tua_foto']);
-            $old = $stmt->fetch(PDO::FETCH_ASSOC);
-        } catch (Throwable $e) {
-            $old = null;
-        }
-
-        // Update DB
-        try {
-            $by = (string)($adminSession['name'] ?? $adminSession['email'] ?? 'admin#'.$adminSession['id'] ?? '');
-            $stmt = $pdo->prepare('UPDATE data SET data_value = ?, data_updated_at = NOW(), data_updated_by = ? WHERE data_key = ? LIMIT 1');
-            $stmt->execute([$newName, $by !== '' ? $by : null, 'media.hukum_tua_foto']);
-            $_SESSION['flash'][] = 'Foto Hukum Tua berhasil diperbarui.';
-        } catch (Throwable $e) {
-            @unlink($target);
-            $_SESSION['flash_error'][] = 'Gagal menyimpan nama file: ' . $e->getMessage();
-            header('Location: admin_management.php#data'); exit;
-        }
-
-        // Hapus file lama
-        $oldFile = trim((string)($old['data_value'] ?? ''));
-        if ($oldFile !== '') {
-            $oldPath = base_path('uploads/assets/' . ltrim($oldFile, "/\\"));
-            if (is_file($oldPath)) @unlink($oldPath);
-        }
-
-        header('Location: admin_management.php#data'); exit;
     }
 
     if ($action === 'upload_media_data') {
@@ -3071,23 +3061,22 @@ function render_modal(string $formId, array $definition, array $oldInputs, array
     ';
 
     // ——— Tampilkan "Daftar Admin Lain" hanya untuk superadmin ———
-    if ($isSuperadmin) {
-        // Pastikan $otherAdmins aman (opsional, kalau belum didefinisikan di atas)
-        $otherAdmins = $otherAdmins ?? [];
-
-        echo '
-        <header class="card__header" style="margin-top:8px;">
-            <div>
+    if ($isSuperadmin): ?>
+    <header class="card__header" style="margin-top:8px;">
+        <div>
             <h2>Daftar Admin Lain</h2>
             <p>Seluruh admin kecuali akun yang sedang login (read-only).</p>
-            </div>
-            <div class="card__tools"><span class="badge">' . count($otherAdmins) . ' akun</span></div>
-        </header>
+        </div>
+        <div class="card__tools">
+            <span class="badge"><?= count($otherAdmins) ?> akun</span>
+            <button type="button" class="btn-add" data-open-modal="admin-create">Tambah Akun</button>
+        </div>
+    </header>
 
-        <div class="table-wrapper">
-            <table>
+    <div class="table-wrapper">
+        <table>
             <thead>
-                <tr>
+            <tr>
                 <th>ID</th>
                 <th>Nama</th>
                 <th>No. HP</th>
@@ -3096,40 +3085,36 @@ function render_modal(string $formId, array $definition, array $oldInputs, array
                 <th>Deleted?</th>
                 <th>Dibuat</th>
                 <th>Diperbarui</th>
-                </tr>
+            </tr>
             </thead>
-            <tbody>';
-
-        if ($otherAdmins === []) {
-            echo '<tr><td colspan="8" class="empty-state">Belum ada admin lain.</td></tr>';
-        } else {
-            foreach ($otherAdmins as $a) {
-                $role = ((int)($a['admin_is_superadmin'] ?? 0) === 1) ? 'Superadmin' : 'Regular';
-                $del  = ((int)($a['admin_is_deleted'] ?? 0) === 1) ? 'Ya' : 'Tidak';
-                echo '<tr>'
-                    . '<td>#' . e((string)$a['admin_id']) . '</td>'
-                    . '<td>' . e((string)$a['admin_nama']) . '</td>'
-                    . '<td>' . e((string)($a['admin_no_hp'] ?? '-')) . '</td>'
-                    . '<td>' . e((string)($a['admin_email'] ?? '-')) . '</td>'
-                    . '<td>' . e($role) . '</td>'
-                    . '<td>' . e($del) . '</td>'
-                    . '<td>' . e(format_datetime($a['admin_created_at'] ?? null)) . '</td>'
-                    . '<td>' . e(format_datetime($a['admin_updated_at'] ?? null)) . '</td>'
-                . '</tr>';
-            }
-        }
-
-        echo '
+            <tbody>
+            <?php if ($otherAdmins === []): ?>
+                <tr><td colspan="8" class="empty-state">Belum ada admin lain.</td></tr>
+            <?php else: ?>
+                <?php foreach ($otherAdmins as $a): 
+                    $role = ((int)($a['admin_is_superadmin'] ?? 0) === 1) ? 'Superadmin' : 'Regular';
+                    $del  = ((int)($a['admin_is_deleted'] ?? 0) === 1) ? 'Ya' : 'Tidak';
+                ?>
+                    <tr>
+                        <td>#<?= e((string)$a['admin_id']) ?></td>
+                        <td><?= e((string)$a['admin_nama']) ?></td>
+                        <td><?= e((string)($a['admin_no_hp'] ?? '-')) ?></td>
+                        <td><?= e((string)($a['admin_email'] ?? '-')) ?></td>
+                        <td><?= e($role) ?></td>
+                        <td><?= e($del) ?></td>
+                        <td><?= e(format_datetime($a['admin_created_at'] ?? null)) ?></td>
+                        <td><?= e(format_datetime($a['admin_updated_at'] ?? null)) ?></td>
+                    </tr>
+                <?php endforeach; ?>
+            <?php endif; ?>
             </tbody>
-            </table>
-        </div>
-        ';
-    }
-
+        </table>
+    </div>
+<?php endif; ?>
+<?php
     echo '
     </section>';
-    ?>
-
+?>
 
             <?= section_card(
                 'data',
@@ -3542,6 +3527,49 @@ function render_modal(string $formId, array $definition, array $oldInputs, array
     <?php foreach ($tableForms as $modalId => $definition): ?>
         <?= render_modal($modalId, $definition, $formOld[$modalId] ?? [], $formErrors[$modalId] ?? []) ?>
     <?php endforeach; ?>
+    <div class="modal-backdrop" data-modal="admin-create">
+        <div class="modal">
+            <div class="modal__header">
+            <h3 class="modal__title">Tambah Akun Admin</h3>
+            <button type="button" class="modal__close" data-close-modal aria-label="Tutup">&times;</button>
+            </div>
+            <div class="modal__body">
+            <form method="post" action="admin_management.php#admin" autocomplete="off" id="admin-create-form">
+                <input type="hidden" name="action" value="create_admin">
+                <div class="modal__field">
+                <label for="admin_create_nama">Nama <span class="required">*</span></label>
+                <input type="text" id="admin_create_nama" name="admin_nama" required>
+                </div>
+                <div class="modal__field">
+                <label for="admin_create_email">Email</label>
+                <input type="email" id="admin_create_email" name="admin_email" placeholder="opsional">
+                <small class="field-hint">Biarkan kosong jika tidak ingin menambahkan email.</small>
+                </div>
+                <div class="modal__field">
+                <label for="admin_create_hp">No. HP</label>
+                <input type="text" id="admin_create_hp" name="admin_no_hp" placeholder="+62… (opsional)">
+                <small class="field-hint">Format: 8–15 digit, boleh diawali +62.</small>
+                </div>
+                <div class="modal__field">
+                <label for="admin_create_password">Password <span class="required">*</span></label>
+                <input type="password" id="admin_create_password" name="admin_password" minlength="8" required>
+                <small class="field-hint">Minimal 8 karakter. Disimpan ter-enkripsi (hash).</small>
+                </div>
+                <div class="modal__field modal__field--checkbox">
+                <label>
+                    <input type="checkbox" name="admin_is_superadmin">
+                    Jadikan Superadmin
+                </label>
+                </div>
+                <div class="modal__actions">
+                <button type="button" class="btn-secondary" data-close-modal>Batal</button>
+                <button type="submit" class="btn-primary">Simpan</button>
+                </div>
+            </form>
+            </div>
+        </div>
+        </div>
+
     <div class="modal-backdrop" data-modal="password-change">
         <div class="modal">
             <div class="modal__header">
