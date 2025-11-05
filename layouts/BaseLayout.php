@@ -99,6 +99,172 @@ function render_base_layout(array $options = []): void
             window.addEventListener('scroll', updateHeaderState, { passive: true });
         })();
     </script>
+    <script>
+        // Navbar Mobile Enhancement
+(function() {
+    'use strict';
+
+    const menuToggle = document.getElementById('menu-toggle');
+    const body = document.body;
+
+    if (!menuToggle) return;
+
+    // 1. Fallback untuk browser yang tidak support :has()
+    menuToggle.addEventListener('change', function() {
+        if (this.checked) {
+            body.classList.add('menu-open');
+        } else {
+            body.classList.remove('menu-open');
+        }
+    });
+
+    // 2. Tutup menu saat user scroll (opsional - hapus jika tidak diinginkan)
+    let scrollTimeout;
+    window.addEventListener('scroll', function() {
+        if (!menuToggle.checked) return;
+
+        clearTimeout(scrollTimeout);
+        scrollTimeout = setTimeout(function() {
+            menuToggle.checked = false;
+            body.classList.remove('menu-open');
+        }, 150);
+    }, { passive: true });
+
+    // 3. Tutup menu saat klik link (agar smooth scroll bekerja)
+    const navLinks = document.querySelectorAll('.main-navigation a');
+    navLinks.forEach(function(link) {
+        link.addEventListener('click', function() {
+            menuToggle.checked = false;
+            body.classList.remove('menu-open');
+        });
+    });
+
+    // 4. Tutup menu saat klik overlay
+    const navigation = document.querySelector('.main-navigation');
+    if (navigation) {
+        navigation.addEventListener('click', function(e) {
+            // Jika klik di area overlay (pseudo-element ::before)
+            if (e.target === navigation && menuToggle.checked) {
+                menuToggle.checked = false;
+                body.classList.remove('menu-open');
+            }
+        });
+    }
+
+    // 5. Tutup menu dengan tombol ESC
+    document.addEventListener('keydown', function(e) {
+        if (e.key === 'Escape' && menuToggle.checked) {
+            menuToggle.checked = false;
+            body.classList.remove('menu-open');
+        }
+    });
+
+})();
+    </script>
+    <script>
+        // Navbar Mobile Enhancement
+(function() {
+    'use strict';
+
+    const menuToggle = document.getElementById('menu-toggle');
+    const body = document.body;
+    const navigation = document.querySelector('.main-navigation');
+
+    if (!menuToggle) return;
+
+    // 1. Fallback untuk browser yang tidak support :has()
+    menuToggle.addEventListener('change', function() {
+        if (this.checked) {
+            body.classList.add('menu-open');
+        } else {
+            body.classList.remove('menu-open');
+        }
+    });
+
+    // 2. Handle klik pada tombol close (pseudo-element ::after)
+    if (navigation) {
+        navigation.addEventListener('click', function(e) {
+            const rect = navigation.getBoundingClientRect();
+            const closeButtonArea = {
+                top: 10,
+                right: 10,
+                width: 54,
+                height: 54
+            };
+
+            // Check if click is in close button area (top-right corner)
+            const clickX = e.clientX - rect.left;
+            const clickY = e.clientY - rect.top;
+            
+            if (
+                clickX > rect.width - closeButtonArea.right - closeButtonArea.width &&
+                clickX < rect.width - closeButtonArea.right &&
+                clickY > closeButtonArea.top &&
+                clickY < closeButtonArea.top + closeButtonArea.height
+            ) {
+                menuToggle.checked = false;
+                body.classList.remove('menu-open');
+                return;
+            }
+
+            // Klik di overlay (area hitam transparan)
+            if (e.target === navigation && menuToggle.checked) {
+                menuToggle.checked = false;
+                body.classList.remove('menu-open');
+            }
+        });
+    }
+
+    // 3. Tutup menu saat klik link menu
+    const navLinks = document.querySelectorAll('.main-navigation a');
+    navLinks.forEach(function(link) {
+        link.addEventListener('click', function(e) {
+            // Delay sedikit agar smooth scroll bisa bekerja
+            setTimeout(function() {
+                menuToggle.checked = false;
+                body.classList.remove('menu-open');
+            }, 100);
+        });
+    });
+
+    // 4. Tutup menu dengan tombol ESC
+    document.addEventListener('keydown', function(e) {
+        if (e.key === 'Escape' && menuToggle.checked) {
+            menuToggle.checked = false;
+            body.classList.remove('menu-open');
+        }
+    });
+
+    // 5. Cegah scroll propagation pada sidebar
+    if (navigation) {
+        navigation.addEventListener('touchmove', function(e) {
+            // Allow scroll dalam sidebar
+            e.stopPropagation();
+        }, { passive: true });
+    }
+
+    // 6. Tutup menu saat orientasi berubah
+    window.addEventListener('orientationchange', function() {
+        if (menuToggle.checked) {
+            menuToggle.checked = false;
+            body.classList.remove('menu-open');
+        }
+    });
+
+    // 7. Auto-close saat resize ke desktop
+    let resizeTimeout;
+    window.addEventListener('resize', function() {
+        clearTimeout(resizeTimeout);
+        resizeTimeout = setTimeout(function() {
+            if (window.innerWidth > 960 && menuToggle.checked) {
+                menuToggle.checked = false;
+                body.classList.remove('menu-open');
+            }
+        }, 150);
+    });
+
+})();
+    </script>
 </body>
 </html>
 <?php
