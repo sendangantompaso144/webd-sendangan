@@ -49,6 +49,13 @@ function render_base_layout(array $options = []): void
     <meta charset="utf-8">
     <meta http-equiv="X-UA-Compatible" content="IE=edge">
     <meta name="viewport" content="width=device-width, initial-scale=1">
+    <!-- Open Graph (Facebook, WhatsApp, LinkedIn, dsb.) -->
+    <meta property="og:type" content="website">
+    <meta property="og:title" content="Desa Sendangan">
+    <meta property="og:description" content="Pusat informasi resmi Desa Sendangan">
+    <meta property="og:url" content="https://sendangantompaso.web.id">
+    <meta property="og:image" content="https://sendangantompaso.web.id/assets/images/favicon.ico">
+    <meta property="og:site_name" content="Desa Sendangan">
     <title><?= e($title) ?></title>
     <?php foreach ($metaTags as $name => $value): ?>
         <?php if ($value !== ''): ?>
