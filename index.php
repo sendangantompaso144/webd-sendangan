@@ -5,13 +5,73 @@ declare(strict_types=1);
 require __DIR__ . '/layouts/BaseLayout.php';
 
 $homeData = data_source('home', []);
+$latestNews = [];
+
+try {
+    $pdo = db();
+    $stmt = $pdo->query('SELECT berita_id, berita_judul, berita_isi, berita_gambar, berita_dilihat, berita_created_at FROM berita ORDER BY berita_created_at DESC LIMIT 6');
+    if ($stmt !== false) {
+        $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
+        if (is_array($rows)) {
+            $latestNews = $rows;
+        }
+    }
+} catch (Throwable) {
+    // Abaikan, tampilkan state kosong.
+}
+
+$headlines = [];
+
+try {
+    $pdo = db();
+    $stmt = $pdo->query('
+        SELECT pengumuman_isi, pengumuman_valid_hingga
+        FROM pengumuman
+        WHERE pengumuman_valid_hingga >= NOW()
+        ORDER BY pengumuman_created_at DESC
+        LIMIT 5
+    ');
+
+    if ($stmt !== false) {
+        $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
+        foreach ($rows as $row) {
+            $isi = trim((string) ($row['pengumuman_isi'] ?? ''));
+            if ($isi !== '') {
+                // Potong kalimat jika terlalu panjang (misalnya headline 120 karakter)
+                $excerpt = mb_substr($isi, 0, 120);
+                if (mb_strlen($isi) > 120) {
+                    $excerpt .= '...';
+                }
+                $headlines[] = $excerpt;
+            }
+        }
+    }
+} catch (Throwable) {
+    // Abaikan error, pakai fallback dari data statis
+}
+
+$strukturOrganisasi = [];
+
+try {
+    $pdo = db();
+    $stmt = $pdo->query('
+        SELECT struktur_id, struktur_nama, struktur_jabatan, struktur_foto 
+        FROM struktur_organisasi
+        ORDER BY struktur_id ASC
+    ');
+    if ($stmt !== false) {
+        $strukturOrganisasi = $stmt->fetchAll(PDO::FETCH_ASSOC);
+    }
+} catch (Throwable) {
+    // Jika gagal ambil data, biarkan $strukturOrganisasi kosong
+}
 
 render_base_layout([
     'title' => 'Beranda | ' . app_config('name', 'Desa Sendangan'),
     'description' => 'Beranda Desa Sendangan: sambutan, data singkat, dan layanan utama untuk warga.',
     'activePage' => 'home',
     'bodyClass' => 'page-home',
-    'content' => static function () use ($homeData): void {
+    'content' => static function () use ($homeData, $latestNews, $headlines, $strukturOrganisasi): void {
         $profilData = data_source('profil', []);
         $demografiDasar = is_array($profilData['demografi_dasar'] ?? null) ? $profilData['demografi_dasar'] : null;
         $stats = [];
@@ -103,9 +163,41 @@ render_base_layout([
             ['label' => 'Laki-laki', 'value' => '270'],
             ['label' => 'Perempuan', 'value' => '280'],
         ];
-        $potensiList = data_source('potensi', []);
-        $potentials = [];
+        $potensiList = [];
+        try {
+            $pdo = db();
+            $stmt = $pdo->query("
+                SELECT 
+                    p.potensi_id,
+                    p.potensi_judul,
+                    p.potensi_isi,
+                    p.potensi_kategori,
+                    p.potensi_gmaps_link,
+                    p.potensi_created_at,
+                    gp.gambar_namafile AS potensi_gambar
+                FROM potensi_desa p
+                LEFT JOIN (
+                    SELECT potensi_id, MIN(gambar_id) AS min_id
+                    FROM gambar_potensi_desa
+                    GROUP BY potensi_id
+                ) first_img ON first_img.potensi_id = p.potensi_id
+                LEFT JOIN gambar_potensi_desa gp ON gp.gambar_id = first_img.min_id
+                ORDER BY p.potensi_created_at DESC
+            ");
+            if ($stmt !== false) {
+                $potensiList = $stmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
+            }
+        } catch (Throwable) {
+            // fallback ke data_source kalau DB error
+            $potensiList = [];
+        }
 
+        // Fallback ke data_source bila DB kosong
+        if ($potensiList === []) {
+            $potensiList = data_source('potensi', []);
+        }
+
+        $potentials = [];
         if (is_array($potensiList)) {
             if (array_is_list($potensiList)) {
                 $potentials = $potensiList;
@@ -178,34 +270,222 @@ render_base_layout([
             }
         }
         $orderedPotentialCategories = array_slice($orderedPotentialCategories, 0, 4);
-        $headlines = $homeData['headlines'] ?? [
-            'Pelayanan administrasi desa buka Senin-Jumat pukul 08.00 - 15.00 WITA.',
-            'Pengumuman: Kerja bakti lingkungan akan dilaksanakan pada Sabtu, 16 November mulai pukul 07.00 WITA.',
-            'Program bantuan pupuk subsidi dibuka kembali, segera daftar di kantor desa sebelum 25 November.'
+        if (!isset($headlines) || $headlines === []) {
+            $headlines = $homeData['headlines'] ?? [
+            ];
+        }
+        $newsItems = $latestNews;
+        if ($newsItems === []) {
+            $newsItems = $homeData['news'] ?? [
+                [
+                    'berita_judul' => 'Pelatihan Digital untuk UMKM Sendangan',
+                    'berita_isi' => 'Pemerintah desa berkolaborasi dengan komunitas pemuda untuk memberikan pelatihan pemasaran digital kepada para pelaku UMKM. Materi mencakup pengelolaan media sosial, fotografi produk, hingga penggunaan marketplace.',
+                    'berita_gambar' => 'https://images.unsplash.com/photo-1520607162513-77705c0f0d4a',
+                    'berita_dilihat' => 128,
+                    'berita_tanggal' => '10 Oktober 2025',
+                ],
+                [
+                    'berita_judul' => 'Jadwal Layanan Administrasi Desa',
+                    'berita_isi' => 'Pelayanan administrasi kependudukan kini tersedia setiap Selasa dan Kamis pukul 09.00-14.00 WITA. Warga diimbau membawa dokumen pendukung yang lengkap untuk mempercepat proses pelayanan.',
+                    'berita_gambar' => 'https://images.unsplash.com/photo-1522071820081-009f0129c71c',
+                    'berita_dilihat' => 94,
+                    'berita_tanggal' => '05 Oktober 2025',
+                ],
+                [
+                    'berita_judul' => 'Gotong Royong Bersih Desa',
+                    'berita_isi' => 'Kegiatan gotong royong rutin digelar pada Sabtu pekan pertama di setiap bulan. Warga berkumpul di Balai Desa sebelum bersama-sama membersihkan area publik dan saluran air.',
+                    'berita_gambar' => 'https://images.unsplash.com/photo-1521737604893-d14cc237f11d',
+                    'berita_dilihat' => 76,
+                    'berita_tanggal' => '28 September 2025',
+                ],
+            ];
+        }
+        $defaultGreetingMessages = [
+            'Selamat datang di website resmi Desa Sendangan. Kami berkomitmen untuk memberikan pelayanan terbaik kepada masyarakat dan membangun desa yang lebih maju, sejahtera, dan bermartabat.',
+            'Melalui website ini, kami berharap dapat meningkatkan transparansi dan komunikasi dengan seluruh warga. Mari bersama-sama membangun Desa Sendangan yang lebih baik.',
         ];
-        $newsItems = $homeData['news'] ?? [
-            [
-                'berita_judul' => 'Pelatihan Digital untuk UMKM Sendangan',
-                'berita_isi' => 'Pemerintah desa berkolaborasi dengan komunitas pemuda untuk memberikan pelatihan pemasaran digital kepada para pelaku UMKM. Materi mencakup pengelolaan media sosial, fotografi produk, hingga penggunaan marketplace.',
-                'berita_gambar' => 'https://images.unsplash.com/photo-1520607162513-77705c0f0d4a',
-                'berita_dilihat' => 128,
-                'berita_tanggal' => '10 Oktober 2025',
-            ],
-            [
-                'berita_judul' => 'Jadwal Layanan Administrasi Desa',
-                'berita_isi' => 'Pelayanan administrasi kependudukan kini tersedia setiap Selasa dan Kamis pukul 09.00-14.00 WITA. Warga diimbau membawa dokumen pendukung yang lengkap untuk mempercepat proses pelayanan.',
-                'berita_gambar' => 'https://images.unsplash.com/photo-1522071820081-009f0129c71c',
-                'berita_dilihat' => 94,
-                'berita_tanggal' => '05 Oktober 2025',
-            ],
-            [
-                'berita_judul' => 'Gotong Royong Bersih Desa',
-                'berita_isi' => 'Kegiatan gotong royong rutin digelar pada Sabtu pekan pertama di setiap bulan. Warga berkumpul di Balai Desa sebelum bersama-sama membersihkan area publik dan saluran air.',
-                'berita_gambar' => 'https://images.unsplash.com/photo-1521737604893-d14cc237f11d',
-                'berita_dilihat' => 76,
-                'berita_tanggal' => '28 September 2025',
-            ],
+        $greetingData = is_array($homeData['greeting'] ?? null) ? $homeData['greeting'] : [];
+                $defaultGreetingMessages = [
+            'Selamat datang di website resmi Desa Sendangan. Kami berkomitmen untuk memberikan pelayanan terbaik kepada masyarakat dan membangun desa yang lebih maju, sejahtera, dan bermartabat.',
+            'Melalui website ini, kami berharap dapat meningkatkan transparansi dan komunikasi dengan seluruh warga. Mari bersama-sama membangun Desa Sendangan yang lebih baik.',
         ];
+        $greetingData = is_array($homeData['greeting'] ?? null) ? $homeData['greeting'] : [];
+        $greetingBadge = (string) ($greetingData['badge'] ?? 'SAMBUTAN HUKUM TUA');
+        $greetingName = trim((string) ($greetingData['name'] ?? 'Johny R. Mandagi'));
+        $greetingMessageRaw = $greetingData['message'] ?? $defaultGreetingMessages;
+
+        // ---[ TAMBAHKAN BLOK INI ]-------------------------------------------
+        // Ambil nama & foto Hukum Tua dari tabel `data`
+        try {
+            $pdo = db();
+            $stmt = $pdo->prepare('
+                SELECT data_key, data_value 
+                FROM data 
+                WHERE data_key IN ("profile.hukum_tua_nama", "media.hukum_tua_foto")
+            ');
+            if ($stmt->execute()) {
+                $kv = [];
+                foreach ($stmt->fetchAll(PDO::FETCH_ASSOC) as $row) {
+                    $kv[(string)$row['data_key']] = (string)$row['data_value'];
+                }
+
+                // Override nama jika tersedia di DB
+                if (!empty($kv['profile.hukum_tua_nama'])) {
+                    $greetingName = trim($kv['profile.hukum_tua_nama']);
+                }
+
+                // Simpan raw filename foto (tanpa base_uri) agar bisa di-resolve ke URL
+                $greetingPhotoRawFromDb = trim($kv['media.hukum_tua_foto'] ?? '');
+            }
+        } catch (Throwable) {
+            // Abaikan kalau gagal; tetap pakai fallback dari $homeData
+            $greetingPhotoRawFromDb = '';
+        }
+
+        // Helper untuk resolve path foto ke URL (cek uploads/assets/ dulu, baru uploads/)
+        $resolveGreetingPhoto = static function (string $raw): string {
+            $raw = trim($raw);
+            if ($raw === '') return '';
+            if (str_starts_with($raw, 'http')) return $raw;
+
+            $relative = ltrim(str_replace('\\', '/', $raw), '/');
+
+            // Prioritas di uploads/assets/
+            if (is_file(base_path('uploads/assets/' . $relative))) {
+                return base_uri('uploads/assets/' . $relative);
+            }
+            // Fallback: langsung di uploads/
+            if (is_file(base_path('uploads/' . $relative))) {
+                return base_uri('uploads/' . $relative);
+            }
+            // Jika struktur subfolder sudah disertakan di $raw (mis. "assets/xxx.webp")
+            if (!str_starts_with($relative, 'uploads/')) {
+                return base_uri('uploads/' . $relative);
+            }
+            return base_uri($relative);
+        };
+        // ---[ /TAMBAHKAN BLOK INI ]------------------------------------------
+
+        $greetingMessages = [];
+        if (is_string($greetingMessageRaw)) {
+            $chunks = preg_split("/\r?\n\r?\n|\r?\n/", $greetingMessageRaw) ?: [];
+            foreach ($chunks as $chunk) {
+                $chunk = trim((string) $chunk);
+                if ($chunk !== '') {
+                    $greetingMessages[] = $chunk;
+                }
+            }
+        } elseif (is_array($greetingMessageRaw)) {
+            foreach ($greetingMessageRaw as $chunk) {
+                if (!is_string($chunk)) {
+                    continue;
+                }
+                $chunk = trim($chunk);
+                if ($chunk !== '') {
+                    $greetingMessages[] = $chunk;
+                }
+            }
+        }
+        if ($greetingMessages === []) {
+            $greetingMessages = $defaultGreetingMessages;
+        }
+        $greetingCtaLabel = (string) ($greetingData['cta_label'] ?? 'Profil Desa');
+        $greetingCtaLink = (string) ($greetingData['cta_link'] ?? 'profil.php');
+        $greetingCtaHref = $greetingCtaLink !== '' && str_starts_with($greetingCtaLink, 'http')
+            ? $greetingCtaLink
+            : base_uri($greetingCtaLink !== '' ? ltrim($greetingCtaLink, '/') : 'profil.php');
+
+        // ---[ GANTI BAGIAN PENENTU $greetingPhoto MENJADI INI ]--------------
+        // Ambil dari DB (jika ada), jika kosong pakai dari $homeData['greeting']['photo']
+        $greetingPhotoRaw = '';
+        if (!empty($greetingPhotoRawFromDb ?? '')) {
+            $greetingPhotoRaw = $greetingPhotoRawFromDb; // contoh: "hukumtua_690a6df3370235.98424889.webp"
+        } else {
+            $greetingPhotoRaw = (string) ($greetingData['photo'] ?? '');
+        }
+
+        $greetingPhoto = $resolveGreetingPhoto($greetingPhotoRaw);
+        // ---[ /GANTI ]-------------------------------------------------------
+
+        $greetingAlt = $greetingName !== '' ? $greetingName : 'Hukum Tua Desa Sendangan';
+
+        // $greetingPhoto = (string) ($greetingData['photo'] ?? '');
+        // if ($greetingPhoto !== '') {
+        //     $greetingPhoto = str_starts_with($greetingPhoto, 'http')
+        //         ? $greetingPhoto
+        //         : base_uri('uploads/' . ltrim($greetingPhoto, '/'));
+        // } else {
+        //     $greetingPhoto = '';
+        // }
+        // $greetingAlt = $greetingName !== '' ? $greetingName : 'Hukum Tua Desa Sendangan';
+        $mapData = is_array($homeData['map'] ?? null) ? $homeData['map'] : [];
+        $mapTitle = (string) ($mapData['title'] ?? 'Peta Desa Sendangan');
+        $mapDescription = (string) ($mapData['description'] ?? 'Lokasi fasilitas umum, batas wilayah, dan potensi desa dalam satu tampilan interaktif.');
+
+        $resolveMapMedia = static function (string $raw): string {
+            $raw = trim($raw);
+            if ($raw === '') {
+                return '';
+            }
+
+            if (str_starts_with($raw, 'http')) {
+                return $raw;
+            }
+
+            $relativeMedia = ltrim(str_replace('\\', '/', $raw), '/');
+
+            if (!str_contains($relativeMedia, '/')) {
+                if (is_file(base_path('uploads/' . $relativeMedia))) {
+                    $relativeMedia = 'uploads/' . $relativeMedia;
+                } elseif (is_file(base_path('uploads/assets/' . $relativeMedia))) {
+                    $relativeMedia = 'uploads/assets/' . $relativeMedia;
+                } else {
+                    $relativeMedia = 'uploads/' . $relativeMedia;
+                }
+            } elseif (!str_starts_with($relativeMedia, 'uploads/')) {
+                $relativeMedia = 'uploads/' . $relativeMedia;
+            }
+
+            return base_uri($relativeMedia);
+        };
+
+        $resolvePotensiImage = static function (string $raw): string {
+            $raw = trim($raw);
+            if ($raw === '') return '';
+            if (str_starts_with($raw, 'http')) return $raw;
+
+            $relative = ltrim(str_replace('\\', '/', $raw), '/');
+
+            $candidates = [
+                'uploads/potensi/' . $relative,
+                'uploads/assets/potensi/' . $relative,
+                'uploads/assets/' . $relative,
+                'uploads/' . $relative,
+                $relative,
+            ];
+
+            foreach ($candidates as $rel) {
+                $abs = base_path($rel);
+                if (is_file($abs)) {
+                    // versi cache-busting berdasarkan mtime
+                    $ver = (string) @filemtime($abs);
+                    return base_uri($rel) . ($ver ? ('?v=' . $ver) : '');
+                }
+            }
+            // fallback URL (tanpa cek fisik)
+            return base_uri('uploads/' . $relative);
+        };
+
+
+        $mapMedia = $resolveMapMedia((string) ($mapData['media'] ?? ''));
+        $mapMediaSatellite = $resolveMapMedia((string) ($mapData['media_satellite'] ?? ''));
+
+        $mapAlt = $mapTitle !== '' ? $mapTitle : 'Peta Desa Sendangan';
+        $mapSatelliteAlt = $mapAlt . ' - Peta Citra';
+        $mapHasDefault = $mapMedia !== '';
+        $mapHasSatellite = $mapMediaSatellite !== '';
+        $mapToggleEnabled = $mapHasDefault && $mapHasSatellite;
+        $mapInitialView = $mapHasDefault ? 'default' : ($mapHasSatellite ? 'satellite' : 'none');
         ?>
         
         <!-- Hero Section dengan Gradient -->
@@ -261,37 +541,73 @@ render_base_layout([
                 <div class="greeting-grid">
                     <div class="greeting-photo">
                         <div class="photo-frame">
-                            <img src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='400' height='500'%3E%3Crect fill='%23E3F2FD' width='400' height='500'/%3E%3Ctext x='50%25' y='50%25' font-size='16' fill='%2390CAF9' text-anchor='middle' dominant-baseline='middle'%3EJohny R. Mandagi%3C/text%3E%3C/svg%3E" alt="Johny R. Mandagi" />
+                            <?php if ($greetingPhoto !== ''): ?>
+                                <img src="<?= e($greetingPhoto) ?>" alt="<?= e($greetingAlt) ?>" />
+                            <?php else: ?>
+                                <img src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='400' height='500'%3E%3Crect fill='%23E3F2FD' width='400' height='500'/%3E%3Ctext x='50%25' y='50%25' font-size='16' fill='%2390CAF9' text-anchor='middle' dominant-baseline='middle'%3E<?= rawurlencode($greetingAlt) ?>%3C/text%3E%3C/svg%3E" alt="<?= e($greetingAlt) ?>" />
+                            <?php endif; ?>
                         </div>
                     </div>
                     <div class="greeting-content">
-                        <div class="greeting-badge">SAMBUTAN HUKUM TUA</div>
-                        <h2 class="greeting-title">Johny R. Mandagi</h2>
-                        <div class="greeting-text">
-                            <p>Selamat datang di website resmi Desa Sendangan. Kami berkomitmen untuk memberikan pelayanan terbaik kepada masyarakat dan membangun desa yang lebih maju, sejahtera, dan bermartabat.</p>
-                            <p>Melalui website ini, kami berharap dapat meningkatkan transparansi dan komunikasi dengan seluruh warga. Mari bersama-sama membangun Desa Sendangan yang lebih baik.</p>
-                        </div>
-                        <a class="greeting-button" href="<?= e(base_uri('profil.php')) ?>">
-                            Profil Desa →
-                        </a>
+                        <div class="greeting-badge"><?= e($greetingBadge) ?></div>
+                        <?php if ($greetingName !== ''): ?>
+                            <h2 class="greeting-title"><?= e($greetingName) ?></h2>
+                        <?php endif; ?>
+                        <?php if ($greetingMessages !== []): ?>
+                            <div class="greeting-text">
+                                <?php foreach ($greetingMessages as $paragraph): ?>
+                                    <p><?= e($paragraph) ?></p>
+                                <?php endforeach; ?>
+                            </div>
+                        <?php endif; ?>
+                        <?php if ($greetingCtaLabel !== ''): ?>
+                            <a class="greeting-button" href="<?= e($greetingCtaHref) ?>">
+                                <?= e($greetingCtaLabel) ?> <span class="greeting-button-icon">&rarr;</span>
+                            </a>
+                        <?php endif; ?>
                     </div>
                 </div>
             </div>
         </section>
 
         <!-- Map Section -->
-        <section class="map-section">
+        <section class="map-section" data-map-section>
             <div class="map-container">
                 <div class="map-intro">
-                    <h2>Peta Desa Sendangan</h2>
-                    <p>Lokasi fasilitas umum, batas wilayah, dan potensi desa dalam satu tampilan interaktif.</p>
+                    <h2><?= e($mapTitle) ?></h2>
+                    <p><?= e($mapDescription) ?></p>
+                    <?php if ($mapToggleEnabled): ?>
+                        <div class="map-toggle" data-map-toggle>
+                            <span class="map-toggle-label">Tampilan</span>
+                            <label class="map-toggle-switch">
+                                <input type="checkbox" data-map-toggle-input aria-label="Tampilkan peta citra (satelit)">
+                                <span class="map-toggle-slider">
+                                    <span class="map-toggle-option map-toggle-option-default">Wilayah</span>
+                                    <span class="map-toggle-option map-toggle-option-satellite">Citra</span>
+                                </span>
+                            </label>
+                            <!-- <span class="map-toggle-caption" data-default="Peta Wilayah" data-satellite="Peta Citra" aria-live="polite">Peta Wilayah</span> -->
+                        </div>
+                    <?php endif; ?>
                 </div>
-                <div class="map-display">
-                    <div class="map-placeholder">
-                        <div class="map-icon">🗺️</div>
-                        <p class="map-text">Peta desa akan ditampilkan di sini</p>
-                        <p class="map-subtext">Segera hadir dengan informasi lokasi lengkap</p>
-                    </div>
+                <div class="map-display" data-map-display>
+                    <?php if ($mapHasDefault): ?>
+                        <div class="map-image<?= $mapInitialView === 'default' ? ' is-active' : '' ?>" data-map-view="default">
+                            <img src="<?= e($mapMedia) ?>" alt="<?= e($mapAlt) ?>" />
+                        </div>
+                    <?php endif; ?>
+                    <?php if ($mapHasSatellite): ?>
+                        <div class="map-image<?= $mapInitialView === 'satellite' ? ' is-active' : '' ?>" data-map-view="satellite">
+                            <img src="<?= e($mapMediaSatellite) ?>" alt="<?= e($mapSatelliteAlt) ?>" />
+                        </div>
+                    <?php endif; ?>
+                    <?php if (!$mapHasDefault && !$mapHasSatellite): ?>
+                        <div class="map-placeholder">
+                            <div class="map-icon">&#128205;</div>
+                            <p class="map-text">Peta desa akan ditampilkan di sini</p>
+                            <p class="map-subtext">Segera hadir dengan informasi lokasi lengkap</p>
+                        </div>
+                    <?php endif; ?>
                 </div>
             </div>
         </section>
@@ -304,26 +620,34 @@ render_base_layout([
                     <p class="section-description">Perangkat Desa Sendangan yang mengabdi untuk masyarakat</p>
                 </div>
                 <div class="structure-grid">
-                    <?php 
-                    $positions = [
-                        ['name' => 'Johny R. Mandagi', 'role' => 'Kepala Desa'],
-                        ['name' => 'Maria S. Wenas', 'role' => 'Sekretaris Desa'],
-                        ['name' => '', 'role' => 'Kaur Pemerintahan'],
-                        ['name' => '', 'role' => 'Kaur Pembangunan'],
-                        ['name' => '', 'role' => 'Kaur Keuangan'],
-                        ['name' => '', 'role' => 'Kaur Umum']
-                    ];
-                    foreach ($positions as $position): ?>
-                        <div class="structure-card">
-                            <div class="structure-photo">
-                                <img src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='200' height='200'%3E%3Crect fill='%23E3F2FD' width='200' height='200' rx='100'/%3E%3Ctext x='50%25' y='50%25' font-size='60' text-anchor='middle' dominant-baseline='middle'%3E👤%3C/text%3E%3C/svg%3E" alt="<?= e($position['role']) ?>" />
+                    <?php if (!empty($strukturOrganisasi)): ?>
+                        <?php foreach ($strukturOrganisasi as $person): ?>
+                            <?php
+                            $nama = (string)($person['struktur_nama'] ?? '');
+                            $jabatan = (string)($person['struktur_jabatan'] ?? '');
+                            $foto = trim((string)($person['struktur_foto'] ?? ''));
+                            $fotoUrl = $foto !== '' 
+                                ? base_uri('uploads/struktur/' . ltrim($foto, '/')) 
+                                : 'data:image/svg+xml,' . rawurlencode("
+                                    <svg xmlns='http://www.w3.org/2000/svg' width='200' height='200'>
+                                        <rect fill='#E3F2FD' width='200' height='200' rx='100'/>
+                                        <text x='50%' y='50%' font-size='60' fill='#90CAF9' text-anchor='middle' dominant-baseline='middle'>👤</text>
+                                    </svg>
+                                ");
+                            ?>
+                            <div class="structure-card">
+                                <div class="structure-photo">
+                                    <img src="<?= e($fotoUrl) ?>" alt="<?= e($jabatan ?: 'Perangkat Desa') ?>" />
+                                </div>
+                                <?php if ($nama !== ''): ?>
+                                    <div class="structure-name"><?= e($nama) ?></div>
+                                <?php endif; ?>
+                                <div class="structure-role"><?= e($jabatan ?: '-') ?></div>
                             </div>
-                            <?php if (!empty($position['name'])): ?>
-                                <div class="structure-name"><?= e($position['name']) ?></div>
-                            <?php endif; ?>
-                            <div class="structure-role"><?= e($position['role']) ?></div>
-                        </div>
-                    <?php endforeach; ?>
+                        <?php endforeach; ?>
+                    <?php else: ?>
+                        <p style="text-align:center;color:#607D8B;">Belum ada data struktur organisasi yang tersedia.</p>
+                    <?php endif; ?>
                 </div>
             </div>
         </section>
@@ -345,20 +669,37 @@ render_base_layout([
                         <?php foreach ($orderedPotentialCategories as $category): ?>
                             <?php
                             $entries = $potentialsByCategory[$category] ?? [];
-                            if ($entries === []) {
-                                continue;
-                            }
+                            if ($entries === []) continue;
+
+                            // Cari entry pertama yang punya gambar; kalau tidak ada, pakai entries[0]
                             $primary = $entries[0];
+                            foreach ($entries as $cand) {
+                                if (trim((string)($cand['potensi_gambar'] ?? '')) !== '') {
+                                    $primary = $cand;
+                                    break;
+                                }
+                            }
+
                             $title = (string) ($primary['potensi_judul'] ?? '');
                             $description = (string) ($primary['potensi_isi'] ?? '');
-                            $summary = mb_substr($description, 0, 140);
-                            if (mb_strlen($description) > 140) {
-                                $summary .= '...';
-                            }
+                            $summary = mb_substr($description, 0, 140) . (mb_strlen($description) > 140 ? '...' : '');
                             $iconLabel = strtoupper(substr($category, 0, 1));
+
+                            $imgUrl = $resolvePotensiImage((string)($primary['potensi_gambar'] ?? ''));
                             ?>
                             <div class="potential-card">
-                                <div class="potential-icon"><?= e($iconLabel !== '' ? $iconLabel : 'P') ?></div>
+                                <?php
+                                // Ambil nama file gambar pertama dari DB (alias potensi_gambar)
+                                $imgUrl = $resolvePotensiImage((string)($primary['potensi_gambar'] ?? ''));
+                                ?>
+                                <?php if ($imgUrl !== ''): ?>
+                                    <div class="potential-thumb">
+                                        <img src="<?= e($imgUrl) ?>" alt="<?= e($title !== '' ? $title : $category) ?>">
+                                    </div>
+                                <?php else: ?>
+                                    <div class="potential-icon"><?= e($iconLabel !== '' ? $iconLabel : 'P') ?></div>
+                                <?php endif; ?>
+
                                 <div class="potential-category"><?= e($category) ?></div>
                                 <h3 class="potential-title"><?= e($title) ?></h3>
                                 <!-- <?php if ($summary !== ''): ?>
@@ -374,6 +715,35 @@ render_base_layout([
             </section>
         <?php endif; ?>
 
+        <?php
+        $formatBeritaTanggal = static function (string $value): string {
+            $value = trim($value);
+            if ($value === '') {
+                return '';
+            }
+            $timestamp = strtotime($value);
+            if ($timestamp === false) {
+                return $value;
+            }
+            $bulan = [
+                1 => 'Januari',
+                2 => 'Februari',
+                3 => 'Maret',
+                4 => 'April',
+                5 => 'Mei',
+                6 => 'Juni',
+                7 => 'Juli',
+                8 => 'Agustus',
+                9 => 'September',
+                10 => 'Oktober',
+                11 => 'November',
+                12 => 'Desember',
+            ];
+            $nomorBulan = (int) date('n', $timestamp);
+            $namaBulan = $bulan[$nomorBulan] ?? date('F', $timestamp);
+            return date('j', $timestamp) . ' ' . $namaBulan . ' ' . date('Y', $timestamp);
+        };
+        ?>
         <?php if ($newsItems !== []): ?>
             <!-- News Section -->
             <section class="content-section news-section">
@@ -390,6 +760,7 @@ render_base_layout([
                     <div class="news-grid">
                         <?php foreach ($newsItems as $news): ?>
                             <?php
+                            $newsId = isset($news['berita_id']) ? (int) $news['berita_id'] : 0;
                             $newsTitle = (string) ($news['berita_judul'] ?? '');
                             $newsBody = (string) ($news['berita_isi'] ?? '');
                             $newsRawExcerpt = trim(strip_tags($newsBody));
@@ -398,24 +769,34 @@ render_base_layout([
                                 $newsExcerpt .= '...';
                             }
                             $newsViews = isset($news['berita_dilihat']) ? (int) $news['berita_dilihat'] : 0;
-                            $newsDate = (string) ($news['berita_tanggal'] ?? $news['berita_created_at'] ?? '');
+                            $newsDateRaw = (string) ($news['berita_created_at'] ?? $news['berita_tanggal'] ?? '');
+                            $newsDate = $newsDateRaw !== '' ? $formatBeritaTanggal($newsDateRaw) : '';
+                            $newsImageRaw = (string) ($news['berita_gambar'] ?? '');
+                            if ($newsId > 0 && $newsImageRaw !== '') {
+                                $newsImage = base_uri('uploads/berita/' . ltrim($newsImageRaw, '/'));
+                            } else {
+                                $newsImage = $newsImageRaw !== '' ? $newsImageRaw : asset('images/placeholder-media.svg');
+                            }
+                            $newsLink = $newsId > 0 ? base_uri('baca_berita.php?id=' . $newsId) : base_uri('info_publik.php?tab=berita');
                             ?>
                             <article class="news-card">
-                                <?php if (!empty($news['berita_gambar'])): ?>
+                                <?php if ($newsImage !== ''): ?>
                                     <div class="news-card-image">
-                                        <img src="<?= e((string) $news['berita_gambar']) ?>" alt="<?= e($newsTitle === '' ? 'Berita Desa' : $newsTitle) ?>">
+                                        <img src="<?= e($newsImage) ?>" alt="<?= e($newsTitle === '' ? 'Berita Desa' : $newsTitle) ?>">
                                     </div>
                                 <?php endif; ?>
                                 <div class="news-card-content">
                                     <div class="news-meta">
-                                        <span class="news-views"><?= e(number_format($newsViews)) ?> kali dibaca</span>
+                                        <?php if ($newsViews > 0): ?>
+                                            <span class="news-views"><?= e(number_format($newsViews)) ?> kali dibaca</span>
+                                        <?php endif; ?>
                                         <?php if ($newsDate !== ''): ?>
                                             <span class="news-date"><?= e($newsDate) ?></span>
                                         <?php endif; ?>
                                     </div>
                                     <h3 class="news-title"><?= e($newsTitle) ?></h3>
                                     <p class="news-excerpt"><?= e($newsExcerpt) ?></p>
-                                    <a class="news-link" href="<?= e(base_uri('info_publik.php?tab=berita')) ?>">
+                                    <a class="news-link" href="<?= e($newsLink) ?>">
                                         Baca Selengkapnya &rarr;
                                     </a>
                                 </div>
@@ -792,17 +1173,160 @@ render_base_layout([
                 box-shadow: 0 6px 20px rgba(144, 202, 249, 0.4);
             }
 
+            .greeting-button-icon {
+                margin-left: 8px;
+                display: inline-block;
+                transition: transform 0.3s ease;
+            }
+
+            .greeting-button:hover .greeting-button-icon {
+                transform: translateX(4px);
+            }
+
             /* Map Section */
             .map-section {
                 background: white;
             }
 
+            .map-container {
+                width: min(1120px, 92vw);
+                margin: 0 auto;
+                display: grid;
+                gap: 24px;
+            }
+
+            .map-display {
+                background: rgba(144, 202, 249, 0.25);
+                border-radius: 24px;
+                padding: clamp(12px, 2.2vw, 20px);
+                box-shadow: 0 18px 38px rgba(21, 101, 192, 0.18);
+                display: flex;
+                flex-direction: column;
+                align-items: stretch;
+                justify-content: center;
+                overflow: hidden;
+            }
+
+            .map-toggle {
+                margin-top: 16px;
+                display: flex;
+                align-items: center;
+                gap: 16px;
+                flex-wrap: wrap;
+            }
+
+            .map-toggle-label {
+                font-size: 14px;
+                font-weight: 600;
+                color: #1565C0;
+                text-transform: uppercase;
+                letter-spacing: 0.4px;
+            }
+
+            .map-toggle-switch {
+                position: relative;
+                display: inline-flex;
+                align-items: center;
+                cursor: pointer;
+                user-select: none;
+            }
+
+            .map-toggle-switch input {
+                position: absolute;
+                opacity: 0;
+                pointer-events: none;
+            }
+
+            .map-toggle-slider {
+                position: relative;
+                display: inline-flex;
+                align-items: center;
+                justify-content: space-between;
+                background: #E3F2FD;
+                border-radius: 999px;
+                padding: 4px;
+                min-width: 160px;
+                font-size: 13px;
+                font-weight: 600;
+                text-transform: uppercase;
+                letter-spacing: 0.4px;
+                color: #1565C0;
+                transition: background 0.3s ease;
+            }
+
+            .map-toggle-slider::before {
+                content: '';
+                position: absolute;
+                top: 4px;
+                bottom: 4px;
+                left: 4px;
+                width: calc(50% - 4px);
+                border-radius: 999px;
+                background: #1565C0;
+                transition: transform 0.3s ease;
+            }
+
+            .map-toggle-switch input:checked + .map-toggle-slider::before {
+                transform: translateX(100%);
+            }
+
+            .map-toggle-option {
+                position: relative;
+                z-index: 1;
+                flex: 1;
+                text-align: center;
+                transition: color 0.3s ease;
+            }
+
+            .map-toggle-switch input:not(:checked) + .map-toggle-slider .map-toggle-option-default,
+            .map-toggle-switch input:checked + .map-toggle-slider .map-toggle-option-satellite {
+                color: #FFFFFF;
+            }
+
+            .map-toggle-switch input:not(:checked) + .map-toggle-slider .map-toggle-option-satellite,
+            .map-toggle-switch input:checked + .map-toggle-slider .map-toggle-option-default {
+                color: #1565C0;
+            }
+
+            .map-toggle-caption {
+                font-size: 13px;
+                color: #546E7A;
+                font-weight: 500;
+            }
+
             .map-placeholder {
                 background: linear-gradient(135deg, #E3F2FD 0%, #F9FAFB 100%);
-                border-radius: 20px;
-                padding: 100px 40px;
+                border-radius: inherit;
+                padding: clamp(60px, 12vw, 120px) 40px;
                 text-align: center;
                 border: 2px dashed #90CAF9;
+            }
+
+            .map-image {
+                flex: 1;
+                background: transparent;
+                border-radius: inherit;
+                padding: 0;
+                display: flex;
+                align-items: stretch;
+                justify-content: center;
+                min-height: 360px;
+            }
+
+            .map-display[data-map-display] .map-image {
+                display: none;
+            }
+
+            .map-display[data-map-display] .map-image.is-active {
+                display: flex;
+            }
+
+            .map-image img {
+                width: 100%;
+                height: 100%;
+                border-radius: inherit;
+                object-fit: cover;
+                display: block;
             }
 
             .map-icon {
@@ -1026,6 +1550,25 @@ render_base_layout([
                 color: #607D8B;
                 font-style: italic;
             }
+            .potential-thumb {
+                position: relative;
+                width: 100%;
+                padding-top: 56%; /* 16:9 */
+                border-radius: 14px;
+                overflow: hidden;
+                margin-bottom: 16px;
+                background: #f3f6f9;
+                border: 1px solid #e9eef5;
+            }
+
+            .potential-thumb img {
+                position: absolute;
+                inset: 0;
+                width: 100%;
+                height: 100%;
+                object-fit: cover;
+                display: block;
+            }
 
             /* News Section */
             .news-section {
@@ -1034,8 +1577,9 @@ render_base_layout([
 
             .news-grid {
                 display: grid;
-                grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
-                gap: 30px;
+                grid-template-columns: repeat(4, minmax(0, 1fr));
+                gap: 26px;
+                justify-items: center;
             }
 
             .news-card {
@@ -1047,6 +1591,20 @@ render_base_layout([
                 display: flex;
                 flex-direction: column;
                 min-height: 100%;
+                width: 100%;
+                max-width: 260px;
+            }
+
+            @media (max-width: 1280px) {
+                .news-grid {
+                    grid-template-columns: repeat(3, minmax(0, 1fr));
+                }
+            }
+
+            @media (max-width: 1024px) {
+                .news-grid {
+                    grid-template-columns: repeat(2, minmax(0, 1fr));
+                }
             }
 
             .news-card:hover {
@@ -1122,6 +1680,33 @@ render_base_layout([
 
             /* Responsive Design */
             @media (max-width: 768px) {
+                .map-toggle {
+                    gap: 12px;
+                }
+
+                .map-container {
+                    gap: 20px;
+                }
+
+                .map-display {
+                    padding: clamp(8px, 4vw, 14px);
+                    border-radius: 18px;
+                }
+
+                .map-image {
+                    min-height: 260px;
+                }
+
+                .map-toggle-slider {
+                    min-width: 140px;
+                    font-size: 12px;
+                }
+
+                .map-toggle-label,
+                .map-toggle-caption {
+                    font-size: 12px;
+                }
+
                 .hero-section {
                     min-height: 460px;
                     padding: calc(30px + var(--header-height, 88px)) 0 0;
@@ -1190,11 +1775,15 @@ render_base_layout([
                 }
 
                 .map-placeholder {
-                    padding: 60px 20px;
+                    padding: 48px 20px;
                 }
 
                 .map-icon {
                     font-size: 60px;
+                }
+
+                .map-image img {
+                    border-radius: inherit;
                 }
             }
 
@@ -1220,6 +1809,19 @@ render_base_layout([
 
                 .stat-value {
                     font-size: 28px;
+                }
+
+                .map-display {
+                    padding: 10px;
+                    border-radius: 16px;
+                }
+
+                .map-image {
+                    min-height: 200px;
+                }
+
+                .map-placeholder {
+                    padding: 40px 16px;
                 }
 
                 .feature-card,
@@ -1381,139 +1983,193 @@ render_base_layout([
         <script>
             document.addEventListener('DOMContentLoaded', function () {
                 var heroHeadline = document.querySelector('.hero-headline');
-                if (!heroHeadline) {
-                    return;
-                }
+                if (heroHeadline) {
+                    var viewport = heroHeadline.querySelector('.hero-headline-viewport');
+                    var track = heroHeadline.querySelector('.hero-headline-track');
+                    var items = Array.prototype.slice.call(heroHeadline.querySelectorAll('.hero-headline-item'));
 
-                var viewport = heroHeadline.querySelector('.hero-headline-viewport');
-                var track = heroHeadline.querySelector('.hero-headline-track');
-                var items = Array.prototype.slice.call(heroHeadline.querySelectorAll('.hero-headline-item'));
+                    if (viewport && track && items.length > 0) {
+                        var intervalAttr = parseInt(heroHeadline.getAttribute('data-interval') || '', 8.5);
+                        var interval = Number.isFinite(intervalAttr) && intervalAttr > 0 ? intervalAttr : 10000;
 
-                if (!viewport || !track || items.length === 0) {
-                    return;
-                }
+                        var currentIndex = 0;
+                        var timerId;
+                        var positions = [];
+                        var positionIndex = -1;
 
-                var intervalAttr = parseInt(heroHeadline.getAttribute('data-interval') || '', 8.5);
-                var interval = Number.isFinite(intervalAttr) && intervalAttr > 0 ? intervalAttr : 10000;
+                        var setTrackPosition = function (index, animate) {
+                            var itemHeight = items[0] ? items[0].offsetHeight : 0;
+                            var offset = itemHeight * index;
+                            if (!animate) {
+                                var previousTransition = track.style.transition;
+                                track.style.transition = 'none';
+                                track.style.transform = 'translateY(-' + offset + 'px)';
+                                void track.offsetHeight;
+                                track.style.transition = previousTransition || 'transform 0.6s ease';
+                            } else {
+                                track.style.transition = 'transform 0.6s ease';
+                                track.style.transform = 'translateY(-' + offset + 'px)';
+                            }
+                        };
 
-                var currentIndex = 0;
-                var timerId;
-                var positions = [];
-                var positionIndex = -1;
+                        var schedule = function (callback, delay) {
+                            window.clearTimeout(timerId);
+                            timerId = window.setTimeout(callback, delay);
+                        };
 
-                var setTrackPosition = function (index, animate) {
-                    var itemHeight = items[0] ? items[0].offsetHeight : 0;
-                    var offset = itemHeight * index;
-                    if (!animate) {
-                        var previousTransition = track.style.transition;
-                        track.style.transition = 'none';
-                        track.style.transform = 'translateY(-' + offset + 'px)';
-                        void track.offsetHeight;
-                        track.style.transition = previousTransition || 'transform 0.6s ease';
-                    } else {
-                        track.style.transition = 'transform 0.6s ease';
-                        track.style.transform = 'translateY(-' + offset + 'px)';
-                    }
-                };
+                        var resetText = function (textEl) {
+                            textEl.style.transition = 'none';
+                            textEl.style.transform = 'translateX(0px)';
+                            void textEl.offsetWidth;
+                            textEl.style.transition = 'transform 0.8s ease';
+                        };
 
-                var schedule = function (callback, delay) {
-                    window.clearTimeout(timerId);
-                    timerId = window.setTimeout(callback, delay);
-                };
+                        var prepareText = function (item) {
+                            var textEl = item.querySelector('.hero-headline-text');
+                            if (!textEl) {
+                                return { positions: [] };
+                            }
 
-                var resetText = function (textEl) {
-                    textEl.style.transition = 'none';
-                    textEl.style.transform = 'translateX(0px)';
-                    void textEl.offsetWidth;
-                    textEl.style.transition = 'transform 0.8s ease';
-                };
-
-                var prepareText = function (item) {
-                    var textEl = item.querySelector('.hero-headline-text');
-                    if (!textEl) {
-                        return { positions: [] };
-                    }
-
-                    resetText(textEl);
-
-                    var viewportWidth = viewport.clientWidth;
-                    var textWidth = textEl.scrollWidth;
-
-                    if (textWidth <= viewportWidth + 1) {
-                        return { positions: [], element: textEl };
-                    }
-
-                    var maxOffset = textWidth - viewportWidth;
-                    var stepWidth = viewportWidth;
-                    var stepPositions = [];
-                    var current = 0;
-                    while (current < maxOffset) {
-                        current = Math.min(current + stepWidth, maxOffset);
-                        stepPositions.push(current);
-                    }
-
-                    return { positions: stepPositions, element: textEl };
-                };
-
-                var playHorizontalShift = function () {
-                    positionIndex++;
-                    if (positionIndex >= positions.length) {
-                        schedule(nextHeadline, interval);
-                        return;
-                    }
-
-                    var item = items[currentIndex];
-                    var textEl = item.querySelector('.hero-headline-text');
-                    if (!textEl) {
-                        schedule(nextHeadline, interval);
-                        return;
-                    }
-
-                    textEl.style.transform = 'translateX(-' + positions[positionIndex] + 'px)';
-                    schedule(playHorizontalShift, interval);
-                };
-
-                var nextHeadline = function () {
-                    var nextIndex = (currentIndex + 1) % items.length;
-                    showHeadline(nextIndex);
-                };
-
-                var showHeadline = function (index, options) {
-                    options = options || {};
-                    currentIndex = index;
-
-                    items.forEach(function (item, itemIndex) {
-                        var textEl = item.querySelector('.hero-headline-text');
-                        if (textEl && itemIndex !== index) {
                             resetText(textEl);
-                        }
-                        item.classList.toggle('is-active', itemIndex === index);
-                    });
 
-                    setTrackPosition(index, !options.instant);
+                            var viewportWidth = viewport.clientWidth;
+                            var textWidth = textEl.scrollWidth;
 
-                    var meta = prepareText(items[index]);
-                    positions = meta.positions;
-                    positionIndex = -1;
+                            if (textWidth <= viewportWidth + 1) {
+                                return { positions: [], element: textEl };
+                            }
 
-                    if (positions.length === 0) {
-                        schedule(nextHeadline, interval);
-                    } else {
-                        schedule(playHorizontalShift, interval);
+                            var maxOffset = textWidth - viewportWidth;
+                            var stepWidth = viewportWidth;
+                            var stepPositions = [];
+                            var current = 0;
+                            while (current < maxOffset) {
+                                current = Math.min(current + stepWidth, maxOffset);
+                                stepPositions.push(current);
+                            }
+
+                            return { positions: stepPositions, element: textEl };
+                        };
+
+                        var playHorizontalShift = function () {
+                            positionIndex++;
+                            if (positionIndex >= positions.length) {
+                                schedule(nextHeadline, interval);
+                                return;
+                            }
+
+                            var item = items[currentIndex];
+                            var textEl = item.querySelector('.hero-headline-text');
+                            if (!textEl) {
+                                schedule(nextHeadline, interval);
+                                return;
+                            }
+
+                            textEl.style.transform = 'translateX(-' + positions[positionIndex] + 'px)';
+                            schedule(playHorizontalShift, interval);
+                        };
+
+                        var nextHeadline = function () {
+                            var nextIndex = (currentIndex + 1) % items.length;
+                            showHeadline(nextIndex);
+                        };
+
+                        var showHeadline = function (index, options) {
+                            options = options || {};
+                            currentIndex = index;
+
+                            items.forEach(function (item, itemIndex) {
+                                var textEl = item.querySelector('.hero-headline-text');
+                                if (textEl && itemIndex !== index) {
+                                    resetText(textEl);
+                                }
+                                item.classList.toggle('is-active', itemIndex === index);
+                            });
+
+                            setTrackPosition(index, !options.instant);
+
+                            var meta = prepareText(items[index]);
+                            positions = meta.positions;
+                            positionIndex = -1;
+
+                            if (positions.length === 0) {
+                                schedule(nextHeadline, interval);
+                            } else {
+                                schedule(playHorizontalShift, interval);
+                            }
+                        };
+
+                        window.addEventListener('resize', function () {
+                            window.clearTimeout(timerId);
+                            showHeadline(currentIndex, { instant: true });
+                        });
+
+                        showHeadline(0, { instant: true });
                     }
-                };
+                }
 
-                window.addEventListener('resize', function () {
-                    window.clearTimeout(timerId);
-                    showHeadline(currentIndex, { instant: true });
-                });
+                var mapSection = document.querySelector('[data-map-section]');
+                if (mapSection) {
+                    var toggleInput = mapSection.querySelector('[data-map-toggle-input]');
+                    var mapItemsArray = Array.prototype.slice.call(mapSection.querySelectorAll('[data-map-view]'));
+                    var toggleCaption = mapSection.querySelector('[data-map-toggle-caption]');
 
-                showHeadline(0, { instant: true });
+                    if (mapItemsArray.length > 0) {
+                        var setMapMode = function (mode) {
+                            mapSection.setAttribute('data-map-mode', mode);
+                        };
+
+                        var updateMapView = function (showSatellite) {
+                            var activeView = showSatellite ? 'satellite' : 'default';
+                            var hasTarget = mapItemsArray.some(function (item) {
+                                return item.getAttribute('data-map-view') === activeView;
+                            });
+
+                            if (!hasTarget) {
+                                activeView = mapItemsArray[0].getAttribute('data-map-view') || activeView;
+                            }
+
+                            mapItemsArray.forEach(function (item) {
+                                item.classList.toggle('is-active', item.getAttribute('data-map-view') === activeView);
+                            });
+
+                            if (toggleCaption) {
+                                var defaultText = toggleCaption.getAttribute('data-default') || toggleCaption.textContent || 'Peta Wilayah';
+                                var satelliteText = toggleCaption.getAttribute('data-satellite') || 'Peta Citra';
+                                toggleCaption.textContent = activeView === 'satellite' ? satelliteText : defaultText;
+                            }
+
+                            setMapMode(activeView);
+                        };
+
+                        if (toggleInput && mapItemsArray.length > 1) {
+                            updateMapView(toggleInput.checked);
+                            toggleInput.addEventListener('change', function () {
+                                updateMapView(toggleInput.checked);
+                            });
+                        } else {
+                            var fallbackView = mapItemsArray[0].getAttribute('data-map-view') || 'default';
+                            mapItemsArray[0].classList.add('is-active');
+
+                            if (toggleCaption) {
+                                var defaultText = toggleCaption.getAttribute('data-default') || toggleCaption.textContent || 'Peta Wilayah';
+                                var satelliteText = toggleCaption.getAttribute('data-satellite') || 'Peta Citra';
+                                toggleCaption.textContent = fallbackView === 'satellite' ? satelliteText : defaultText;
+                            }
+
+                            setMapMode(fallbackView);
+                        }
+                    }
+                }
             });
         </script>
         <?php
     },
 ]);
+
+
+
+
 
 
 

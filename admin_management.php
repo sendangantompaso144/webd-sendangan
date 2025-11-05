@@ -1,0 +1,4730 @@
+<?php
+
+declare(strict_types=1);
+
+require __DIR__ . '/app/bootstrap.php';
+
+if (session_status() !== PHP_SESSION_ACTIVE) {
+    session_start([
+        'cookie_httponly' => true,
+        'use_strict_mode' => true,
+    ]);
+}
+
+$adminSession = $_SESSION['admin'] ?? null;
+$isAuthorized = is_array($adminSession) && isset($adminSession['id']) && (int) $adminSession['id'] > 0;
+
+if (!$isAuthorized) {
+    header('Location: admin.php');
+    exit;
+}
+
+try {
+    $pdo = db();
+
+// === Current admin ===
+$currentAdminId = (int)($adminSession['id'] ?? 0);
+
+$currentAdmin = [];
+if ($currentAdminId > 0) {
+    try {
+        $stmt = $pdo->prepare('
+            SELECT admin_id, admin_nama, admin_password, admin_no_hp, admin_email,
+                   admin_created_at, admin_updated_at, admin_is_superadmin
+            FROM admin
+            WHERE admin_id = ? LIMIT 1
+        ');
+        $stmt->execute([$currentAdminId]);
+        $currentAdmin = $stmt->fetch(PDO::FETCH_ASSOC) ?: [];
+    } catch (Throwable) {
+        $currentAdmin = [];
+    }
+}
+
+// ✅ Baru hitung setelah $currentAdmin terisi
+$isSuperadmin = ((int)($currentAdmin['admin_is_superadmin'] ?? 0) === 1);
+// === Filter UI: tampilkan admin soft-deleted? (persist di sesi)
+$showDeletedAdmins = 0;
+if ($isSuperadmin) {
+    $showDeletedAdmins = isset($_GET['show_deleted'])
+        ? (int)($_GET['show_deleted'] === '1')
+        : (int)($_SESSION['ui_show_admin_deleted'] ?? 0);
+    $_SESSION['ui_show_admin_deleted'] = $showDeletedAdmins;
+}
+
+
+} catch (Throwable $exception) {
+    http_response_code(500);
+    echo '<h1>Kesalahan Server</h1>';
+    echo '<p>Tidak dapat terhubung ke database: ' . e($exception->getMessage()) . '</p>';
+    exit;
+}
+
+function fetch_table(PDO $pdo, string $sql, array $params = []): array
+{
+    try {
+        $stmt = $pdo->prepare($sql);
+        if ($stmt === false) {
+            return [];
+        }
+        $stmt->execute($params);
+        $results = $stmt->fetchAll(PDO::FETCH_ASSOC);
+        return is_array($results) ? $results : [];
+    } catch (Throwable) {
+        return [];
+    }
+}
+
+function format_datetime(null|string $value): string
+{
+    if ($value === null || $value === '') {
+        return '-';
+    }
+
+    try {
+        $ts = strtotime($value);
+        if ($ts === false) {
+            return $value;
+        }
+        return date('d M Y H:i', $ts);
+    } catch (Throwable) {
+        return $value;
+    }
+}
+
+function resolve_potensi_media_url(string $path): string
+{
+    $path = trim($path);
+    if ($path === '') {
+        return '';
+    }
+
+    $lower = strtolower($path);
+    if (str_starts_with($lower, 'http://') || str_starts_with($lower, 'https://') || str_starts_with($path, '//')) {
+        return $path;
+    }
+
+    $normalized = ltrim(str_replace('\\', '/', $path), '/');
+
+    $candidates = [
+        $normalized,
+        'uploads/' . $normalized,
+        'uploads/potensi/' . $normalized,
+        'uploads/potensi_desa/' . $normalized,
+        'uploads/assets/' . $normalized,
+    ];
+
+    foreach ($candidates as $candidate) {
+        if (is_file(base_path($candidate))) {
+            return base_uri($candidate);
+        }
+    }
+
+    return base_uri($normalized);
+}
+
+// Kamus label untuk menampilkan nama yang mudah dipahami operator
+$dataDictionary = [
+    // ——— DEMOGRAFI ———
+    'demografi.jaga_1_laki'        => ['label' => 'Jaga 1 — Laki-laki',   'hint' => 'Jumlah penduduk laki-laki di Jaga 1 (orang)'],
+    'demografi.jaga_1_perempuan'   => ['label' => 'Jaga 1 — Perempuan',   'hint' => 'Jumlah penduduk perempuan di Jaga 1 (orang)'],
+    'demografi.jaga_2_laki'        => ['label' => 'Jaga 2 — Laki-laki',   'hint' => 'Jumlah penduduk laki-laki di Jaga 2 (orang)'],
+    'demografi.jaga_2_perempuan'   => ['label' => 'Jaga 2 — Perempuan',   'hint' => 'Jumlah penduduk perempuan di Jaga 2 (orang)'],
+    'demografi.jumlah_jaga'        => ['label' => 'Jumlah Jaga',          'hint' => 'Total wilayah jaga/lingkungan'],
+    'demografi.kepala_keluarga'    => ['label' => 'Jumlah KK',            'hint' => 'Jumlah Kepala Keluarga (KK)'],
+    'demografi.luas_wilayah_ha'    => ['label' => 'Luas Wilayah (ha)',    'hint' => 'Satuan hektare (ha)'],
+
+    // ——— SAPAAN/TEKS ———
+    'greeting.hukum_tua'           => ['label' => 'Sambutan Hukum Tua',   'hint' => 'Teks sambutan/kalimat pembuka'],
+
+    // ——— KONTAK ———
+    'kontak.email_desa'            => ['label' => 'Email Resmi Desa',     'hint' => 'Contoh: desa@contoh.go.id'],
+    'kontak.telepon_desa'          => ['label' => 'Telepon Resmi Desa',   'hint' => 'Gunakan format nasional, mis. 0431… atau +62…'],
+
+    // ——— MEDIA ———
+    'media.peta_desa_sendangan'        => ['label' => 'Peta Desa (Jalan)',        'hint' => 'Nama file atau URL gambar peta jalan'],
+    'media.peta_desa_sendangan_citra'  => ['label' => 'Peta Desa (Citra Satelit)','hint' => 'Nama file atau URL gambar peta citra'],
+    // ——— PROFIL HUKUM TUA ———
+    'profile.hukum_tua_nama' => [
+        'label' => 'Nama Hukum Tua',
+        'hint'  => 'Nama lengkap Hukum Tua saat ini'
+    ],
+    'media.hukum_tua_foto' => [
+        'label' => 'Foto Hukum Tua (nama file)',
+        'hint'  => 'Diisi otomatis saat upload. Menyimpan nama file .webp di folder uploads/assets/'
+    ],
+];
+
+$tableForms = [
+    'apbdes' => [
+        'table' => 'apbdes',
+        'title' => 'Dokumen APBDes',
+        'fields' => [
+            'apbdes_judul' => ['label' => 'Judul', 'type' => 'text', 'required' => true],
+            'apbdes_file' => ['label' => 'Nama Berkas', 'type' => 'file_pdf', 'required' => true],
+        ],
+    ],
+    'berita' => [
+        'table' => 'berita',
+        'title' => 'Berita Desa',
+        'fields' => [
+            'berita_judul' => ['label' => 'Judul', 'type' => 'text', 'required' => true],
+            'berita_isi' => ['label' => 'Isi Berita', 'type' => 'textarea', 'required' => true],
+            'berita_gambar' => ['label' => 'Gambar', 'type' => 'file_image', 'required' => false],
+        ],
+    ],
+    'fasilitas' => [
+        'table' => 'fasilitas',
+        'title' => 'Fasilitas Desa',
+        'fields' => [
+            'fasilitas_nama' => ['label' => 'Nama Fasilitas', 'type' => 'text', 'required' => true],
+            'fasilitas_gambar' => ['label' => 'Gambar', 'type' => 'file_image', 'required' => true],
+            'fasilitas_gmaps_link' => ['label' => 'Link Google Maps', 'type' => 'text', 'required' => false],
+        ],
+    ],
+    'potensi' => [
+        'table' => 'potensi_desa',
+        'title' => 'Potensi Desa',
+        'fields' => [
+            'potensi_judul' => ['label' => 'Judul Potensi', 'type' => 'text', 'required' => true],
+            'potensi_isi' => ['label' => 'Deskripsi', 'type' => 'textarea', 'required' => true],
+            'potensi_kategori' => ['label' => 'Kategori', 'type' => 'select', 'required' => true, 'options' => ['Wisata', 'Budaya', 'Kuliner', 'UMKM']],
+            'potensi_gmaps_link' => ['label' => 'Link Google Maps', 'type' => 'text', 'required' => false],
+        ],
+    ],
+    'galeri' => [
+        'table' => 'galeri',
+        'title' => 'Galeri Desa',
+        'fields' => [
+            'galeri_keterangan' => ['label' => 'Keterangan', 'type' => 'textarea', 'required' => false],
+            'galeri_gambar' => ['label' => 'Upload Gambar', 'type' => 'file_image', 'required' => true],
+        ],
+    ],
+    'potensi-media' => [
+        'table' => 'gambar_potensi_desa',
+        'title' => 'Tambah Foto Potensi',
+        'fields' => [
+            // potensi_id tidak tampil di form, dikirim otomatis dari JS
+            'gambar_namafile' => ['label' => 'Upload Foto', 'type' => 'file_image', 'required' => true],
+        ],
+    ],
+    'pengumuman' => [
+        'table' => 'pengumuman',
+        'title' => 'Pengumuman',
+        'fields' => [
+            'pengumuman_isi' => ['label' => 'Isi Pengumuman', 'type' => 'textarea', 'required' => true],
+            'pengumuman_valid_hingga' => ['label' => 'Berlaku Hingga', 'type' => 'datetime', 'required' => true],
+        ],
+    ],
+    'permohonan' => [
+        'table' => 'permohonan_informasi',
+        'title' => 'Permohonan Informasi',
+        'fields' => [
+            'pi_isi_permintaan' => ['label' => 'Isi Permintaan', 'type' => 'textarea', 'required' => true],
+            'pi_email' => ['label' => 'Email Pemohon', 'type' => 'email', 'required' => false],
+            'pi_asal_instansi' => ['label' => 'Asal Instansi', 'type' => 'text', 'required' => false],
+            'pi_selesai' => ['label' => 'Ditandai Selesai', 'type' => 'checkbox', 'required' => false, 'default' => 0],
+        ],
+    ],
+    'ppid' => [
+        'table' => 'ppid_dokumen',
+        'title' => 'Dokumen PPID',
+        'fields' => [
+            'ppid_judul' => ['label' => 'Judul Dokumen', 'type' => 'text', 'required' => true],
+            'ppid_namafile' => ['label' => 'Nama File', 'type' => 'text', 'required' => true],
+            'ppid_kategori' => ['label' => 'Kategori', 'type' => 'text', 'required' => false],
+            'ppid_pi_id' => ['label' => 'Terkait Permohonan ID', 'type' => 'number', 'required' => false],
+        ],
+    ],
+    'program' => [
+        'table' => 'program_desa',
+        'title' => 'Program Desa',
+        'fields' => [
+            'program_nama' => ['label' => 'Nama Program', 'type' => 'text', 'required' => true],
+            'program_deskripsi' => ['label' => 'Deskripsi', 'type' => 'textarea', 'required' => true],
+            'program_gambar' => ['label' => 'Gambar Program', 'type' => 'file_image', 'required' => false],
+        ],
+    ],
+    'struktur' => [
+        'table' => 'struktur_organisasi',
+        'title' => 'Struktur Organisasi',
+        'fields' => [
+            'struktur_nama' => ['label' => 'Nama', 'type' => 'text', 'required' => true],
+            'struktur_jabatan' => ['label' => 'Jabatan', 'type' => 'text', 'required' => true],
+            'struktur_foto' => ['label' => 'Foto', 'type' => 'file_image', 'required' => false],
+        ],
+    ],
+];
+
+if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    $action = (string) ($_POST['action'] ?? '');
+    // ————— ACCOUNT ACTIONS —————
+    // CREATE ADMIN (SUPERADMIN ONLY)
+    if ($action === 'create_admin') {
+        if (!$isSuperadmin) {
+            $_SESSION['flash_error'][] = 'Anda tidak berwenang membuat akun baru.';
+            header('Location: admin_management.php#admin'); exit;
+        }
+
+        $nama     = trim((string)($_POST['admin_nama'] ?? ''));
+        $emailRaw = trim((string)($_POST['admin_email'] ?? ''));
+        $hpRaw    = trim((string)($_POST['admin_no_hp'] ?? ''));
+        $password = (string)($_POST['admin_password'] ?? '');
+        $isSup    = isset($_POST['admin_is_superadmin']) ? 1 : 0;
+
+        $errors = [];
+        if ($nama === '')                          $errors[] = 'Nama wajib diisi.';
+        if ($password === '' || strlen($password) < 8) $errors[] = 'Password minimal 8 karakter.';
+
+        $email = $emailRaw === '' ? null : $emailRaw;
+        if ($email !== null && !filter_var($email, FILTER_VALIDATE_EMAIL)) {
+            $errors[] = 'Format email tidak valid.';
+        }
+
+        $hp = $hpRaw === '' ? null : $hpRaw;
+        if ($hp !== null && !preg_match('~^\+?\d{8,15}$~', $hp)) {
+            $errors[] = 'Format nomor HP tidak valid.';
+        }
+
+        if ($errors !== []) {
+            foreach ($errors as $err) $_SESSION['flash_error'][] = $err;
+            header('Location: admin_management.php#admin'); exit;
+        }
+
+        try {
+            // Cek unik email (jika diisi)
+            if ($email !== null) {
+                $st = $pdo->prepare('SELECT COUNT(*) FROM admin WHERE admin_email = ?');
+                $st->execute([$email]);
+                if ((int)$st->fetchColumn() > 0) {
+                    $_SESSION['flash_error'][] = 'Email sudah digunakan.';
+                    header('Location: admin_management.php#admin'); exit;
+                }
+            }
+            // Cek unik no HP (jika diisi)
+            if ($hp !== null) {
+                $st = $pdo->prepare('SELECT COUNT(*) FROM admin WHERE admin_no_hp = ?');
+                $st->execute([$hp]);
+                if ((int)$st->fetchColumn() > 0) {
+                    $_SESSION['flash_error'][] = 'No. HP sudah digunakan.';
+                    header('Location: admin_management.php#admin'); exit;
+                }
+            }
+
+            $hash = password_hash($password, PASSWORD_DEFAULT);
+            $stmt = $pdo->prepare('
+                INSERT INTO admin (admin_nama, admin_password, admin_no_hp, admin_email, admin_is_deleted, admin_is_superadmin)
+                VALUES (?, ?, ?, ?, 0, ?)
+            ');
+            $stmt->execute([$nama, $hash, $hp, $email, $isSup]);
+
+            $_SESSION['flash'][] = 'Akun admin berhasil dibuat.';
+        } catch (Throwable $e) {
+            // fallback untuk duplicate key dari DB
+            $msg = (string)$e->getMessage();
+            if (str_contains($msg, 'Duplicate') || str_contains($msg, '1062')) {
+                $_SESSION['flash_error'][] = 'Email atau No. HP sudah terdaftar.';
+            } else {
+                $_SESSION['flash_error'][] = 'Gagal membuat akun: ' . $e->getMessage();
+            }
+        }
+
+        header('Location: admin_management.php#admin'); exit;
+    }
+        // ——— ACCOUNT ACTIONS ———
+    // SOFT DELETE ADMIN (Superadmin only)
+    if ($action === 'soft_delete_admin') {
+        if (!$isSuperadmin) {
+            $_SESSION['flash_error'][] = 'Akses ditolak.';
+            header('Location: admin_management.php#admin'); exit;
+        }
+
+        $targetId = (int)($_POST['target_admin_id'] ?? 0);
+        if ($targetId <= 0 || $targetId === $currentAdminId) {
+            $_SESSION['flash_error'][] = 'Target tidak valid.';
+            header('Location: admin_management.php#admin'); exit;
+        }
+
+        try {
+            $st = $pdo->prepare('SELECT admin_is_superadmin FROM admin WHERE admin_id = ? LIMIT 1');
+            $st->execute([$targetId]);
+            $row = $st->fetch(PDO::FETCH_ASSOC);
+
+            if (!$row) {
+                $_SESSION['flash_error'][] = 'Akun tidak ditemukan.';
+            } elseif ((int)$row['admin_is_superadmin'] === 1) {
+                $_SESSION['flash_error'][] = 'Tidak dapat menghapus superadmin.';
+            } else {
+                $up = $pdo->prepare('UPDATE admin SET admin_is_deleted = 1, admin_updated_at = NOW() WHERE admin_id = ?');
+                $up->execute([$targetId]);
+                $_SESSION['flash'][] = 'Akun ditandai terhapus.';
+            }
+        } catch (Throwable $e) {
+            $_SESSION['flash_error'][] = 'Gagal menghapus: ' . $e->getMessage();
+        }
+
+        header('Location: admin_management.php#admin'); exit;
+    }
+        // ——— ACCOUNT ACTIONS ———
+    // EDIT ADMIN LAIN (Superadmin only)
+    if ($action === 'edit_other_admin') {
+        if (!$isSuperadmin) {
+            $_SESSION['flash_error'][] = 'Akses ditolak.';
+            header('Location: admin_management.php#admin'); exit;
+        }
+
+        $targetId = (int)($_POST['target_admin_id'] ?? 0);
+        $nama     = trim((string)($_POST['admin_nama'] ?? ''));
+        $emailRaw = trim((string)($_POST['admin_email'] ?? ''));
+        $hpRaw    = trim((string)($_POST['admin_no_hp'] ?? ''));
+        $isSup    = isset($_POST['admin_is_superadmin']) ? 1 : 0;
+        $isDel    = isset($_POST['admin_is_deleted']) ? 1 : 0;
+
+        if ($targetId <= 0) {
+            $_SESSION['flash_error'][] = 'Target tidak valid.';
+            header('Location: admin_management.php#admin'); exit;
+        }
+        if ($nama === '') {
+            $_SESSION['flash_error'][] = 'Nama wajib diisi.';
+            header('Location: admin_management.php#admin'); exit;
+        }
+
+        $email = ($emailRaw === '') ? null : $emailRaw;
+        if ($email !== null && !filter_var($email, FILTER_VALIDATE_EMAIL)) {
+            $_SESSION['flash_error'][] = 'Format email tidak valid.';
+            header('Location: admin_management.php#admin'); exit;
+        }
+
+        $hp = ($hpRaw === '') ? null : $hpRaw;
+        if ($hp !== null && !preg_match('~^\+?\d{8,15}$~', $hp)) {
+            $_SESSION['flash_error'][] = 'Format nomor HP tidak valid.';
+            header('Location: admin_management.php#admin'); exit;
+        }
+
+        try {
+            // Ambil status sebelumnya
+            $st = $pdo->prepare('SELECT admin_is_superadmin FROM admin WHERE admin_id = ? LIMIT 1');
+            $st->execute([$targetId]);
+            $prev = $st->fetch(PDO::FETCH_ASSOC);
+            if (!$prev) {
+                $_SESSION['flash_error'][] = 'Akun tidak ditemukan.';
+                header('Location: admin_management.php#admin'); exit;
+            }
+
+            // Cek unik email/HP (abaikan NULL) untuk admin lain
+            if ($email !== null) {
+                $st = $pdo->prepare('SELECT COUNT(*) FROM admin WHERE admin_email = ? AND admin_id <> ?');
+                $st->execute([$email, $targetId]);
+                if ((int)$st->fetchColumn() > 0) {
+                    $_SESSION['flash_error'][] = 'Email sudah digunakan admin lain.';
+                    header('Location: admin_management.php#admin'); exit;
+                }
+            }
+            if ($hp !== null) {
+                $st = $pdo->prepare('SELECT COUNT(*) FROM admin WHERE admin_no_hp = ? AND admin_id <> ?');
+                $st->execute([$hp, $targetId]);
+                if ((int)$st->fetchColumn() > 0) {
+                    $_SESSION['flash_error'][] = 'No. HP sudah digunakan admin lain.';
+                    header('Location: admin_management.php#admin'); exit;
+                }
+            }
+
+            // Larangan menonaktifkan / menurunkan pangkat superadmin terakhir
+            $wasSuper = (int)($prev['admin_is_superadmin'] ?? 0) === 1;
+            if ($wasSuper && ($isSup === 0 || $isDel === 1)) {
+                $st = $pdo->query('SELECT COUNT(*) FROM admin WHERE admin_is_superadmin = 1');
+                $totalSuper = (int)$st->fetchColumn();
+                if ($totalSuper <= 1) {
+                    $_SESSION['flash_error'][] = 'Tidak dapat menonaktifkan atau menurunkan superadmin terakhir.';
+                    header('Location: admin_management.php#admin'); exit;
+                }
+            }
+
+            $stmt = $pdo->prepare('
+                UPDATE admin
+                SET admin_nama = ?, admin_email = ?, admin_no_hp = ?, admin_is_superadmin = ?, admin_is_deleted = ?, admin_updated_at = NOW()
+                WHERE admin_id = ?
+            ');
+            $stmt->execute([$nama, $email, $hp, $isSup, $isDel, $targetId]);
+
+            $_SESSION['flash'][] = 'Akun admin #' . $targetId . ' berhasil diperbarui.';
+        } catch (Throwable $e) {
+            $_SESSION['flash_error'][] = 'Gagal memperbarui akun: ' . $e->getMessage();
+        }
+
+        header('Location: admin_management.php#admin'); exit;
+    }
+
+    // RESET PASSWORD ADMIN LAIN (Superadmin only)
+    if ($action === 'reset_admin_password') {
+        if (!$isSuperadmin) {
+            $_SESSION['flash_error'][] = 'Akses ditolak.';
+            header('Location: admin_management.php#admin'); exit;
+        }
+
+        $targetId = (int)($_POST['target_admin_id'] ?? 0);
+        $pass1 = (string)($_POST['new_password'] ?? '');
+        $pass2 = (string)($_POST['new_password_repeat'] ?? '');
+
+        if ($targetId <= 0) {
+            $_SESSION['flash_error'][] = 'Target tidak valid.';
+            header('Location: admin_management.php#admin'); exit;
+        }
+        if ($pass1 === '' || strlen($pass1) < 8) {
+            $_SESSION['flash_error'][] = 'Password minimal 8 karakter.';
+            header('Location: admin_management.php#admin'); exit;
+        }
+        if ($pass1 !== $pass2) {
+            $_SESSION['flash_error'][] = 'Ketik ulang password tidak sama.';
+            header('Location: admin_management.php#admin'); exit;
+        }
+
+        try {
+            // Pastikan target ada
+            $st = $pdo->prepare('SELECT admin_id FROM admin WHERE admin_id = ? LIMIT 1');
+            $st->execute([$targetId]);
+            if (!$st->fetch(PDO::FETCH_ASSOC)) {
+                $_SESSION['flash_error'][] = 'Akun tidak ditemukan.';
+                header('Location: admin_management.php#admin'); exit;
+            }
+
+            $hash = password_hash($pass1, PASSWORD_DEFAULT);
+            $up = $pdo->prepare('UPDATE admin SET admin_password = ?, admin_updated_at = NOW() WHERE admin_id = ?');
+            $up->execute([$hash, $targetId]);
+
+            $_SESSION['flash'][] = 'Password untuk akun #' . $targetId . ' berhasil direset.';
+        } catch (Throwable $e) {
+            $_SESSION['flash_error'][] = 'Gagal reset password: ' . $e->getMessage();
+        }
+
+        header('Location: admin_management.php#admin'); exit;
+    }
+
+    // RESTORE ADMIN (Superadmin only)
+    if ($action === 'restore_admin') {
+        if (!$isSuperadmin) {
+            $_SESSION['flash_error'][] = 'Akses ditolak.';
+            header('Location: admin_management.php#admin'); exit;
+        }
+
+        $targetId = (int)($_POST['target_admin_id'] ?? 0);
+        if ($targetId <= 0 || $targetId === $currentAdminId) {
+            $_SESSION['flash_error'][] = 'Target tidak valid.';
+            header('Location: admin_management.php#admin'); exit;
+        }
+
+        try {
+            $st = $pdo->prepare('SELECT admin_is_superadmin FROM admin WHERE admin_id = ? LIMIT 1');
+            $st->execute([$targetId]);
+            $row = $st->fetch(PDO::FETCH_ASSOC);
+
+            if (!$row) {
+                $_SESSION['flash_error'][] = 'Akun tidak ditemukan.';
+            } else {
+                $up = $pdo->prepare('UPDATE admin SET admin_is_deleted = 0, admin_updated_at = NOW() WHERE admin_id = ?');
+                $up->execute([$targetId]);
+                $_SESSION['flash'][] = 'Akun dipulihkan.';
+            }
+        } catch (Throwable $e) {
+            $_SESSION['flash_error'][] = 'Gagal memulihkan: ' . $e->getMessage();
+        }
+
+        header('Location: admin_management.php#admin'); exit;
+    }
+
+        // ————— ACCOUNT ACTIONS —————
+    if ($action === 'update_admin_nama') {
+        $new = trim((string)($_POST['admin_nama'] ?? ''));
+        if ($new === '') {
+            $_SESSION['flash_error'][] = 'Nama tidak boleh kosong.';
+            header('Location: admin_management.php#admin'); exit;
+        }
+        try {
+            $stmt = $pdo->prepare('UPDATE admin SET admin_nama = ?, admin_updated_at = NOW() WHERE admin_id = ?');
+            $stmt->execute([$new, $currentAdminId]);
+            $_SESSION['admin']['name'] = $new; // sinkron sesi
+            $_SESSION['flash'][] = 'Nama berhasil diperbarui.';
+        } catch (Throwable $e) {
+            $_SESSION['flash_error'][] = 'Gagal memperbarui nama: ' . $e->getMessage();
+        }
+        header('Location: admin_management.php#admin'); exit;
+    }
+
+    if ($action === 'update_admin_no_hp') {
+        $raw = trim((string)($_POST['admin_no_hp'] ?? ''));
+        $phone = $raw === '' ? null : $raw;
+        if ($phone !== null && !preg_match('~^\+?\d{8,15}$~', $phone)) {
+            $_SESSION['flash_error'][] = 'Format nomor HP tidak valid.';
+            header('Location: admin_management.php#admin'); exit;
+        }
+        try {
+            if ($phone !== null) {
+                $stmt = $pdo->prepare('SELECT COUNT(*) FROM admin WHERE admin_no_hp = ? AND admin_id <> ?');
+                $stmt->execute([$phone, $currentAdminId]);
+                if ((int)$stmt->fetchColumn() > 0) {
+                    $_SESSION['flash_error'][] = 'Nomor HP sudah digunakan admin lain.';
+                    header('Location: admin_management.php#admin'); exit;
+                }
+            }
+            $stmt = $pdo->prepare('UPDATE admin SET admin_no_hp = ?, admin_updated_at = NOW() WHERE admin_id = ?');
+            $stmt->execute([$phone, $currentAdminId]);
+            $_SESSION['flash'][] = 'Nomor HP berhasil diperbarui.';
+        } catch (Throwable $e) {
+            $_SESSION['flash_error'][] = 'Gagal memperbarui nomor HP: ' . $e->getMessage();
+        }
+        header('Location: admin_management.php#admin'); exit;
+    }
+
+    if ($action === 'update_admin_email') {
+        $raw = trim((string)($_POST['admin_email'] ?? ''));
+        $email = $raw === '' ? null : $raw;
+        if ($email !== null && !filter_var($email, FILTER_VALIDATE_EMAIL)) {
+            $_SESSION['flash_error'][] = 'Format email tidak valid.';
+            header('Location: admin_management.php#admin'); exit;
+        }
+        try {
+            if ($email !== null) {
+                $stmt = $pdo->prepare('SELECT COUNT(*) FROM admin WHERE admin_email = ? AND admin_id <> ?');
+                $stmt->execute([$email, $currentAdminId]);
+                if ((int)$stmt->fetchColumn() > 0) {
+                    $_SESSION['flash_error'][] = 'Email sudah digunakan admin lain.';
+                    header('Location: admin_management.php#admin'); exit;
+                }
+            }
+            $stmt = $pdo->prepare('UPDATE admin SET admin_email = ?, admin_updated_at = NOW() WHERE admin_id = ?');
+            $stmt->execute([$email, $currentAdminId]);
+            $_SESSION['flash'][] = 'Email berhasil diperbarui.';
+        } catch (Throwable $e) {
+            $_SESSION['flash_error'][] = 'Gagal memperbarui email: ' . $e->getMessage();
+        }
+        header('Location: admin_management.php#admin'); exit;
+    }
+
+    if ($action === 'change_admin_password') {
+        $old = (string)($_POST['password_lama'] ?? '');
+        $new = (string)($_POST['password_baru'] ?? '');
+        $rep = (string)($_POST['password_baru_repeat'] ?? '');
+
+        if ($new === '' || strlen($new) < 8) {
+            $_SESSION['flash_error'][] = 'Password baru minimal 8 karakter.';
+            header('Location: admin_management.php#admin'); exit;
+        }
+        if ($new !== $rep) {
+            $_SESSION['flash_error'][] = 'Ketik ulang password tidak sama.';
+            header('Location: admin_management.php#admin'); exit;
+        }
+
+        try {
+            $stmt = $pdo->prepare('SELECT admin_password FROM admin WHERE admin_id = ? LIMIT 1');
+            $stmt->execute([$currentAdminId]);
+            $row = $stmt->fetch(PDO::FETCH_ASSOC);
+            if (!$row || !password_verify($old, (string)$row['admin_password'])) {
+                $_SESSION['flash_error'][] = 'Password lama salah.';
+                header('Location: admin_management.php#admin'); exit;
+            }
+            $hash = password_hash($new, PASSWORD_DEFAULT);
+            $stmt = $pdo->prepare('UPDATE admin SET admin_password = ?, admin_updated_at = NOW() WHERE admin_id = ?');
+            $stmt->execute([$hash, $currentAdminId]);
+            $_SESSION['flash'][] = 'Password berhasil diganti.';
+        } catch (Throwable $e) {
+            $_SESSION['flash_error'][] = 'Gagal mengganti password: ' . $e->getMessage();
+        }
+        header('Location: admin_management.php#admin'); exit;
+    }
+
+    if ($action === 'delete_apbdes') {
+        $apbdesId = isset($_POST['apbdes_id']) ? (int) $_POST['apbdes_id'] : 0;
+        if ($apbdesId <= 0) {
+            $_SESSION['flash_error'][] = 'Data APBDes tidak ditemukan.';
+            header('Location: admin_management.php#apbdes');
+            exit;
+        }
+
+        try {
+            $stmt = $pdo->prepare('SELECT apbdes_file FROM apbdes WHERE apbdes_id = ? LIMIT 1');
+            if ($stmt === false) {
+                throw new RuntimeException('Tidak dapat menyiapkan kueri.');
+            }
+            $stmt->execute([$apbdesId]);
+            $row = $stmt->fetch(PDO::FETCH_ASSOC);
+        } catch (Throwable $exception) {
+            $_SESSION['flash_error'][] = 'Gagal memuat data APBDes: ' . $exception->getMessage();
+            header('Location: admin_management.php#apbdes');
+            exit;
+        }
+
+        if (!$row) {
+            $_SESSION['flash_error'][] = 'Data APBDes tidak ditemukan.';
+            header('Location: admin_management.php#apbdes');
+            exit;
+        }
+
+        $fileName = trim((string) ($row['apbdes_file'] ?? ''));
+        if ($fileName !== '') {
+            $filePath = base_path('uploads/apbdes/' . ltrim($fileName, "/\\"));
+            if (is_file($filePath) && !unlink($filePath)) {
+                $_SESSION['flash_error'][] = 'Gagal menghapus berkas APBDes.';
+                header('Location: admin_management.php#apbdes');
+                exit;
+            }
+        }
+
+        try {
+            $stmt = $pdo->prepare('DELETE FROM apbdes WHERE apbdes_id = ?');
+            if ($stmt === false) {
+                throw new RuntimeException('Tidak dapat menyiapkan kueri.');
+            }
+            $executed = $stmt->execute([$apbdesId]);
+            if ($executed) {
+                $_SESSION['flash'][] = 'Dokumen APBDes berhasil dihapus.';
+            } else {
+                $_SESSION['flash_error'][] = 'Gagal menghapus data APBDes.';
+            }
+        } catch (Throwable $exception) {
+            $_SESSION['flash_error'][] = 'Gagal menghapus data APBDes: ' . $exception->getMessage();
+        }
+
+        header('Location: admin_management.php#apbdes');
+        exit;
+    }
+
+    if ($action === 'delete_berita') {
+        $beritaId = isset($_POST['berita_id']) ? (int) $_POST['berita_id'] : 0;
+        if ($beritaId <= 0) {
+            $_SESSION['flash_error'][] = 'Data berita tidak ditemukan.';
+            header('Location: admin_management.php#berita');
+            exit;
+        }
+
+        try {
+            $stmt = $pdo->prepare('SELECT berita_gambar FROM berita WHERE berita_id = ? LIMIT 1');
+            if ($stmt === false) {
+                throw new RuntimeException('Tidak dapat menyiapkan kueri.');
+            }
+            $stmt->execute([$beritaId]);
+            $row = $stmt->fetch(PDO::FETCH_ASSOC);
+        } catch (Throwable $exception) {
+            $_SESSION['flash_error'][] = 'Gagal memuat data berita: ' . $exception->getMessage();
+            header('Location: admin_management.php#berita');
+            exit;
+        }
+
+        if (!$row) {
+            $_SESSION['flash_error'][] = 'Data berita tidak ditemukan.';
+            header('Location: admin_management.php#berita');
+            exit;
+        }
+
+        $fileName = trim((string) ($row['berita_gambar'] ?? ''));
+        if ($fileName !== '') {
+            $filePath = base_path('uploads/berita/' . ltrim($fileName, "/\\"));
+            if (is_file($filePath) && !unlink($filePath)) {
+                $_SESSION['flash_error'][] = 'Gagal menghapus file gambar berita.';
+                header('Location: admin_management.php#berita');
+                exit;
+            }
+        }
+
+        try {
+            $stmt = $pdo->prepare('DELETE FROM berita WHERE berita_id = ?');
+            if ($stmt === false) {
+                throw new RuntimeException('Tidak dapat menyiapkan kueri.');
+            }
+            $executed = $stmt->execute([$beritaId]);
+            if ($executed) {
+                $_SESSION['flash'][] = 'Berita berhasil dihapus.';
+            } else {
+                $_SESSION['flash_error'][] = 'Gagal menghapus data berita.';
+            }
+        } catch (Throwable $exception) {
+            $_SESSION['flash_error'][] = 'Gagal menghapus data berita: ' . $exception->getMessage();
+        }
+
+        header('Location: admin_management.php#berita');
+        exit;
+    }
+
+    if ($action === 'delete_program') {
+        $programId = isset($_POST['program_id']) ? (int) $_POST['program_id'] : 0;
+        if ($programId <= 0) {
+            $_SESSION['flash_error'][] = 'Data program tidak ditemukan.';
+            header('Location: admin_management.php#program');
+            exit;
+        }
+
+        // 1️⃣ Ambil data gambar program terlebih dahulu
+        try {
+            $stmt = $pdo->prepare('SELECT program_gambar FROM program_desa WHERE program_id = ? LIMIT 1');
+            if ($stmt === false) {
+                throw new RuntimeException('Gagal menyiapkan query.');
+            }
+            $stmt->execute([$programId]);
+            $row = $stmt->fetch(PDO::FETCH_ASSOC);
+        } catch (Throwable $e) {
+            $_SESSION['flash_error'][] = 'Gagal memuat data program: ' . $e->getMessage();
+            header('Location: admin_management.php#program');
+            exit;
+        }
+
+        if (!$row) {
+            $_SESSION['flash_error'][] = 'Data program tidak ditemukan.';
+            header('Location: admin_management.php#program');
+            exit;
+        }
+
+        // 2️⃣ Hapus file gambar (jika ada)
+        $fileName = trim((string) ($row['program_gambar'] ?? ''));
+        if ($fileName !== '') {
+            // Pastikan hanya nama file, bukan URL
+            $fileName = basename($fileName);
+            $filePath = base_path('uploads/program/' . $fileName);
+
+            if (is_file($filePath)) {
+                if (!@unlink($filePath)) {
+                    $_SESSION['flash_error'][] = 'Gagal menghapus file gambar program: ' . e($fileName);
+                    header('Location: admin_management.php#program');
+                    exit;
+                }
+            }
+        }
+
+        // 3️⃣ Hapus data program dari database
+        try {
+            $stmt = $pdo->prepare('DELETE FROM program_desa WHERE program_id = ?');
+            if ($stmt === false) {
+                throw new RuntimeException('Gagal menyiapkan query penghapusan.');
+            }
+            $stmt->execute([$programId]);
+            $_SESSION['flash'][] = 'Program Desa berhasil dihapus.';
+        } catch (Throwable $e) {
+            $_SESSION['flash_error'][] = 'Gagal menghapus data program: ' . $e->getMessage();
+        }
+
+        header('Location: admin_management.php#program');
+        exit;
+    }
+
+    if ($action === 'delete_fasilitas') {
+        $fasilitasId = isset($_POST['fasilitas_id']) ? (int) $_POST['fasilitas_id'] : 0;
+        if ($fasilitasId <= 0) {
+            $_SESSION['flash_error'][] = 'Data fasilitas tidak ditemukan.';
+            header('Location: admin_management.php#fasilitas');
+            exit;
+        }
+
+        try {
+            $stmt = $pdo->prepare('SELECT fasilitas_gambar FROM fasilitas WHERE fasilitas_id = ? LIMIT 1');
+            if ($stmt === false) {
+                throw new RuntimeException('Tidak dapat menyiapkan kueri.');
+            }
+            $stmt->execute([$fasilitasId]);
+            $row = $stmt->fetch(PDO::FETCH_ASSOC);
+        } catch (Throwable $exception) {
+            $_SESSION['flash_error'][] = 'Gagal memuat data fasilitas: ' . $exception->getMessage();
+            header('Location: admin_management.php#fasilitas');
+            exit;
+        }
+
+        if (!$row) {
+            $_SESSION['flash_error'][] = 'Data fasilitas tidak ditemukan.';
+            header('Location: admin_management.php#fasilitas');
+            exit;
+        }
+
+        $fileName = trim((string) ($row['fasilitas_gambar'] ?? ''));
+        if ($fileName !== '') {
+            $filePath = base_path('uploads/fasilitas/' . ltrim($fileName, "/\\"));
+            if (is_file($filePath) && !unlink($filePath)) {
+                $_SESSION['flash_error'][] = 'Gagal menghapus file gambar fasilitas.';
+                header('Location: admin_management.php#fasilitas');
+                exit;
+            }
+        }
+
+        try {
+            $stmt = $pdo->prepare('DELETE FROM fasilitas WHERE fasilitas_id = ?');
+            if ($stmt === false) {
+                throw new RuntimeException('Tidak dapat menyiapkan kueri.');
+            }
+            $executed = $stmt->execute([$fasilitasId]);
+            if ($executed) {
+                $_SESSION['flash'][] = 'Fasilitas berhasil dihapus.';
+            } else {
+                $_SESSION['flash_error'][] = 'Gagal menghapus data fasilitas.';
+            }
+        } catch (Throwable $exception) {
+            $_SESSION['flash_error'][] = 'Gagal menghapus data fasilitas: ' . $exception->getMessage();
+        }
+
+        header('Location: admin_management.php#fasilitas');
+        exit;
+    }
+
+    if ($action === 'delete_potensi') {
+        $potensiId = isset($_POST['potensi_id']) ? (int) $_POST['potensi_id'] : 0;
+        if ($potensiId <= 0) {
+            $_SESSION['flash_error'][] = 'Data potensi tidak ditemukan.';
+            header('Location: admin_management.php#potensi');
+            exit;
+        }
+
+        // 1️⃣ Ambil semua gambar yang terkait
+        try {
+            $stmt = $pdo->prepare('SELECT gambar_namafile FROM gambar_potensi_desa WHERE potensi_id = ?');
+            $stmt->execute([$potensiId]);
+            $images = $stmt->fetchAll(PDO::FETCH_COLUMN);
+        } catch (Throwable $e) {
+            $_SESSION['flash_error'][] = 'Gagal memuat gambar potensi: ' . $e->getMessage();
+            header('Location: admin_management.php#potensi');
+            exit;
+        }
+
+        // 2️⃣ Hapus file di folder uploads/potensi/
+        if (is_array($images)) {
+            foreach ($images as $img) {
+                $file = basename(trim((string)$img));
+                if ($file === '') continue;
+                $path = base_path('uploads/potensi/' . $file);
+                if (is_file($path)) {
+                    @unlink($path);
+                }
+            }
+        }
+
+        // 3️⃣ Hapus gambar dari tabel gambar_potensi_desa
+        try {
+            $stmt = $pdo->prepare('DELETE FROM gambar_potensi_desa WHERE potensi_id = ?');
+            $stmt->execute([$potensiId]);
+        } catch (Throwable $e) {
+            $_SESSION['flash_error'][] = 'Gagal menghapus foto potensi: ' . $e->getMessage();
+            header('Location: admin_management.php#potensi');
+            exit;
+        }
+
+        // 4️⃣ Hapus data potensi
+        try {
+            $stmt = $pdo->prepare('DELETE FROM potensi_desa WHERE potensi_id = ?');
+            $stmt->execute([$potensiId]);
+            $_SESSION['flash'][] = 'Data potensi dan semua foto terkait berhasil dihapus.';
+        } catch (Throwable $e) {
+            $_SESSION['flash_error'][] = 'Gagal menghapus data potensi: ' . $e->getMessage();
+        }
+
+        header('Location: admin_management.php#potensi');
+        exit;
+    }
+
+    if ($action === 'delete_gambar_potensi') {
+        $gambarId = isset($_POST['gambar_id']) ? (int) $_POST['gambar_id'] : 0;
+        if ($gambarId <= 0) {
+            $_SESSION['flash_error'][] = 'Data foto potensi tidak ditemukan.';
+            header('Location: admin_management.php#potensi');
+            exit;
+        }
+
+        try {
+            $stmt = $pdo->prepare('SELECT gambar_namafile FROM gambar_potensi_desa WHERE gambar_id = ? LIMIT 1');
+            $stmt->execute([$gambarId]);
+            $row = $stmt->fetch(PDO::FETCH_ASSOC);
+        } catch (Throwable $exception) {
+            $_SESSION['flash_error'][] = 'Gagal memuat data foto potensi: ' . $exception->getMessage();
+            header('Location: admin_management.php#potensi');
+            exit;
+        }
+
+        if (!$row) {
+            $_SESSION['flash_error'][] = 'Data foto potensi tidak ditemukan di database.';
+            header('Location: admin_management.php#potensi');
+            exit;
+        }
+
+        $fileName = trim((string) ($row['gambar_namafile'] ?? ''));
+        if ($fileName !== '') {
+            // pastikan hanya nama file, bukan path
+            $fileName = basename($fileName);
+            $filePath = base_path('uploads/potensi/' . $fileName);
+            if (is_file($filePath)) {
+                if (!@unlink($filePath)) {
+                    $_SESSION['flash_error'][] = 'Gagal menghapus file gambar: ' . e($fileName);
+                    header('Location: admin_management.php#potensi');
+                    exit;
+                }
+            }
+        }
+
+        try {
+            $stmt = $pdo->prepare('DELETE FROM gambar_potensi_desa WHERE gambar_id = ?');
+            $stmt->execute([$gambarId]);
+            $_SESSION['flash'][] = 'Foto potensi berhasil dihapus.';
+        } catch (Throwable $exception) {
+            $_SESSION['flash_error'][] = 'Gagal menghapus data foto potensi: ' . $exception->getMessage();
+        }
+
+        header('Location: admin_management.php#potensi');
+        exit;
+    }
+
+    if ($action === 'delete_galeri') {
+        $galeriId = isset($_POST['galeri_id']) ? (int) $_POST['galeri_id'] : 0;
+        if ($galeriId <= 0) {
+            $_SESSION['flash_error'][] = 'Data galeri tidak ditemukan.';
+            header('Location: admin_management.php#galeri');
+            exit;
+        }
+
+        try {
+            $stmt = $pdo->prepare('SELECT galeri_gambar FROM galeri WHERE galeri_id = ? LIMIT 1');
+            $stmt->execute([$galeriId]);
+            $row = $stmt->fetch(PDO::FETCH_ASSOC);
+        } catch (Throwable $e) {
+            $_SESSION['flash_error'][] = 'Gagal memuat data galeri: ' . $e->getMessage();
+            header('Location: admin_management.php#galeri');
+            exit;
+        }
+
+        if ($row) {
+            $fileName = trim((string)($row['galeri_gambar'] ?? ''));
+            if ($fileName !== '') {
+                $filePath = base_path('uploads/galeri/' . ltrim($fileName, '/'));
+                if (is_file($filePath)) {
+                    @unlink($filePath);
+                }
+            }
+        }
+
+        try {
+            $stmt = $pdo->prepare('DELETE FROM galeri WHERE galeri_id = ?');
+            $stmt->execute([$galeriId]);
+            $_SESSION['flash'][] = 'Data galeri berhasil dihapus.';
+        } catch (Throwable $e) {
+            $_SESSION['flash_error'][] = 'Gagal menghapus data galeri: ' . $e->getMessage();
+        }
+
+        header('Location: admin_management.php#galeri');
+        exit;
+    }
+
+    if ($action === 'delete_struktur') {
+        $strukturId = isset($_POST['struktur_id']) ? (int)$_POST['struktur_id'] : 0;
+        if ($strukturId <= 0) {
+            $_SESSION['flash_error'][] = 'Data struktur tidak ditemukan.';
+            header('Location: admin_management.php#struktur');
+            exit;
+        }
+
+        try {
+            $stmt = $pdo->prepare('SELECT struktur_foto FROM struktur_organisasi WHERE struktur_id = ? LIMIT 1');
+            $stmt->execute([$strukturId]);
+            $row = $stmt->fetch(PDO::FETCH_ASSOC);
+        } catch (Throwable $e) {
+            $_SESSION['flash_error'][] = 'Gagal memuat data struktur: ' . $e->getMessage();
+            header('Location: admin_management.php#struktur');
+            exit;
+        }
+
+        if ($row) {
+            $fileName = trim((string)($row['struktur_foto'] ?? ''));
+            if ($fileName !== '') {
+                $filePath = base_path('uploads/struktur/' . ltrim($fileName, '/'));
+                if (is_file($filePath)) {
+                    @unlink($filePath);
+                }
+            }
+        }
+
+        try {
+            $stmt = $pdo->prepare('DELETE FROM struktur_organisasi WHERE struktur_id = ?');
+            $stmt->execute([$strukturId]);
+            $_SESSION['flash'][] = 'Data struktur berhasil dihapus.';
+        } catch (Throwable $e) {
+            $_SESSION['flash_error'][] = 'Gagal menghapus data struktur: ' . $e->getMessage();
+        }
+
+        header('Location: admin_management.php#struktur');
+        exit;
+    }
+
+    if ($action === 'delete_pengumuman') {
+        $pengumumanId = isset($_POST['pengumuman_id']) ? (int) $_POST['pengumuman_id'] : 0;
+        if ($pengumumanId <= 0) {
+            $_SESSION['flash_error'][] = 'Data pengumuman tidak ditemukan.';
+            header('Location: admin_management.php#pengumuman');
+            exit;
+        }
+
+        try {
+            $stmt = $pdo->prepare('DELETE FROM pengumuman WHERE pengumuman_id = ?');
+            $stmt->execute([$pengumumanId]);
+            $_SESSION['flash'][] = 'Pengumuman berhasil dihapus.';
+        } catch (Throwable $exception) {
+            $_SESSION['flash_error'][] = 'Gagal menghapus pengumuman: ' . $exception->getMessage();
+        }
+
+        header('Location: admin_management.php#pengumuman');
+        exit;
+    }
+
+    if ($action === 'edit_pengumuman') {
+        $pengumumanId = isset($_POST['pengumuman_id']) ? (int) $_POST['pengumuman_id'] : 0;
+        $isi = trim((string) ($_POST['pengumuman_isi'] ?? ''));
+        $validHinggaRaw = trim((string) ($_POST['pengumuman_valid_hingga'] ?? ''));
+        $validHingga = null;
+
+        if ($validHinggaRaw !== '') {
+            $timestamp = strtotime($validHinggaRaw);
+            if ($timestamp !== false) {
+                $validHingga = date('Y-m-d H:i:s', $timestamp);
+            }
+        }
+
+        if ($pengumumanId <= 0) {
+            $_SESSION['flash_error'][] = 'Data pengumuman tidak ditemukan.';
+            header('Location: admin_management.php#pengumuman');
+            exit;
+        }
+
+        if ($isi === '' || $validHingga === null) {
+            $_SESSION['flash_error'][] = 'Isi pengumuman dan tanggal berlaku wajib diisi.';
+            header('Location: admin_management.php#pengumuman');
+            exit;
+        }
+
+        try {
+            $stmt = $pdo->prepare('UPDATE pengumuman SET pengumuman_isi = ?, pengumuman_valid_hingga = ?, pengumuman_updated_at = NOW() WHERE pengumuman_id = ?');
+            $stmt->execute([$isi, $validHingga, $pengumumanId]);
+            $_SESSION['flash'][] = 'Pengumuman berhasil diperbarui.';
+        } catch (Throwable $exception) {
+            $_SESSION['flash_error'][] = 'Gagal memperbarui pengumuman: ' . $exception->getMessage();
+        }
+
+        header('Location: admin_management.php#pengumuman');
+        exit;
+    }
+
+    if ($action === 'edit_fasilitas') {
+        $fasilitasId = isset($_POST['fasilitas_id']) ? (int) $_POST['fasilitas_id'] : 0;
+        $newName = trim((string) ($_POST['fasilitas_nama'] ?? ''));
+        $newMaps = trim((string) ($_POST['fasilitas_gmaps_link'] ?? ''));
+
+        if ($fasilitasId <= 0) {
+            $_SESSION['flash_error'][] = 'Data fasilitas tidak ditemukan.';
+            header('Location: admin_management.php#fasilitas');
+            exit;
+        }
+
+        if ($newName === '') {
+            $_SESSION['flash_error'][] = 'Nama fasilitas wajib diisi.';
+            header('Location: admin_management.php#fasilitas');
+            exit;
+        }
+
+        try {
+            $stmt = $pdo->prepare('SELECT fasilitas_gambar FROM fasilitas WHERE fasilitas_id = ? LIMIT 1');
+            if ($stmt === false) {
+                throw new RuntimeException('Tidak dapat menyiapkan kueri.');
+            }
+            $stmt->execute([$fasilitasId]);
+            $row = $stmt->fetch(PDO::FETCH_ASSOC);
+        } catch (Throwable $exception) {
+            $_SESSION['flash_error'][] = 'Gagal memuat data fasilitas: ' . $exception->getMessage();
+            header('Location: admin_management.php#fasilitas');
+            exit;
+        }
+
+        if (!$row) {
+            $_SESSION['flash_error'][] = 'Data fasilitas tidak ditemukan.';
+            header('Location: admin_management.php#fasilitas');
+            exit;
+        }
+
+        $currentImage = trim((string) ($row['fasilitas_gambar'] ?? ''));
+        $newImageName = null;
+        $newImagePath = null;
+
+        $fileInfo = $_FILES['fasilitas_gambar'] ?? null;
+        $hasNewImage = is_array($fileInfo) && ($fileInfo['error'] ?? UPLOAD_ERR_NO_FILE) !== UPLOAD_ERR_NO_FILE;
+
+        if ($hasNewImage) {
+            if (($fileInfo['error'] ?? UPLOAD_ERR_OK) !== UPLOAD_ERR_OK) {
+                $_SESSION['flash_error'][] = 'Gagal mengunggah gambar baru.';
+                header('Location: admin_management.php#fasilitas');
+                exit;
+            }
+
+            $finfo = finfo_open(FILEINFO_MIME_TYPE);
+            $mime = $finfo ? (string) finfo_file($finfo, $fileInfo['tmp_name']) : '';
+            if ($finfo) {
+                finfo_close($finfo);
+            }
+
+            $ext = strtolower(pathinfo((string) ($fileInfo['name'] ?? ''), PATHINFO_EXTENSION));
+            $allowedExt = ['jpg', 'jpeg', 'png', 'webp'];
+            $allowedMime = ['image/jpeg', 'image/png', 'image/webp'];
+
+            if (!in_array($ext, $allowedExt, true) || !in_array($mime, $allowedMime, true)) {
+                $_SESSION['flash_error'][] = 'Format gambar tidak didukung. Gunakan JPG, JPEG, PNG, atau WEBP.';
+                header('Location: admin_management.php#fasilitas');
+                exit;
+            }
+
+            $imageMeta = @getimagesize($fileInfo['tmp_name']);
+            if ($imageMeta === false) {
+                $_SESSION['flash_error'][] = 'File gambar tidak valid.';
+                header('Location: admin_management.php#fasilitas');
+                exit;
+            }
+
+            $targetDir = base_path('uploads/fasilitas');
+            if (!is_dir($targetDir) && !mkdir($targetDir, 0755, true) && !is_dir($targetDir)) {
+                $_SESSION['flash_error'][] = 'Folder unggahan tidak dapat dibuat.';
+                header('Location: admin_management.php#fasilitas');
+                exit;
+            }
+
+            $uniqueName = uniqid('fasilitas_', true) . '.webp';
+            $targetPath = $targetDir . DIRECTORY_SEPARATOR . $uniqueName;
+
+            $conversionSuccess = false;
+            if ($mime === 'image/webp') {
+                $conversionSuccess = move_uploaded_file($fileInfo['tmp_name'], $targetPath);
+            } else {
+                if (!function_exists('imagewebp')) {
+                    $_SESSION['flash_error'][] = 'Konversi gambar ke WebP tidak tersedia di server.';
+                    header('Location: admin_management.php#fasilitas');
+                    exit;
+                }
+
+                $image = null;
+                switch ($mime) {
+                    case 'image/jpeg':
+                        $image = @imagecreatefromjpeg($fileInfo['tmp_name']);
+                        break;
+                    case 'image/png':
+                        $image = @imagecreatefrompng($fileInfo['tmp_name']);
+                        if ($image !== false) {
+                            imagepalettetotruecolor($image);
+                            imagealphablending($image, false);
+                            imagesavealpha($image, true);
+                        }
+                        break;
+                }
+
+                if ($image !== false && $image !== null) {
+                    $conversionSuccess = imagewebp($image, $targetPath, 90);
+                    imagedestroy($image);
+                }
+            }
+
+            if (!$conversionSuccess) {
+                if (is_file($targetPath)) {
+                    @unlink($targetPath);
+                }
+                $_SESSION['flash_error'][] = 'Gagal memproses gambar baru.';
+                header('Location: admin_management.php#fasilitas');
+                exit;
+            }
+
+            $newImageName = $uniqueName;
+            $newImagePath = $targetPath;
+        }
+
+        $setParts = ['fasilitas_nama = ?', 'fasilitas_gmaps_link = ?'];
+        $params = [$newName, $newMaps !== '' ? $newMaps : null];
+
+        if ($newImageName !== null) {
+            $setParts[] = 'fasilitas_gambar = ?';
+            $params[] = $newImageName;
+        }
+
+        $params[] = $fasilitasId;
+        $setClause = implode(', ', $setParts);
+
+        try {
+            $stmt = $pdo->prepare('UPDATE fasilitas SET ' . $setClause . ' WHERE fasilitas_id = ?');
+            if ($stmt === false) {
+                throw new RuntimeException('Tidak dapat menyiapkan kueri.');
+            }
+            $executed = $stmt->execute($params);
+            if ($executed) {
+                if ($newImageName !== null && $currentImage !== '') {
+                    $oldPath = base_path('uploads/fasilitas/' . ltrim($currentImage, "/\\"));
+                    if (is_file($oldPath)) {
+                        @unlink($oldPath);
+                    }
+                }
+                $_SESSION['flash'][] = 'Fasilitas berhasil diperbarui.';
+            } else {
+                if ($newImagePath !== null && is_file($newImagePath)) {
+                    @unlink($newImagePath);
+                }
+                $_SESSION['flash_error'][] = 'Gagal memperbarui fasilitas.';
+            }
+        } catch (Throwable $exception) {
+            if ($newImagePath !== null && is_file($newImagePath)) {
+                @unlink($newImagePath);
+            }
+            $_SESSION['flash_error'][] = 'Gagal memperbarui fasilitas: ' . $exception->getMessage();
+        }
+
+        header('Location: admin_management.php#fasilitas');
+        exit;
+    }
+
+    if ($action === 'edit_berita') {
+        $beritaId = isset($_POST['berita_id']) ? (int) $_POST['berita_id'] : 0;
+        $newTitle = trim((string) ($_POST['berita_judul'] ?? ''));
+        $newContent = trim((string) ($_POST['berita_isi'] ?? ''));
+
+        if ($beritaId <= 0) {
+            $_SESSION['flash_error'][] = 'Data berita tidak ditemukan.';
+            header('Location: admin_management.php#berita');
+            exit;
+        }
+
+        if ($newTitle === '' || $newContent === '') {
+            $_SESSION['flash_error'][] = 'Judul dan isi berita wajib diisi.';
+            header('Location: admin_management.php#berita');
+            exit;
+        }
+
+        try {
+            $stmt = $pdo->prepare('SELECT berita_gambar FROM berita WHERE berita_id = ? LIMIT 1');
+            if ($stmt === false) {
+                throw new RuntimeException('Tidak dapat menyiapkan kueri.');
+            }
+            $stmt->execute([$beritaId]);
+            $row = $stmt->fetch(PDO::FETCH_ASSOC);
+        } catch (Throwable $exception) {
+            $_SESSION['flash_error'][] = 'Gagal memuat data berita: ' . $exception->getMessage();
+            header('Location: admin_management.php#berita');
+            exit;
+        }
+
+        if (!$row) {
+            $_SESSION['flash_error'][] = 'Data berita tidak ditemukan.';
+            header('Location: admin_management.php#berita');
+            exit;
+        }
+
+        $currentImage = trim((string) ($row['berita_gambar'] ?? ''));
+        $newImageName = null;
+        $newImagePath = null;
+
+        $fileInfo = $_FILES['berita_gambar'] ?? null;
+        $hasNewImage = is_array($fileInfo) && ($fileInfo['error'] ?? UPLOAD_ERR_NO_FILE) !== UPLOAD_ERR_NO_FILE;
+
+        if ($hasNewImage) {
+            if (($fileInfo['error'] ?? UPLOAD_ERR_OK) !== UPLOAD_ERR_OK) {
+                $_SESSION['flash_error'][] = 'Gagal mengunggah gambar baru.';
+                header('Location: admin_management.php#berita');
+                exit;
+            }
+
+            $finfo = finfo_open(FILEINFO_MIME_TYPE);
+            $mime = $finfo ? (string) finfo_file($finfo, $fileInfo['tmp_name']) : '';
+            if ($finfo) {
+                finfo_close($finfo);
+            }
+
+            $ext = strtolower(pathinfo((string) ($fileInfo['name'] ?? ''), PATHINFO_EXTENSION));
+            $allowedExt = ['jpg', 'jpeg', 'png', 'webp'];
+            $allowedMime = ['image/jpeg', 'image/png', 'image/webp'];
+
+            if (!in_array($ext, $allowedExt, true) || !in_array($mime, $allowedMime, true)) {
+                $_SESSION['flash_error'][] = 'Format gambar tidak didukung. Gunakan JPG, JPEG, PNG, atau WEBP.';
+                header('Location: admin_management.php#berita');
+                exit;
+            }
+
+            $imageMeta = @getimagesize($fileInfo['tmp_name']);
+            if ($imageMeta === false) {
+                $_SESSION['flash_error'][] = 'File gambar tidak valid.';
+                header('Location: admin_management.php#berita');
+                exit;
+            }
+
+            $targetDir = base_path('uploads/berita');
+            if (!is_dir($targetDir) && !mkdir($targetDir, 0755, true) && !is_dir($targetDir)) {
+                $_SESSION['flash_error'][] = 'Folder unggahan tidak dapat dibuat.';
+                header('Location: admin_management.php#berita');
+                exit;
+            }
+
+            $uniqueName = uniqid('berita_', true) . '.webp';
+            $targetPath = $targetDir . DIRECTORY_SEPARATOR . $uniqueName;
+
+            $conversionSuccess = false;
+            if ($mime === 'image/webp') {
+                $conversionSuccess = move_uploaded_file($fileInfo['tmp_name'], $targetPath);
+            } else {
+                if (!function_exists('imagewebp')) {
+                    $_SESSION['flash_error'][] = 'Konversi gambar ke WebP tidak tersedia di server.';
+                    header('Location: admin_management.php#berita');
+                    exit;
+                }
+
+                $image = null;
+                switch ($mime) {
+                    case 'image/jpeg':
+                        $image = @imagecreatefromjpeg($fileInfo['tmp_name']);
+                        break;
+                    case 'image/png':
+                        $image = @imagecreatefrompng($fileInfo['tmp_name']);
+                        if ($image !== false) {
+                            imagepalettetotruecolor($image);
+                            imagealphablending($image, false);
+                            imagesavealpha($image, true);
+                        }
+                        break;
+                }
+
+                if ($image !== false && $image !== null) {
+                    $conversionSuccess = imagewebp($image, $targetPath, 90);
+                    imagedestroy($image);
+                }
+            }
+
+            if (!$conversionSuccess) {
+                if (is_file($targetPath)) {
+                    @unlink($targetPath);
+                }
+                $_SESSION['flash_error'][] = 'Gagal memproses gambar baru.';
+                header('Location: admin_management.php#berita');
+                exit;
+            }
+
+            $newImageName = $uniqueName;
+            $newImagePath = $targetPath;
+        }
+
+        $setParts = ['berita_judul = ?', 'berita_isi = ?'];
+        $params = [$newTitle, $newContent];
+
+        if ($newImageName !== null) {
+            $setParts[] = 'berita_gambar = ?';
+            $params[] = $newImageName;
+        }
+
+        $params[] = $beritaId;
+        $setClause = implode(', ', $setParts);
+
+        try {
+            $stmt = $pdo->prepare('UPDATE berita SET ' . $setClause . ' WHERE berita_id = ?');
+            if ($stmt === false) {
+                throw new RuntimeException('Tidak dapat menyiapkan kueri.');
+            }
+            $executed = $stmt->execute($params);
+            if ($executed) {
+                if ($newImageName !== null && $currentImage !== '') {
+                    $oldPath = base_path('uploads/berita/' . ltrim($currentImage, "/\\"));
+                    if (is_file($oldPath)) {
+                        @unlink($oldPath);
+                    }
+                }
+                $_SESSION['flash'][] = 'Berita berhasil diperbarui.';
+            } else {
+                if ($newImagePath !== null && is_file($newImagePath)) {
+                    @unlink($newImagePath);
+                }
+                $_SESSION['flash_error'][] = 'Gagal memperbarui berita.';
+            }
+        } catch (Throwable $exception) {
+            if ($newImagePath !== null && is_file($newImagePath)) {
+                @unlink($newImagePath);
+            }
+            $_SESSION['flash_error'][] = 'Gagal memperbarui berita: ' . $exception->getMessage();
+        }
+
+        header('Location: admin_management.php#berita');
+        exit;
+    }
+
+        if ($action === 'edit_program') {
+        $programId = isset($_POST['program_id']) ? (int) $_POST['program_id'] : 0;
+        $newName = trim((string) ($_POST['program_nama'] ?? ''));
+        $newDesc = trim((string) ($_POST['program_deskripsi'] ?? ''));
+
+        if ($programId <= 0) {
+            $_SESSION['flash_error'][] = 'Data program tidak ditemukan.';
+            header('Location: admin_management.php#program');
+            exit;
+        }
+
+        if ($newName === '' || $newDesc === '') {
+            $_SESSION['flash_error'][] = 'Nama dan deskripsi program wajib diisi.';
+            header('Location: admin_management.php#program');
+            exit;
+        }
+
+        try {
+            $stmt = $pdo->prepare('SELECT program_gambar FROM program_desa WHERE program_id = ? LIMIT 1');
+            $stmt->execute([$programId]);
+            $row = $stmt->fetch(PDO::FETCH_ASSOC);
+        } catch (Throwable $e) {
+            $_SESSION['flash_error'][] = 'Gagal memuat data program: ' . $e->getMessage();
+            header('Location: admin_management.php#program');
+            exit;
+        }
+
+        if (!$row) {
+            $_SESSION['flash_error'][] = 'Data program tidak ditemukan.';
+            header('Location: admin_management.php#program');
+            exit;
+        }
+
+        $currentImage = trim((string) ($row['program_gambar'] ?? ''));
+        $newImageName = null;
+        $newImagePath = null;
+
+        $fileInfo = $_FILES['program_gambar'] ?? null;
+        $hasNewImage = is_array($fileInfo) && ($fileInfo['error'] ?? UPLOAD_ERR_NO_FILE) !== UPLOAD_ERR_NO_FILE;
+
+        if ($hasNewImage) {
+            if (($fileInfo['error'] ?? UPLOAD_ERR_OK) !== UPLOAD_ERR_OK) {
+                $_SESSION['flash_error'][] = 'Gagal mengunggah gambar baru.';
+                header('Location: admin_management.php#program');
+                exit;
+            }
+
+            $finfo = finfo_open(FILEINFO_MIME_TYPE);
+            $mime = $finfo ? (string) finfo_file($finfo, $fileInfo['tmp_name']) : '';
+            if ($finfo) finfo_close($finfo);
+
+            $ext = strtolower(pathinfo((string) ($fileInfo['name'] ?? ''), PATHINFO_EXTENSION));
+            $allowedExt = ['jpg', 'jpeg', 'png', 'webp'];
+            $allowedMime = ['image/jpeg', 'image/png', 'image/webp'];
+
+            if (!in_array($ext, $allowedExt, true) || !in_array($mime, $allowedMime, true)) {
+                $_SESSION['flash_error'][] = 'Format gambar tidak didukung. Gunakan JPG, JPEG, PNG, atau WEBP.';
+                header('Location: admin_management.php#program');
+                exit;
+            }
+
+            $targetDir = base_path('uploads/program');
+            if (!is_dir($targetDir) && !mkdir($targetDir, 0755, true) && !is_dir($targetDir)) {
+                $_SESSION['flash_error'][] = 'Folder unggahan tidak dapat dibuat.';
+                header('Location: admin_management.php#program');
+                exit;
+            }
+
+            $uniqueName = uniqid('program_', true) . '.webp';
+            $targetPath = $targetDir . DIRECTORY_SEPARATOR . $uniqueName;
+
+            $conversionSuccess = false;
+            if ($mime === 'image/webp') {
+                $conversionSuccess = move_uploaded_file($fileInfo['tmp_name'], $targetPath);
+            } else {
+                if (!function_exists('imagewebp')) {
+                    $_SESSION['flash_error'][] = 'Konversi gambar ke WebP tidak tersedia di server.';
+                    header('Location: admin_management.php#program');
+                    exit;
+                }
+
+                $image = null;
+                switch ($mime) {
+                    case 'image/jpeg':
+                        $image = @imagecreatefromjpeg($fileInfo['tmp_name']);
+                        break;
+                    case 'image/png':
+                        $image = @imagecreatefrompng($fileInfo['tmp_name']);
+                        if ($image !== false) {
+                            imagepalettetotruecolor($image);
+                            imagealphablending($image, false);
+                            imagesavealpha($image, true);
+                        }
+                        break;
+                }
+
+                if ($image !== false && $image !== null) {
+                    $conversionSuccess = imagewebp($image, $targetPath, 90);
+                    imagedestroy($image);
+                }
+            }
+
+            if (!$conversionSuccess) {
+                if (is_file($targetPath)) @unlink($targetPath);
+                $_SESSION['flash_error'][] = 'Gagal memproses gambar baru.';
+                header('Location: admin_management.php#program');
+                exit;
+            }
+
+            $newImageName = $uniqueName;
+            $newImagePath = $targetPath;
+        }
+
+        $setParts = ['program_nama = ?', 'program_deskripsi = ?'];
+        $params = [$newName, $newDesc];
+
+        if ($newImageName !== null) {
+            $setParts[] = 'program_gambar = ?';
+            $params[] = $newImageName;
+        }
+
+        $params[] = $programId;
+        $setClause = implode(', ', $setParts);
+
+        try {
+            $stmt = $pdo->prepare('UPDATE program_desa SET ' . $setClause . ' WHERE program_id = ?');
+            $stmt->execute($params);
+
+            if ($newImageName !== null && $currentImage !== '') {
+                $oldPath = base_path('uploads/program/' . ltrim($currentImage, "/\\"));
+                if (is_file($oldPath)) @unlink($oldPath);
+            }
+
+            $_SESSION['flash'][] = 'Program Desa berhasil diperbarui.';
+        } catch (Throwable $e) {
+            if ($newImagePath !== null && is_file($newImagePath)) {
+                @unlink($newImagePath);
+            }
+            $_SESSION['flash_error'][] = 'Gagal memperbarui data program: ' . $e->getMessage();
+        }
+
+        header('Location: admin_management.php#program');
+        exit;
+    }
+
+    if ($action === 'edit_apbdes') {
+        $apbdesId = isset($_POST['apbdes_id']) ? (int) $_POST['apbdes_id'] : 0;
+        $newTitle = trim((string) ($_POST['apbdes_judul'] ?? ''));
+
+        if ($apbdesId <= 0) {
+            $_SESSION['flash_error'][] = 'Data APBDes tidak ditemukan.';
+            header('Location: admin_management.php#apbdes');
+            exit;
+        }
+
+        if ($newTitle === '') {
+            $_SESSION['flash_error'][] = 'Judul APBDes wajib diisi.';
+            header('Location: admin_management.php#apbdes');
+            exit;
+        }
+
+        try {
+            $stmt = $pdo->prepare('SELECT apbdes_edited_by FROM apbdes WHERE apbdes_id = ? LIMIT 1');
+            if ($stmt === false) {
+                throw new RuntimeException('Tidak dapat menyiapkan kueri.');
+            }
+            $stmt->execute([$apbdesId]);
+            $row = $stmt->fetch(PDO::FETCH_ASSOC);
+        } catch (Throwable $exception) {
+            $_SESSION['flash_error'][] = 'Gagal memuat data APBDes: ' . $exception->getMessage();
+            header('Location: admin_management.php#apbdes');
+            exit;
+        }
+
+        if (!$row) {
+            $_SESSION['flash_error'][] = 'Data APBDes tidak ditemukan.';
+            header('Location: admin_management.php#apbdes');
+            exit;
+        }
+
+        $editedBy = isset($adminSession['name']) ? (string) $adminSession['name'] : (string) ($row['apbdes_edited_by'] ?? '');
+
+        try {
+            $stmt = $pdo->prepare('UPDATE apbdes SET apbdes_judul = ?, apbdes_edited_by = ? WHERE apbdes_id = ?');
+            if ($stmt === false) {
+                throw new RuntimeException('Tidak dapat menyiapkan kueri.');
+            }
+            $executed = $stmt->execute([$newTitle, $editedBy, $apbdesId]);
+            if ($executed) {
+                $_SESSION['flash'][] = 'Judul APBDes berhasil diperbarui.';
+            } else {
+                $_SESSION['flash_error'][] = 'Gagal memperbarui judul APBDes.';
+            }
+        } catch (Throwable $exception) {
+            $_SESSION['flash_error'][] = 'Gagal memperbarui judul APBDes: ' . $exception->getMessage();
+        }
+
+        header('Location: admin_management.php#apbdes');
+        exit;
+    }
+
+    if ($action === 'upload_media_data') {
+        $dataKey = trim((string)($_POST['data_key'] ?? ''));
+        if ($dataKey === '' || !str_starts_with($dataKey, 'media.')) {
+            $_SESSION['flash_error'][] = 'Key media tidak valid.';
+            header('Location: admin_management.php#data'); exit;
+        }
+
+        $file = $_FILES['media_file'] ?? null;
+        if (!is_array($file) || ($file['error'] ?? UPLOAD_ERR_NO_FILE) === UPLOAD_ERR_NO_FILE) {
+            $_SESSION['flash_error'][] = 'Pilih gambar terlebih dahulu.';
+            header('Location: admin_management.php#data'); exit;
+        }
+        if (($file['error'] ?? UPLOAD_ERR_OK) !== UPLOAD_ERR_OK) {
+            $_SESSION['flash_error'][] = 'Upload gagal.'; 
+            header('Location: admin_management.php#data'); exit;
+        }
+
+        $finfo = finfo_open(FILEINFO_MIME_TYPE);
+        $mime  = $finfo ? (string) finfo_file($finfo, $file['tmp_name']) : '';
+        if ($finfo) finfo_close($finfo);
+        if (!in_array($mime, ['image/jpeg','image/png','image/webp'], true)) {
+            $_SESSION['flash_error'][] = 'Format harus JPG/PNG/WEBP.';
+            header('Location: admin_management.php#data'); exit;
+        }
+
+        $dir = base_path('uploads/assets');
+        if (!is_dir($dir) && !mkdir($dir, 0755, true) && !is_dir($dir)) {
+            $_SESSION['flash_error'][] = 'Folder uploads/assets tidak bisa dibuat.';
+            header('Location: admin_management.php#data'); exit;
+        }
+
+        // Gunakan slug dari key untuk prefix nama file.
+        $slug = preg_replace('~[^a-z0-9]+~i', '_', str_replace('media.', '', $dataKey));
+        $newName = $slug . '_' . uniqid('', true) . '.webp';
+        $target  = $dir . DIRECTORY_SEPARATOR . $newName;
+
+        $ok = false;
+        if ($mime === 'image/webp') {
+            $ok = move_uploaded_file($file['tmp_name'], $target);
+        } else {
+            if (!function_exists('imagewebp')) {
+                $_SESSION['flash_error'][] = 'Konversi ke WebP tidak tersedia di server.';
+                header('Location: admin_management.php#data'); exit;
+            }
+            $im = null;
+            if ($mime === 'image/jpeg') $im = @imagecreatefromjpeg($file['tmp_name']);
+            if ($mime === 'image/png')  { $im = @imagecreatefrompng($file['tmp_name']); if ($im) { imagepalettetotruecolor($im); imagealphablending($im,false); imagesavealpha($im,true); } }
+            if ($im) { $ok = imagewebp($im, $target, 90); imagedestroy($im); }
+        }
+        if (!$ok) {
+            if (is_file($target)) @unlink($target);
+            $_SESSION['flash_error'][] = 'Gagal memproses gambar.';
+            header('Location: admin_management.php#data'); exit;
+        }
+
+        // Ambil file lama
+        $old = null;
+        try {
+            $stmt = $pdo->prepare('SELECT data_value FROM data WHERE data_key = ? LIMIT 1');
+            $stmt->execute([$dataKey]);
+            $old = $stmt->fetch(PDO::FETCH_ASSOC);
+        } catch (Throwable $e) {}
+
+        // Update DB
+        try {
+            $by = (string)($adminSession['name'] ?? $adminSession['email'] ?? 'admin#'.$adminSession['id'] ?? '');
+            $stmt = $pdo->prepare('UPDATE data SET data_value = ?, data_updated_at = NOW(), data_updated_by = ? WHERE data_key = ? LIMIT 1');
+            $stmt->execute([$newName, $by !== '' ? $by : null, $dataKey]);
+            $_SESSION['flash'][] = 'Media berhasil diperbarui untuk key: ' . $dataKey;
+        } catch (Throwable $e) {
+            @unlink($target);
+            $_SESSION['flash_error'][] = 'Gagal menyimpan nama file: ' . $e->getMessage();
+            header('Location: admin_management.php#data'); exit;
+        }
+
+        // Hapus lama
+        $oldFile = trim((string)($old['data_value'] ?? ''));
+        if ($oldFile !== '') {
+            $oldPath = base_path('uploads/assets/' . ltrim($oldFile, "/\\"));
+            if (is_file($oldPath)) @unlink($oldPath);
+        }
+
+        header('Location: admin_management.php#data'); exit;
+    }
+
+        if ($action === 'update_hukum_tua_foto') {
+        // Validasi input
+        $file = $_FILES['hukumtua_foto'] ?? null;
+        if (!is_array($file) || ($file['error'] ?? UPLOAD_ERR_NO_FILE) === UPLOAD_ERR_NO_FILE) {
+            $_SESSION['flash_error'][] = 'Pilih foto terlebih dahulu.';
+            header('Location: admin_management.php#data'); exit;
+        }
+        if (($file['error'] ?? UPLOAD_ERR_OK) !== UPLOAD_ERR_OK) {
+            $_SESSION['flash_error'][] = 'Upload gagal.'; 
+            header('Location: admin_management.php#data'); exit;
+        }
+
+        // Cek MIME
+        $finfo = finfo_open(FILEINFO_MIME_TYPE);
+        $mime  = $finfo ? (string) finfo_file($finfo, $file['tmp_name']) : '';
+        if ($finfo) finfo_close($finfo);
+        if (!in_array($mime, ['image/jpeg','image/png','image/webp'], true)) {
+            $_SESSION['flash_error'][] = 'Format harus JPG/PNG/WEBP.';
+            header('Location: admin_management.php#data'); exit;
+        }
+
+        // Siapkan folder
+        $dir = base_path('uploads/assets');
+        if (!is_dir($dir) && !mkdir($dir, 0755, true) && !is_dir($dir)) {
+            $_SESSION['flash_error'][] = 'Folder uploads/assets tidak bisa dibuat.';
+            header('Location: admin_management.php#data'); exit;
+        }
+
+        // Nama unik
+        $newName = 'hukumtua_' . uniqid('', true) . '.webp';
+        $target  = $dir . DIRECTORY_SEPARATOR . $newName;
+
+        // Convert → WebP
+        $ok = false;
+        if ($mime === 'image/webp') {
+            $ok = move_uploaded_file($file['tmp_name'], $target);
+        } else {
+            if (!function_exists('imagewebp')) {
+                $_SESSION['flash_error'][] = 'Konversi ke WebP tidak tersedia di server.';
+                header('Location: admin_management.php#data'); exit;
+            }
+            $im = null;
+            if ($mime === 'image/jpeg') $im = @imagecreatefromjpeg($file['tmp_name']);
+            if ($mime === 'image/png')  { $im = @imagecreatefrompng($file['tmp_name']); if ($im) { imagepalettetotruecolor($im); imagealphablending($im,false); imagesavealpha($im,true); } }
+            if ($im) { $ok = imagewebp($im, $target, 90); imagedestroy($im); }
+        }
+
+        if (!$ok) {
+            if (is_file($target)) @unlink($target);
+            $_SESSION['flash_error'][] = 'Gagal memproses gambar.';
+            header('Location: admin_management.php#data'); exit;
+        }
+
+        // Ambil file lama (jika ada)
+        try {
+            $stmt = $pdo->prepare('SELECT data_value FROM data WHERE data_key = ? LIMIT 1');
+            $stmt->execute(['media.hukum_tua_foto']);
+            $old = $stmt->fetch(PDO::FETCH_ASSOC);
+        } catch (Throwable $e) {
+            $old = null;
+        }
+
+        // Update DB
+        try {
+            $by = (string)($adminSession['name'] ?? $adminSession['email'] ?? 'admin#'.$adminSession['id'] ?? '');
+            $stmt = $pdo->prepare('UPDATE data SET data_value = ?, data_updated_at = NOW(), data_updated_by = ? WHERE data_key = ? LIMIT 1');
+            $stmt->execute([$newName, $by !== '' ? $by : null, 'media.hukum_tua_foto']);
+            $_SESSION['flash'][] = 'Foto Hukum Tua berhasil diperbarui.';
+        } catch (Throwable $e) {
+            @unlink($target);
+            $_SESSION['flash_error'][] = 'Gagal menyimpan nama file: ' . $e->getMessage();
+            header('Location: admin_management.php#data'); exit;
+        }
+
+        // Hapus file lama
+        $oldFile = trim((string)($old['data_value'] ?? ''));
+        if ($oldFile !== '') {
+            $oldPath = base_path('uploads/assets/' . ltrim($oldFile, "/\\"));
+            if (is_file($oldPath)) @unlink($oldPath);
+        }
+
+        header('Location: admin_management.php#data'); exit;
+    }
+
+    if ($action === 'update_data_value') {
+        $dataKey = trim((string)($_POST['data_key'] ?? ''));
+        $rawValue = (string)($_POST['data_value'] ?? '');
+
+        if ($dataKey === '') {
+            $_SESSION['flash_error'][] = 'Kunci data tidak valid.';
+            header('Location: admin_management.php#data');
+            exit;
+        }
+
+        try {
+            // Ambil tipe untuk validasi
+            $stmt = $pdo->prepare('SELECT data_type FROM data WHERE data_key = ? LIMIT 1');
+            $stmt->execute([$dataKey]);
+            $row = $stmt->fetch(PDO::FETCH_ASSOC);
+            if (!$row) {
+                $_SESSION['flash_error'][] = 'Data dengan key tersebut tidak ditemukan.';
+                header('Location: admin_management.php#data');
+                exit;
+            }
+
+            $type = strtolower((string)($row['data_type'] ?? 'string'));
+            $value = null;
+
+            if ($type === 'integer') {
+                $filtered = filter_var(trim($rawValue), FILTER_VALIDATE_INT);
+                if ($filtered === false) {
+                    $_SESSION['flash_error'][] = 'Nilai harus berupa angka untuk key: ' . $dataKey;
+                    header('Location: admin_management.php#data');
+                    exit;
+                }
+                $value = (string)$filtered; // simpan tetap sebagai string di kolom data_value
+            } else {
+                $value = trim($rawValue);
+            }
+
+            $updatedBy = '';
+            if (is_array($adminSession ?? null)) {
+                $updatedBy = (string)($adminSession['name'] ?? '');
+                if ($updatedBy === '') $updatedBy = (string)($adminSession['email'] ?? '');
+                if ($updatedBy === '') $updatedBy = 'admin#'.$adminSession['id'];
+            }
+
+            $stmt = $pdo->prepare('UPDATE data SET data_value = ?, data_updated_at = NOW(), data_updated_by = ? WHERE data_key = ? LIMIT 1');
+            $stmt->execute([$value, $updatedBy !== '' ? $updatedBy : null, $dataKey]);
+
+            $_SESSION['flash'][] = 'Data "' . $dataKey . '" berhasil diperbarui.';
+        } catch (Throwable $e) {
+            $_SESSION['flash_error'][] = 'Gagal memperbarui data: ' . $e->getMessage();
+        }
+
+        header('Location: admin_management.php#data');
+        exit;
+    }
+
+    $formId = (string) ($_POST['form_id'] ?? '');
+    if (isset($tableForms[$formId])) {
+        $definition = $tableForms[$formId];
+        $fieldsDefinition = $definition['fields'];
+        $inputData = [];
+        $errors = [];
+
+        foreach ($fieldsDefinition as $fieldName => $fieldMeta) {
+            $type = $fieldMeta['type'] ?? 'text';
+
+            if (in_array($type, ['file_pdf', 'file_image'], true)) {
+                $required = !empty($fieldMeta['required']);
+                $fileInfo = $_FILES[$fieldName] ?? null;
+
+                if (!is_array($fileInfo) || ($fileInfo['error'] ?? UPLOAD_ERR_NO_FILE) === UPLOAD_ERR_NO_FILE) {
+                    if ($required) {
+                        $errors[$fieldName] = $type === 'file_pdf'
+                            ? 'Silakan unggah file PDF.'
+                            : 'Silakan pilih gambar.';
+                    }
+                    continue;
+                }
+
+                if (($fileInfo['error'] ?? UPLOAD_ERR_OK) !== UPLOAD_ERR_OK) {
+                    $errors[$fieldName] = 'Gagal mengunggah file.';
+                    continue;
+                }
+
+                $finfo = finfo_open(FILEINFO_MIME_TYPE);
+                $mime = $finfo ? (string) finfo_file($finfo, $fileInfo['tmp_name']) : '';
+                if ($finfo) {
+                    finfo_close($finfo);
+                }
+
+                $ext = strtolower(pathinfo((string) ($fileInfo['name'] ?? ''), PATHINFO_EXTENSION));
+
+                if ($type === 'file_pdf') {
+                    if ($mime !== 'application/pdf' || $ext !== 'pdf') {
+                        $errors[$fieldName] = 'File harus berupa PDF.';
+                        continue;
+                    }
+                } else {
+                    $allowedExt = ['jpg', 'jpeg', 'png', 'webp'];
+                    $allowedMime = ['image/jpeg', 'image/png', 'image/webp'];
+
+                    if (!in_array($ext, $allowedExt, true) || !in_array($mime, $allowedMime, true)) {
+                        $errors[$fieldName] = 'Format gambar tidak didukung. Gunakan JPG, JPEG, PNG, atau WEBP.';
+                        continue;
+                    }
+
+                    $imageMeta = @getimagesize($fileInfo['tmp_name']);
+                    if ($imageMeta === false) {
+                        $errors[$fieldName] = 'File gambar tidak valid.';
+                        continue;
+                    }
+
+                    $fileInfo['_width'] = (int) ($imageMeta[0] ?? 0);
+                    $fileInfo['_height'] = (int) ($imageMeta[1] ?? 0);
+                }
+
+                $fileInfo['_mime'] = $mime;
+                $fileInfo['_extension'] = $ext;
+                $fileInfo['_field_type'] = $type;
+                $inputData[$fieldName] = $fileInfo;
+                continue;
+            }
+
+            $required = !empty($fieldMeta['required']);
+            $rawValue = $_POST[$fieldName] ?? null;
+            $value = null;
+
+            switch ($type) {
+                case 'checkbox':
+                    $value = isset($_POST[$fieldName]) ? 1 : 0;
+                    if ($required && $value !== 1) {
+                        $errors[$fieldName] = 'Harus dicentang.';
+                    } elseif ($value === 1 || !empty($fieldMeta['default'])) {
+                        $inputData[$fieldName] = $value;
+                    } elseif ($required) {
+                        $inputData[$fieldName] = 0;
+                    }
+                    continue 2;
+
+                case 'number':
+                    $raw = is_array($rawValue) ? '' : trim((string) $rawValue);
+                    if ($raw === '') {
+                        if ($required) {
+                            $errors[$fieldName] = 'Data wajib diisi.';
+                        } elseif (array_key_exists('default', $fieldMeta)) {
+                            $inputData[$fieldName] = (int) $fieldMeta['default'];
+                        }
+                    } else {
+                        $filtered = filter_var($raw, FILTER_VALIDATE_INT);
+                        if ($filtered === false) {
+                            $errors[$fieldName] = 'Masukkan angka yang valid.';
+                        } else {
+                            $inputData[$fieldName] = $filtered;
+                        }
+                    }
+                    continue 2;
+
+                case 'select':
+                    $options = $fieldMeta['options'] ?? [];
+                    $raw = is_array($rawValue) ? '' : trim((string) $rawValue);
+                    if ($raw === '') {
+                        if ($required) {
+                            $errors[$fieldName] = 'Pilih salah satu opsi.';
+                        }
+                    } else {
+                        $allowedValues = [];
+                        $isList = array_is_list($options);
+                        foreach ($options as $optionValue => $optionLabel) {
+                            if ($isList || is_int($optionValue)) {
+                                $allowedValues[] = (string) $optionLabel;
+                            } else {
+                                $allowedValues[] = (string) $optionValue;
+                            }
+                        }
+
+                        if (!in_array($raw, $allowedValues, true)) {
+                            $errors[$fieldName] = 'Opsi tidak valid.';
+                        } else {
+                            $inputData[$fieldName] = ctype_digit($raw) ? (int) $raw : $raw;
+                        }
+                    }
+                    continue 2;
+
+                case 'datetime':
+                    $raw = is_array($rawValue) ? '' : trim((string) $rawValue);
+                    if ($raw === '') {
+                        if ($required) {
+                            $errors[$fieldName] = 'Tanggal dan waktu wajib diisi.';
+                        }
+                    } else {
+                        $timestamp = strtotime($raw);
+                        if ($timestamp === false) {
+                            $errors[$fieldName] = 'Format tanggal dan waktu tidak valid.';
+                        } else {
+                            $inputData[$fieldName] = date('Y-m-d H:i:s', $timestamp);
+                        }
+                    }
+                    continue 2;
+
+                case 'email':
+                    $raw = is_array($rawValue) ? '' : trim((string) $rawValue);
+                    if ($raw === '') {
+                        if ($required) {
+                            $errors[$fieldName] = 'Email wajib diisi.';
+                        }
+                    } elseif (!filter_var($raw, FILTER_VALIDATE_EMAIL)) {
+                        $errors[$fieldName] = 'Email tidak valid.';
+                    } else {
+                        $inputData[$fieldName] = $raw;
+                    }
+                    continue 2;
+
+                case 'textarea':
+                case 'text':
+                case 'file_pdf':
+                default:
+                    $raw = is_array($rawValue) ? '' : trim((string) $rawValue);
+                    if ($raw === '') {
+                        if ($required) {
+                            $errors[$fieldName] = 'Data wajib diisi.';
+                        } elseif (array_key_exists('default', $fieldMeta)) {
+                            $inputData[$fieldName] = (string) $fieldMeta['default'];
+                        }
+                    } else {
+                        $inputData[$fieldName] = $raw;
+                    }
+                    continue 2;
+            }
+        }
+
+        if ($errors === []) {
+            if ($inputData === []) {
+                $errors['_general'] = 'Tidak ada data yang diisi.';
+            } else {
+                $fileUploads = [];
+                foreach ($inputData as $column => $value) {
+                    if (is_array($value) && isset($value['tmp_name'])) {
+                        $fileUploads[$column] = $value;
+                    }
+                }
+
+                foreach ($fileUploads as $column => $fileInfo) {
+                    $uploadFolder = 'uploads/' . $formId;
+                    $filenamePrefix = $formId . '_';
+                    $storedPrefix = '';
+
+                    if ($formId === 'potensi-media') {
+                        $uploadFolder = 'uploads/potensi';
+                        $filenamePrefix = 'potensi_';
+                        $storedPrefix = '';
+                    }
+
+                    if ($formId === 'program') {
+                        $uploadFolder = 'uploads/program';
+                        $filenamePrefix = 'program_';
+                    }
+
+                    $targetDir = base_path($uploadFolder);
+                    if (!is_dir($targetDir) && !mkdir($targetDir, 0755, true) && !is_dir($targetDir)) {
+                        $errors['_general'] = 'Folder unggahan tidak dapat dibuat.';
+                        break;
+                    }
+
+                    $fieldType = $fieldsDefinition[$column]['type'] ?? '';
+                    if ($fieldType === 'file_image') {
+                        $uniqueName = uniqid($filenamePrefix, true) . '.webp';
+                        $targetPath = $targetDir . DIRECTORY_SEPARATOR . $uniqueName;
+                        $mime = (string) ($fileInfo['_mime'] ?? '');
+
+                        if ($mime === 'image/webp') {
+                            if (!move_uploaded_file($fileInfo['tmp_name'], $targetPath)) {
+                                $errors['_general'] = 'Gagal menyimpan gambar.';
+                                break;
+                            }
+                        } else {
+                            if (!function_exists('imagewebp')) {
+                                $errors['_general'] = 'Konversi gambar ke WebP tidak tersedia di server.';
+                                break;
+                            }
+
+                            $image = null;
+                            switch ($mime) {
+                                case 'image/jpeg':
+                                    $image = @imagecreatefromjpeg($fileInfo['tmp_name']);
+                                    break;
+                                case 'image/png':
+                                    $image = @imagecreatefrompng($fileInfo['tmp_name']);
+                                    if ($image !== false) {
+                                        imagepalettetotruecolor($image);
+                                        imagealphablending($image, false);
+                                        imagesavealpha($image, true);
+                                    }
+                                    break;
+                            }
+
+                            if ($image === false || $image === null) {
+                                $errors['_general'] = 'Gagal memproses gambar yang diunggah.';
+                                break;
+                            }
+
+                            if (!imagewebp($image, $targetPath, 90)) {
+                                imagedestroy($image);
+                                $errors['_general'] = 'Gagal mengonversi gambar ke WebP.';
+                                break;
+                            }
+
+                            imagedestroy($image);
+                            @unlink($fileInfo['tmp_name']);
+                        }
+
+                        $fileInfo['_stored'] = $storedPrefix !== '' ? $storedPrefix . $uniqueName : $uniqueName;
+                        $fileUploads[$column] = $fileInfo;
+                        continue;
+                    }
+
+                    $uniqueName = uniqid($filenamePrefix, true) . '.pdf';
+                    $targetPath = $targetDir . DIRECTORY_SEPARATOR . $uniqueName;
+                    if (!move_uploaded_file($fileInfo['tmp_name'], $targetPath)) {
+                        $errors['_general'] = 'Gagal memindahkan file unggahan.';
+                        break;
+                    }
+
+                    $fileInfo['_stored'] = $storedPrefix !== '' ? $storedPrefix . $uniqueName : $uniqueName;
+                    $fileUploads[$column] = $fileInfo;
+                }
+
+                if (($errors['_general'] ?? '') === '') {
+                    if ($formId === 'apbdes' && isset($adminSession['name'])) {
+                        $inputData['apbdes_edited_by'] = (string) $adminSession['name'];
+                    }
+                    // Pastikan potensi_id ikut tersimpan saat upload foto potensi
+                    if ($formId === 'potensi-media') {
+                        $potensiId = isset($_POST['potensi_id']) ? (int) $_POST['potensi_id'] : 0;
+                        if ($potensiId > 0) {
+                            $inputData['potensi_id'] = $potensiId;
+                        } else {
+                            // Jika tidak dikirim, beri peringatan agar tidak null
+                            $errors['_general'] = 'Potensi ID tidak ditemukan. Silakan ulangi dari tombol "Foto".';
+                        }
+                    }
+
+
+                    foreach ($fileUploads as $column => $fileInfo) {
+                        $inputData[$column] = $fileInfo['_stored'] ?? '';
+                    }
+
+                    $columns = array_keys($inputData);
+                    $placeholders = implode(', ', array_fill(0, count($columns), '?'));
+                    $query = 'INSERT INTO ' . $definition['table'] . ' (' . implode(', ', $columns) . ') VALUES (' . $placeholders . ')';
+                try {
+                    $stmt = $pdo->prepare($query);
+                    $stmt->execute(array_values($inputData));
+                    $_SESSION['flash'][] = $definition['title'] . ' berhasil ditambahkan.';
+                    unset($_SESSION['form_errors'][$formId], $_SESSION['form_old'][$formId]);
+
+                    // Jika form yang dikirim adalah potensi-media, arahkan kembali ke tab Potensi Desa
+                    $redirectSection = $formId;
+                    if ($formId === 'potensi-media') {
+                        $redirectSection = 'potensi';
+                    }
+
+                    header('Location: admin_management.php#' . rawurlencode($redirectSection));
+                    exit;
+
+                } catch (Throwable $exception) {
+                    $errors['_general'] = 'Gagal menyimpan data: ' . $exception->getMessage();
+                }
+            }
+        }
+
+        $_SESSION['form_errors'][$formId] = $errors;
+        $_SESSION['form_old'][$formId] = array_intersect_key($_POST, $fieldsDefinition);
+        header('Location: admin_management.php#' . rawurlencode($formId));
+        exit;
+    }
+}}
+
+$dataRows = fetch_table(
+    $pdo,
+    'SELECT data_key, data_value, data_type, data_updated_at, data_updated_by
+     FROM data
+     ORDER BY data_key ASC'
+);
+
+$apbdes = fetch_table($pdo, 'SELECT apbdes_id, apbdes_judul, apbdes_file, apbdes_edited_by, apbdes_created_at, apbdes_updated_at FROM apbdes ORDER BY apbdes_updated_at DESC LIMIT 50');
+$berita = fetch_table($pdo, 'SELECT berita_id, berita_judul, berita_isi, berita_gambar, berita_dilihat, berita_created_at, berita_updated_at FROM berita ORDER BY berita_updated_at DESC LIMIT 50');
+$fasilitas = fetch_table($pdo, 'SELECT fasilitas_id, fasilitas_nama, fasilitas_gambar, fasilitas_gmaps_link, fasilitas_created_at, fasilitas_updated_at FROM fasilitas ORDER BY fasilitas_updated_at DESC LIMIT 50');
+$galeri = fetch_table($pdo, 'SELECT galeri_id, galeri_keterangan, galeri_gambar, galeri_created_at FROM galeri ORDER BY galeri_created_at DESC LIMIT 50');
+$gambarPotensi = fetch_table($pdo, 'SELECT g.gambar_id, g.potensi_id, g.gambar_namafile, g.gambar_created_at, p.potensi_judul FROM gambar_potensi_desa g LEFT JOIN potensi_desa p ON p.potensi_id = g.potensi_id ORDER BY g.gambar_created_at DESC');
+$gambarPotensiByPotensi = [];
+foreach ($gambarPotensi as $mediaRow) {
+    $potensiId = isset($mediaRow['potensi_id']) ? (int) $mediaRow['potensi_id'] : 0;
+    if ($potensiId <= 0) {
+        continue;
+    }
+    if (!isset($gambarPotensiByPotensi[$potensiId])) {
+        $gambarPotensiByPotensi[$potensiId] = [];
+    }
+    $mediaUrl = resolve_potensi_media_url((string) ($mediaRow['gambar_namafile'] ?? ''));
+    $gambarPotensiByPotensi[$potensiId][] = [
+        'id' => (int) ($mediaRow['gambar_id'] ?? 0),
+        'judul' => (string) ($mediaRow['potensi_judul'] ?? ''),
+        'file' => $mediaUrl,
+        'raw' => (string) ($mediaRow['gambar_namafile'] ?? ''),
+        'created_at' => $mediaRow['gambar_created_at'] ?? null,
+        'created_label' => format_datetime($mediaRow['gambar_created_at'] ?? null),
+    ];
+}
+$potensiDesa = fetch_table($pdo, 'SELECT potensi_id, potensi_judul, potensi_isi, potensi_kategori, potensi_gmaps_link, potensi_created_at, potensi_updated_at FROM potensi_desa ORDER BY potensi_updated_at DESC LIMIT 50');
+if (isset($tableForms['potensi-media']['fields']['potensi_id'])) {
+    $potensiSelectOptions = ['' => '-- Pilih Potensi --'];
+    foreach ($potensiDesa as $potensiRow) {
+        $id = isset($potensiRow['potensi_id']) ? (int) $potensiRow['potensi_id'] : 0;
+        if ($id <= 0) {
+            continue;
+        }
+        $title = trim((string) ($potensiRow['potensi_judul'] ?? ''));
+        if ($title === '') {
+            $title = 'Potensi #' . $id;
+        }
+        $potensiSelectOptions[(string) $id] = $title;
+    }
+    $tableForms['potensi-media']['fields']['potensi_id']['options'] = $potensiSelectOptions;
+}
+$pengumuman = fetch_table($pdo, 'SELECT pengumuman_id, pengumuman_isi, pengumuman_valid_hingga, pengumuman_created_at, pengumuman_updated_at FROM pengumuman ORDER BY pengumuman_updated_at DESC LIMIT 50');
+$permohonanInformasi = fetch_table($pdo, 'SELECT pi_id, pi_email, pi_asal_instansi, pi_selesai, pi_created_at, pi_updated_at FROM permohonan_informasi ORDER BY pi_updated_at DESC LIMIT 50');
+$ppidDokumen = fetch_table($pdo, 'SELECT ppid_id, ppid_judul, ppid_kategori, ppid_namafile, ppid_created_at, ppid_updated_at FROM ppid_dokumen ORDER BY ppid_updated_at DESC LIMIT 50');
+$programDesa = fetch_table($pdo, 'SELECT program_id, program_nama, program_deskripsi, program_gambar, program_created_at, program_updated_at FROM program_desa ORDER BY program_updated_at DESC LIMIT 50');
+$strukturOrganisasi = fetch_table(
+    $pdo,
+    'SELECT struktur_id, struktur_nama, struktur_jabatan, struktur_foto, struktur_created_at, struktur_updated_at 
+     FROM struktur_organisasi 
+     ORDER BY struktur_updated_at DESC LIMIT 50'
+);
+$otherAdmins = [];
+if ($isSuperadmin) {
+    $sql = 'SELECT admin_id, admin_nama, admin_no_hp, admin_email,
+                   admin_created_at, admin_updated_at, admin_is_deleted, admin_is_superadmin
+            FROM admin
+            WHERE admin_id <> ?';
+    $params = [$currentAdminId];
+
+    if (!$showDeletedAdmins) {
+        $sql .= ' AND admin_is_deleted = 0'; // default: sembunyikan yang soft-deleted
+    }
+
+    $sql .= ' ORDER BY admin_updated_at DESC';
+    $otherAdmins = fetch_table($pdo, $sql, $params);
+}
+
+
+$flashMessages = $_SESSION['flash'] ?? [];
+$flashErrors = $_SESSION['flash_error'] ?? [];
+$formErrors = $_SESSION['form_errors'] ?? [];
+$formOld = $_SESSION['form_old'] ?? [];
+unset($_SESSION['flash'], $_SESSION['flash_error'], $_SESSION['form_errors'], $_SESSION['form_old']);
+
+function section_card(string $sectionId, string $title, string $description, array $headers, array $rows, callable $rowRenderer): string
+{
+    global $tableForms;
+
+    $headerHtml = '';
+    foreach ($headers as $header) {
+        $headerHtml .= '<th>' . e($header) . '</th>';
+    }
+
+    $bodyHtml = '';
+    if ($rows === []) {
+        $bodyHtml = '<tr><td colspan="' . count($headers) . '" class="empty-state">Belum ada data.</td></tr>';
+    } else {
+        foreach ($rows as $row) {
+            $bodyHtml .= $rowRenderer($row);
+        }
+    }
+
+    $toolsHtml = '<span class="badge">' . count($rows) . ' item</span>';
+    if (isset($tableForms[$sectionId])) {
+        $toolsHtml .= '<button type="button" class="btn-add" data-open-modal="' . e($sectionId) . '">Tambah Data</button>';
+    }
+
+    return '
+    <section class="card section-card" data-section="' . e($sectionId) . '" id="' . e($sectionId) . '">
+        <header class="card__header">
+            <div>
+                <h2>' . e($title) . '</h2>
+                <p>' . e($description) . '</p>
+            </div>
+            <div class="card__tools">' . $toolsHtml . '</div>
+        </header>
+        <div class="table-wrapper">
+            <table>
+                <thead><tr>' . $headerHtml . '</tr></thead>
+                <tbody>' . $bodyHtml . '</tbody>
+            </table>
+        </div>
+    </section>';
+}
+
+function render_modal(string $formId, array $definition, array $oldInputs, array $errors): string
+{
+    $title = $definition['title'] ?? ucfirst(str_replace('-', ' ', $formId));
+    $fields = $definition['fields'] ?? [];
+
+    $errorList = '';
+    if ($errors !== []) {
+        $items = '';
+        foreach ($errors as $name => $message) {
+            if ($name === '_general') {
+                continue;
+            }
+            $items .= '<li>' . e($message) . '</li>';
+        }
+        if (isset($errors['_general'])) {
+            $items = '<li>' . e($errors['_general']) . '</li>' . $items;
+        }
+        $errorList = '<div class="modal-alert"><strong>Periksa kembali:</strong><ul>' . $items . '</ul></div>';
+    }
+
+    $fieldsHtml = '';
+
+    foreach ($fields as $name => $meta) {
+        $type = $meta['type'] ?? 'text';
+        $label = $meta['label'] ?? ucfirst(str_replace('_', ' ', $name));
+        $required = !empty($meta['required']);
+        $default = $meta['default'] ?? null;
+        $value = $oldInputs[$name] ?? ($default ?? '');
+        $fieldError = $errors[$name] ?? '';
+
+        if ($type === 'datetime' && $value !== '') {
+            $timestamp = strtotime((string) $value);
+            if ($timestamp !== false) {
+                $value = date('Y-m-d\TH:i', $timestamp);
+            }
+        }
+
+        if ($type === 'checkbox') {
+            $isChecked = isset($oldInputs[$name])
+                ? in_array((string) $oldInputs[$name], ['1', 'on', 'true'], true)
+                : (!empty($default));
+
+            $fieldsHtml .= '
+            <div class="modal__field modal__field--checkbox">
+                <label>
+                    <input type="checkbox" name="' . e($name) . '"' . ($isChecked ? ' checked' : '') . '>
+                    ' . e($label) . '
+                </label>'
+                . ($fieldError !== '' ? '<div class="field-error">' . e($fieldError) . '</div>' : '')
+            . '</div>';
+            continue;
+        }
+
+        $inputHtml = '';
+        $requiredAttr = $required ? ' required' : '';
+
+        switch ($type) {
+            case 'file_pdf':
+                $inputHtml = '<input type="file" name="' . e($name) . '" accept="application/pdf"' . $requiredAttr . '>';
+                break;
+            case 'file_image':
+                $inputHtml = '<input type="file" name="' . e($name) . '" accept="image/jpeg,image/png,image/webp"' . $requiredAttr . '>';
+                break;
+            case 'textarea':
+                $inputHtml = '<textarea name="' . e($name) . '" rows="4"' . $requiredAttr . '>' . e((string) $value) . '</textarea>';
+                break;
+            case 'select':
+                $options = $meta['options'] ?? [];
+                $optionsHtml = '';
+                $isList = array_is_list($options);
+
+                foreach ($options as $optionValue => $optionLabel) {
+                    if ($isList || is_int($optionValue)) {
+                        $optionValue = (string) $optionLabel;
+                        $optionLabel = (string) $optionLabel;
+                    } else {
+                        $optionValue = (string) $optionValue;
+                        $optionLabel = (string) $optionLabel;
+                    }
+                    $optionsHtml .= '<option value="' . e($optionValue) . '"' . ((string) $value === $optionValue ? ' selected' : '') . '>' . e($optionLabel) . '</option>';
+                }
+
+                $inputHtml = '<select name="' . e($name) . '"' . $requiredAttr . '>' . $optionsHtml . '</select>';
+                break;
+            case 'number':
+                $inputHtml = '<input type="number" name="' . e($name) . '" value="' . e($value !== '' ? (string) $value : '') . '"' . $requiredAttr . '>';
+                break;
+            case 'email':
+                $inputHtml = '<input type="email" name="' . e($name) . '" value="' . e((string) $value) . '"' . $requiredAttr . '>';
+                break;
+            case 'datetime':
+                $inputHtml = '<input type="datetime-local" name="' . e($name) . '" value="' . e((string) $value) . '"' . $requiredAttr . '>';
+                break;
+            default:
+                    $inputHtml = '<input type="text" name="' . e($name) . '" value="' . e((string) (is_array($value) ? '' : $value)) . '"' . $requiredAttr . '>';
+                break;
+        }
+
+        $fieldsHtml .= '
+            <div class="modal__field">
+                <label for="' . e($formId . '_' . $name) . '">' . e($label) . ($required ? ' <span class="required">*</span>' : '') . '</label>
+                ' . str_replace('name="' . e($name) . '"', 'name="' . e($name) . '" id="' . e($formId . '_' . $name) . '"', $inputHtml) . '
+                ' . ($fieldError !== '' ? '<div class="field-error">' . e($fieldError) . '</div>' : '') . '
+            </div>';
+    }
+
+    $backdropAttr = 'class="modal-backdrop" data-modal="' . e($formId) . '"';
+    if ($errors !== []) {
+        $backdropAttr .= ' data-open-on-load="1"';
+    }
+
+    return '
+    <div ' . $backdropAttr . '>
+        <div class="modal">
+            <div class="modal__header">
+                <h3 class="modal__title">' . e($definition['title'] ?? 'Data') . '</h3>
+                <button type="button" class="modal__close" data-close-modal aria-label="Tutup">&times;</button>
+            </div>
+            <div class="modal__body">
+                ' . $errorList . '
+                <form method="post" action="admin_management.php#' . e($formId) . '" autocomplete="off" enctype="multipart/form-data">
+                    <input type="hidden" name="form_id" value="' . e($formId) . '">
+                    ' . $fieldsHtml . '
+                    <div class="modal__actions">
+                        <button type="button" class="btn-secondary" data-close-modal>Batal</button>
+                        <button type="submit" class="btn-primary">Simpan</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>';
+}
+
+?><!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <link rel="icon" type="image/x-icon" href="assets/images/favicon.ico" />
+    <title>Manajemen Konten | Desa Sendangan</title>
+    <style>
+        :root {
+            color-scheme: light;
+            font-family: "Inter", system-ui, -apple-system, "Segoe UI", sans-serif;
+            background-color: #f1f5f9;
+        }
+
+        body {
+            margin: 0;
+            background: #f8fafc;
+            color: #0f172a;
+        }
+
+        a {
+            color: inherit;
+        }
+
+        .layout {
+            min-height: 100vh;
+        }
+
+        .sidebar {
+            position: fixed;
+            inset: 0 auto 0 0;
+            width: 280px;
+            background: #1d4ed8;
+            color: #ffffff;
+            padding: 32px 28px;
+            display: flex;
+            flex-direction: column;
+            gap: 40px;
+            overflow-y: auto;
+            box-shadow: 10px 0 30px rgba(29, 78, 216, 0.25);
+            scrollbar-width: none;
+        }
+
+        .sidebar::-webkit-scrollbar {
+            width: 0;
+            height: 0;
+        }
+
+        .sidebar h1 {
+            margin: 0;
+            font-size: 28px;
+            letter-spacing: -0.02em;
+        }
+
+        .sidebar nav {
+            display: grid;
+            gap: 14px;
+        }
+
+        .sidebar a {
+            display: inline-flex;
+            align-items: center;
+            gap: 12px;
+            font-size: 15px;
+            color: rgba(255, 255, 255, 0.85);
+            text-decoration: none;
+            padding: 10px 12px;
+            border-radius: 10px;
+            transition: background 0.2s ease, transform 0.2s ease;
+        }
+
+        .sidebar a:hover {
+            background: rgba(255, 255, 255, 0.15);
+            transform: translateX(4px);
+        }
+
+        .sidebar a.is-active {
+            background: rgba(255, 255, 255, 0.24);
+            color: #ffffff;
+        }
+
+        .sidebar footer {
+            margin-top: auto;
+            font-size: 12px;
+            color: rgba(255, 255, 255, 0.65);
+        }
+        /* opsional */
+        .badge--super { background: rgba(34,197,94,.15); color:#15803d; }
+        .badge--regular { background: rgba(59,130,246,.12); color:#1d4ed8; }
+
+        .content {
+            margin-left: calc(280px + 20px);
+            padding: 32px clamp(24px, 4vw, 48px);
+        }
+
+        .content-header {
+            display: flex;
+            align-items: flex-end;
+            justify-content: space-between;
+            gap: 16px;
+            margin-bottom: 36px;
+            flex-wrap: wrap;
+        }
+
+        .content-header h2 {
+            margin: 0;
+            font-size: 32px;
+            letter-spacing: -0.02em;
+        }
+
+        .content-header span {
+            color: #4b5563;
+            font-size: 14px;
+        }
+
+        .cards-grid {
+            display: block;
+            gap: 24px;
+        }
+
+        .section-card {
+            display: block;
+            margin-bottom: 24px;
+        }
+
+        .js-enabled .section-card {
+            display: none;
+        }
+
+        .js-enabled .section-card.is-active {
+            display: block;
+            animation: fadeIn 0.25s ease;
+        }
+
+        .card {
+            background: #ffffff;
+            border-radius: 18px;
+            box-shadow: 0 18px 45px rgba(15, 23, 42, 0.12);
+            border: 1px solid rgba(226, 232, 240, 0.7);
+            padding: 24px 24px 28px;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(8px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        .card__header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 18px;
+            margin-bottom: 18px;
+        }
+
+        .card__header h2 {
+            margin: 0;
+            font-size: 22px;
+            letter-spacing: -0.01em;
+        }
+
+        .card__header p {
+            margin: 4px 0 0;
+            color: #64748b;
+            font-size: 13px;
+        }
+
+        .badge {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            padding: 6px 14px;
+            border-radius: 999px;
+            background: rgba(59, 130, 246, 0.12);
+            color: #1d4ed8;
+            font-weight: 600;
+            font-size: 12px;
+        }
+
+        .card__tools {
+            display: inline-flex;
+            align-items: center;
+            gap: 12px;
+            flex-wrap: wrap;
+        }
+
+        .btn-add {
+            border: none;
+            border-radius: 10px;
+            padding: 10px 16px;
+            background: #2563eb;
+            color: #ffffff;
+            font-weight: 600;
+            font-size: 13px;
+            cursor: pointer;
+            transition: transform 0.2s ease, box-shadow 0.2s ease, background 0.2s ease;
+        }
+
+        .btn-add:hover {
+            transform: translateY(-1px);
+            background: #1d4ed8;
+            box-shadow: 0 10px 20px rgba(37, 99, 235, 0.28);
+        }
+
+        .table-wrapper {
+            overflow-x: auto;
+            border-radius: 12px;
+        }
+
+        .flash {
+            margin-bottom: 20px;
+            padding: 14px 18px;
+            border-radius: 12px;
+            font-size: 14px;
+        }
+
+        .flash--success {
+            background: rgba(22, 163, 74, 0.12);
+            color: #166534;
+            border: 1px solid rgba(22, 163, 74, 0.3);
+        }
+
+        .flash--error {
+            background: rgba(239, 68, 68, 0.12);
+            color: #b91c1c;
+            border: 1px solid rgba(239, 68, 68, 0.3);
+        }
+
+        .upload-overlay {
+            position: fixed;
+            inset: 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: rgba(15, 23, 42, 0.65);
+            z-index: 9999;
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 0.2s ease;
+        }
+
+        .upload-overlay.is-visible {
+            opacity: 1;
+            pointer-events: auto;
+        }
+
+        .upload-overlay__content {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 16px;
+            padding: 32px 40px;
+            border-radius: 16px;
+            background: rgba(15, 23, 42, 0.85);
+            color: #f8fafc;
+            text-align: center;
+            box-shadow: 0 24px 60px rgba(15, 23, 42, 0.4);
+        }
+
+        .upload-overlay__spinner {
+            width: 48px;
+            height: 48px;
+            border-radius: 50%;
+            border: 5px solid rgba(148, 163, 184, 0.35);
+            border-top-color: #60a5fa;
+            animation: upload-overlay-spin 0.9s linear infinite;
+        }
+
+        .upload-overlay__content p {
+            margin: 0;
+            font-size: 16px;
+            letter-spacing: 0.02em;
+        }
+
+        @keyframes upload-overlay-spin {
+            from {
+                transform: rotate(0);
+            }
+            to {
+                transform: rotate(360deg);
+            }
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            min-width: 520px;
+            font-size: 14px;
+        }
+
+        th, td {
+            text-align: left;
+            padding: 12px 14px;
+            border-bottom: 1px solid rgba(148, 163, 184, 0.2);
+        }
+
+        thead th {
+            background: rgba(226, 232, 240, 0.65);
+            font-weight: 600;
+            color: #1f2937;
+            position: sticky;
+            top: 0;
+            z-index: 1;
+        }
+
+        tbody tr:nth-child(odd) {
+            background: rgba(248, 250, 252, 0.8);
+        }
+
+        .empty-state {
+            text-align: center;
+            color: #9ca3af;
+            font-style: italic;
+        }
+
+        .table-actions {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .table-actions__form {
+            margin: 0;
+        }
+
+        .table-actions a {
+            color: #2563eb;
+            text-decoration: none;
+            font-weight: 600;
+        }
+
+        .modal-backdrop {
+            position: fixed;
+            inset: 0;
+            background: rgba(15, 23, 42, 0.55);
+            display: none;
+            align-items: center;
+            justify-content: center;
+            padding: 24px;
+            z-index: 100;
+        }
+
+        .modal-backdrop.is-open {
+            display: flex;
+        }
+
+        .modal {
+            background: #ffffff;
+            border-radius: 18px;
+            width: min(520px, 92vw);
+            max-height: 90vh;
+            overflow-y: auto;
+            padding: 28px 28px 32px;
+            box-shadow: 0 24px 60px rgba(15, 23, 42, 0.25);
+            border: 1px solid rgba(226, 232, 240, 0.85);
+        }
+
+        .modal--wide {
+            width: min(720px, 96vw);
+        }
+
+        .modal__header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 16px;
+            margin-bottom: 20px;
+        }
+
+        .modal__toolbar {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 12px;
+            flex-wrap: wrap;
+        }
+
+        .modal__subtitle {
+            margin: 0;
+            font-size: 14px;
+            color: #475569;
+        }
+
+        .modal__title {
+            margin: 0;
+            font-size: 20px;
+            letter-spacing: -0.01em;
+        }
+
+        .modal__close {
+            border: none;
+            background: transparent;
+            font-size: 24px;
+            line-height: 1;
+            cursor: pointer;
+            color: #64748b;
+        }
+
+        .modal__body {
+            display: grid;
+            gap: 18px;
+        }
+
+        .modal-empty {
+            margin: 0;
+            padding: 16px;
+            text-align: center;
+            font-size: 14px;
+            color: #475569;
+            background: rgba(148, 163, 184, 0.16);
+            border-radius: 12px;
+        }
+
+        .modal__field label {
+            display: block;
+            font-weight: 600;
+            font-size: 14px;
+            color: #1f2937;
+            margin-bottom: 6px;
+        }
+
+        .modal__field input,
+        .modal__field select,
+        .modal__field textarea {
+            width: 100%;
+            padding: 12px 14px;
+            border-radius: 10px;
+            border: 1px solid rgba(100, 116, 139, 0.35);
+            font-size: 14px;
+            font-family: inherit;
+            transition: border 0.2s ease, box-shadow 0.2s ease;
+        }
+
+        .modal__field textarea {
+            resize: vertical;
+            min-height: 120px;
+        }
+
+        .is-hidden {
+            display: none !important;
+        }
+
+        .modal__field input:focus,
+        .modal__field select:focus,
+        .modal__field textarea:focus {
+            outline: none;
+            border-color: #2563eb;
+            box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.15);
+        }
+
+        .field-hint {
+            display: block;
+            margin-top: 6px;
+            font-size: 12px;
+            color: #64748b;
+        }
+
+        .modal__field--checkbox label {
+            font-weight: 500;
+            display: inline-flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .modal__field--checkbox input {
+            width: 18px;
+            height: 18px;
+        }
+
+        .modal__actions {
+            display: flex;
+            justify-content: flex-end;
+            gap: 12px;
+            margin-top: 10px;
+        }
+
+        .btn-primary,
+        .btn-secondary {
+            border: none;
+            border-radius: 10px;
+            padding: 10px 18px;
+            font-weight: 600;
+            font-size: 14px;
+            cursor: pointer;
+        }
+
+        .btn-primary {
+            background: #2563eb;
+            color: #ffffff;
+        }
+
+        .btn-primary:hover {
+            background: #1d4ed8;
+        }
+
+        .btn-secondary {
+            background: rgba(148, 163, 184, 0.2);
+            color: #334155;
+        }
+
+        .btn-secondary:hover {
+            background: rgba(148, 163, 184, 0.35);
+        }
+
+        .btn-outline {
+            border: 1px solid rgba(37, 99, 235, 0.4);
+            border-radius: 8px;
+            padding: 8px 14px;
+            font-weight: 600;
+            font-size: 13px;
+            cursor: pointer;
+            background: transparent;
+            color: #2563eb;
+            line-height: 1.2;
+            transition: background 0.2s ease, color 0.2s ease, border-color 0.2s ease;
+        }
+
+        .btn-outline:hover {
+            background: rgba(37, 99, 235, 0.1);
+            color: #1d4ed8;
+            border-color: rgba(37, 99, 235, 0.6);
+        }
+
+        .btn-danger {
+            border: none;
+            border-radius: 8px;
+            padding: 8px 14px;
+            font-weight: 600;
+            font-size: 13px;
+            cursor: pointer;
+            background: rgba(220, 38, 38, 0.15);
+            color: #b91c1c;
+            line-height: 1.2;
+            transition: background 0.2s ease, color 0.2s ease;
+        }
+
+        .btn-danger:hover {
+            background: rgba(220, 38, 38, 0.25);
+            color: #991b1b;
+        }
+
+        .modal-alert {
+            padding: 12px 14px;
+            border-radius: 10px;
+            background: rgba(239, 68, 68, 0.12);
+            border: 1px solid rgba(239, 68, 68, 0.3);
+            color: #b91c1c;
+            font-size: 13px;
+        }
+
+        .modal-alert ul {
+            margin: 8px 0 0;
+            padding-left: 18px;
+        }
+
+        .field-error {
+            margin-top: 6px;
+            color: #b91c1c;
+            font-size: 12px;
+        }
+
+        .required {
+            color: #dc2626;
+        }
+
+        body.modal-open {
+            overflow: hidden;
+        }
+
+        .status-pill {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            padding: 4px 10px;
+            border-radius: 999px;
+            font-size: 12px;
+            font-weight: 600;
+        }
+
+        .status-pill--done {
+            background: rgba(34, 197, 94, 0.15);
+            color: #15803d;
+        }
+
+        .status-pill--pending {
+            background: rgba(250, 204, 21, 0.18);
+            color: #b45309;
+        }
+
+        .media-thumb {
+            display: inline-flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .media-thumb img {
+            width: 42px;
+            height: 42px;
+            object-fit: cover;
+            border-radius: 10px;
+            border: 1px solid rgba(148, 163, 184, 0.45);
+        }
+
+        .media-thumb span {
+            display: inline-block;
+            color: #475569;
+        }
+
+        .table small {
+            display: block;
+            color: #9ca3af;
+            margin-top: 4px;
+        }
+
+        @media (max-width: 1024px) {
+            .sidebar {
+                position: relative;
+                inset: auto;
+                width: 100%;
+                flex-direction: row;
+                align-items: center;
+                gap: 18px;
+                box-shadow: none;
+            }
+
+            .sidebar nav {
+                flex: 1;
+                display: flex;
+                flex-wrap: wrap;
+                gap: 10px;
+            }
+
+            .sidebar footer {
+                display: none;
+            }
+
+            .content {
+                margin-left: 0;
+            }
+        }
+
+        @media (max-width: 640px) {
+            .content {
+                padding: 24px 16px 40px;
+            }
+
+            .content-header h2 {
+                font-size: 26px;
+            }
+
+            table {
+                min-width: 420px;
+            }
+        }
+        .btn-logout {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            border: none;
+            border-radius: 10px;
+            padding: 10px 14px;
+            font-weight: 700;
+            font-size: 13px;
+            cursor: pointer;
+            text-decoration: none;
+            background: rgba(220, 38, 38, 0.15);
+            color: #b91c1c;
+            transition: background 0.2s ease, color 0.2s ease, transform 0.2s ease;
+        }
+        .btn-logout:hover {
+            background: rgba(220, 38, 38, 0.25);
+            color: #991b1b;
+            transform: translateY(-1px);
+        }
+
+        /* Sembunyikan versi mobile di desktop */
+        .only-mobile { display: none; }
+
+        /* Tampilkan tombol di header saat layar kecil, sidebar tetap punya tombolnya */
+        @media (max-width: 1024px) {
+            .only-mobile { display: inline-flex; }
+        }
+
+    </style>
+</head>
+<body>
+<div class="layout">
+    <aside class="sidebar">
+        <div>
+            <h1>Admin Desa</h1>
+            <span><?= e($adminSession['email'] ?? 'admin@desa.id') ?></span>
+            <div style="margin-top:12px;">
+            <a href="admin.php?action=logout" class="btn-logout">Keluar</a>
+            </div>
+
+        </div>
+        <nav>
+            <a class="sidebar-link" href="#admin" data-section="admin" title="Akun">
+                <!-- ikon akun sederhana -->
+                <span style="display:inline-flex;align-items:center;gap:10px;">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                    <circle cx="12" cy="8" r="4" stroke="currentColor" stroke-width="2"></circle>
+                    <path d="M4 20c0-4 4-6 8-6s8 2 8 6" stroke="currentColor" stroke-width="2" stroke-linecap="round"></path>
+                </svg>
+                Akun
+                </span>
+            </a>
+            <a class="sidebar-link" href="#data" data-section="data">Data Umum</a>
+            <a class="sidebar-link" href="#apbdes" data-section="apbdes">APBDes</a>
+            <a class="sidebar-link" href="#berita" data-section="berita">Berita</a>
+            <a class="sidebar-link" href="#fasilitas" data-section="fasilitas">Fasilitas</a>
+            <a class="sidebar-link" href="#potensi" data-section="potensi">Potensi Desa</a>
+            <a class="sidebar-link" href="#pengumuman" data-section="pengumuman">Pengumuman</a>
+            <!-- <a class="sidebar-link" href="#permohonan" data-section="permohonan">Permohonan Informasi</a> -->
+            <!-- <a class="sidebar-link" href="#ppid" data-section="ppid">PPID Dokumen</a> -->
+            <a class="sidebar-link" href="#program" data-section="program">Program Desa</a>
+            <a class="sidebar-link" href="#galeri" data-section="galeri">Galeri</a>
+            <a class="sidebar-link" href="#struktur" data-section="struktur">Struktur Organisasi</a>
+        </nav>
+        <footer>© <?= date('Y') ?> Desa Sendangan</footer>
+    </aside>
+
+    <main class="content">
+        <div class="content-header">
+            <div>
+                <h2>Ringkasan Konten</h2>
+                <span>Manajemen Data dari Konten Website Desa Sendangan</span>
+            </div>  
+        </div>
+            <?php foreach ($flashErrors as $msg): ?>
+                <div class="flash flash--error"><?= e($msg) ?></div>
+            <?php endforeach; ?>
+            <?php foreach ($flashMessages as $msg): ?>
+                <div class="flash flash--success"><?= e($msg) ?></div>
+            <?php endforeach; ?>
+
+
+        <div class="cards-grid">
+    <?php
+    // ——— Section: Admin (Pengaturan Akun) ———
+    echo '
+    <section class="card section-card is-active" data-section="admin" id="admin">
+    <header class="card__header">
+        <div>
+        <h2>Pengaturan Akun</h2>
+        <p>Kelola data diri akun yang sedang login.</p>
+        </div>
+    </header>
+
+    <div class="table-wrapper" style="margin-bottom:18px;">
+        <table>
+        <thead>
+            <tr><th>Field</th><th>Nilai</th><th>Aksi</th></tr>
+        </thead>
+        <tbody>';
+
+    $roleLabel    = ((int)($currentAdmin['admin_is_superadmin'] ?? 0) === 1) ? 'Superadmin' : 'Regular Admin';
+    $createdAt    = format_datetime($currentAdmin['admin_created_at'] ?? null);
+    $updatedAt    = format_datetime($currentAdmin['admin_updated_at'] ?? null);
+
+    echo '
+    <tr>
+    <td>ID</td>
+    <td>#' . e((string)($currentAdmin['admin_id'] ?? '-')) . '</td>
+    <td>—</td>
+    </tr>
+
+    <tr>
+    <td>Peran</td>
+    <td><span class="badge">' . e($roleLabel) . '</span></td>
+    <td>—</td>
+    </tr>
+
+    <tr>
+    <td>Nama</td>
+    <td>
+        <form method="post" action="admin_management.php#admin" class="table-actions__form" style="display:inline-flex;gap:8px;align-items:center;">
+        <input type="hidden" name="action" value="update_admin_nama">
+        <input type="text" name="admin_nama" value="' . e((string)($currentAdmin['admin_nama'] ?? '')) . '" required style="min-width:260px;max-width:520px;width:100%;">
+        <button type="submit" class="btn-outline">Submit</button>
+        </form>
+    </td>
+    <td></td>
+    </tr>
+
+    <tr>
+    <td>Password</td>
+    <td>••••••••</td>
+    <td><button type="button" class="btn-outline" data-open-modal="password-change">Ganti Password</button></td>
+    </tr>
+
+    <tr>
+    <td>No. HP</td>
+    <td>
+        <form method="post" action="admin_management.php#admin" class="table-actions__form" style="display:inline-flex;gap:8px;align-items:center;">
+        <input type="hidden" name="action" value="update_admin_no_hp">
+        <input type="text" name="admin_no_hp" value="' . e((string)($currentAdmin['admin_no_hp'] ?? '')) . '" placeholder="+62…" style="min-width:220px;">
+        <button type="submit" class="btn-outline">Submit</button>
+        </form>
+    </td>
+    <td></td>
+    </tr>
+
+    <tr>
+    <td>Email</td>
+    <td>
+        <form method="post" action="admin_management.php#admin" class="table-actions__form" style="display:inline-flex;gap:8px;align-items:center;">
+        <input type="hidden" name="action" value="update_admin_email">
+        <input type="email" name="admin_email" value="' . e((string)($currentAdmin['admin_email'] ?? '')) . '" placeholder="nama@contoh.com" style="min-width:260px;max-width:520px;width:100%;">
+        <button type="submit" class="btn-outline">Submit</button>
+        </form>
+    </td>
+    <td></td>
+    </tr>
+
+    <tr>
+    <td>Dibuat</td>
+    <td><span class="badge">' . e($createdAt) . '</span></td>
+    <td>—</td>
+    </tr>
+
+    <tr>
+    <td>Diperbarui</td>
+    <td><span class="badge">' . e($updatedAt) . '</span></td>
+    <td>—</td>
+    </tr>';
+
+    echo '
+        </tbody>
+        </table>
+    </div>
+    ';
+
+    // ——— Tampilkan "Daftar Admin Lain" hanya untuk superadmin ———
+    if ($isSuperadmin): ?>
+    <header class="card__header" style="margin-top:8px;">
+    <div>
+        <h2>Daftar Admin Lain</h2>
+        <p>Seluruh admin kecuali akun yang sedang login (read-only).</p>
+    </div>
+    <div class="card__tools">
+        <!-- ⬇⬇ Toggle baru -->
+        <form method="get" action="admin_management.php#admin"
+            id="toggle-deleted-form"
+            class="table-actions__form"
+            style="display:inline-flex;align-items:center;gap:8px;">
+        <input type="hidden" name="show_deleted" value="0">
+        <label style="display:inline-flex;align-items:center;gap:8px;">
+            <input type="checkbox" name="show_deleted" value="1"
+                <?= $showDeletedAdmins ? 'checked' : '' ?>
+                onchange="this.form.submit()">
+            Tampilkan data soft deleted
+        </label>
+        </form>
+        <span class="badge"><?= count($otherAdmins) ?> akun</span>
+        <button type="button" class="btn-add" data-open-modal="admin-create">Tambah Akun</button>
+    </div>
+    </header>
+
+    <div class="table-wrapper">
+        <table>
+            <thead>
+            <tr>
+                <th>ID</th>
+                <th>Nama</th>
+                <th>No. HP</th>
+                <th>Email</th>
+                <th>Peran</th>
+                <th>Deleted?</th>
+                <th>Dibuat</th>
+                <th>Diperbarui</th>
+                <th>Aksi</th>
+            </tr>
+            </thead>
+                        <tbody>
+            <?php if ($otherAdmins === []): ?>
+                <tr><td colspan="9" class="empty-state">Belum ada admin lain.</td></tr>
+            <?php else: ?>
+                <?php foreach ($otherAdmins as $a):
+                    $aid  = (int)($a['admin_id'] ?? 0);
+                    $isSupRow = (int)($a['admin_is_superadmin'] ?? 0) === 1;
+                    $isDelRow = (int)($a['admin_is_deleted'] ?? 0) === 1;
+
+                    $payload = [
+                        'id'            => $aid,
+                        'nama'          => (string)($a['admin_nama'] ?? ''),
+                        'email'         => (string)($a['admin_email'] ?? ''),
+                        'nohp'          => (string)($a['admin_no_hp'] ?? ''),
+                        'is_superadmin' => $isSupRow ? 1 : 0,
+                        'is_deleted'    => $isDelRow ? 1 : 0,
+                    ];
+                    $dataAttr = e(json_encode($payload, JSON_HEX_TAG|JSON_HEX_APOS|JSON_HEX_QUOT|JSON_HEX_AMP|JSON_UNESCAPED_UNICODE));
+                ?>
+                    <tr>
+                        <td>#<?= e((string)$aid) ?></td>
+                        <td><?= e((string)$a['admin_nama']) ?></td>
+                        <td><?= e((string)($a['admin_no_hp'] ?? '-')) ?></td>
+                        <td><?= e((string)($a['admin_email'] ?? '-')) ?></td>
+                        <td><?= $isSupRow ? 'Superadmin' : 'Regular' ?></td>
+                        <td><?= $isDelRow ? 'Ya' : 'Tidak' ?></td>
+                        <td><?= e(format_datetime($a['admin_created_at'] ?? null)) ?></td>
+                        <td><?= e(format_datetime($a['admin_updated_at'] ?? null)) ?></td>
+                        <td>
+                            <div class="table-actions" style="gap:6px; flex-wrap:wrap;">
+                                <button type="button" class="btn-outline"
+                                        data-open-modal="admin-edit"
+                                        data-admin='<?= $dataAttr ?>'>Edit</button>
+
+                                <button type="button" class="btn-outline"
+                                        data-open-modal="admin-reset"
+                                        data-admin-id="<?= e((string)$aid) ?>">Reset Password</button>
+
+                                <?php if (!$isSupRow): ?>
+                                    <?php if ($isDelRow): ?>
+                                        <form method="post" action="admin_management.php#admin" class="table-actions__form" onsubmit="return confirm('Pulihkan akun <?= e((string)($a['admin_nama'] ?? '')) ?> ?');">
+                                            <input type="hidden" name="action" value="restore_admin">
+                                            <input type="hidden" name="target_admin_id" value="<?= e((string)$aid) ?>">
+                                            <button type="submit" class="btn-outline">Pulihkan</button>
+                                        </form>
+                                    <?php else: ?>
+                                        <form method="post" action="admin_management.php#admin" class="table-actions__form" onsubmit="return confirm('Tandai hapus akun <?= e((string)($a['admin_nama'] ?? '')) ?> ?');">
+                                            <input type="hidden" name="action" value="soft_delete_admin">
+                                            <input type="hidden" name="target_admin_id" value="<?= e((string)$aid) ?>">
+                                            <button type="submit" class="btn-danger">Soft Delete</button>
+                                        </form>
+                                    <?php endif; ?>
+                                <?php else: ?>
+                                    <!-- Superadmin lain: tidak ada soft delete -->
+                                    —
+                                <?php endif; ?>
+                            </div>
+                        </td>
+                    </tr>
+                <?php endforeach; ?>
+            <?php endif; ?>
+            </tbody>
+        </table>
+    </div>
+<?php endif; ?>
+<?php
+    echo '
+    </section>';
+?>
+
+            <?= section_card(
+                'data',
+                'Data Umum',
+                'Penyimpanan key–value untuk konten dinamis (seperti JSON). Setiap baris bisa disunting langsung.',
+                ['Nama Data', 'Key', 'Tipe', 'Nilai', 'Diubah pada', 'Oleh'],
+                $dataRows,
+                static function (array $row): string {
+                    // Ambil key & metadata label/hint yang ramah operator
+                    global $dataDictionary;
+                    $dict = is_array($dataDictionary ?? null) ? $dataDictionary : [];
+
+                    $key = (string)($row['data_key'] ?? '');
+                    $meta = $dict[$key] ?? null;
+                    $niceLabel = $meta['label'] ?? ucwords(str_replace(['_', '-'], ' ', $key));
+                    $hint = isset($meta['hint']) ? (string)$meta['hint'] : '';
+
+                    $type = strtolower((string)($row['data_type'] ?? 'string'));
+                    $val  = (string)($row['data_value'] ?? '');
+                    $updatedAt = format_datetime($row['data_updated_at'] ?? null);
+                    $updatedBy = (string)($row['data_updated_by'] ?? '-');
+
+                    // Input type: number untuk integer, text untuk lainnya + aksesibilitas
+                                        // Jika key diawali "media." maka TIDAK ada tombol simpan; tampilkan upload saja
+                    $isMedia = str_starts_with($key, 'media.');
+                    if ($isMedia) {
+                        $isHukumTua = ($key === 'media.hukum_tua_foto');
+                        $valSafe = e($val);
+                        $preview = $val !== '' 
+                            ? '<div class="media-thumb">'
+                                . '<img src="' . e(base_uri('uploads/assets/' . ltrim($val, '/'))) . '" alt="preview" onerror="this.style.display=\'none\'">'
+                                . '<span>' . $valSafe . '</span>'
+                              . '</div>'
+                            : '<em class="empty-state">belum ada file</em>';
+
+                        $btn = $isHukumTua
+                            ? '<button type="button" class="btn-outline" data-open-modal="upload-hukumtua-foto">Upload</button>'
+                            : '<button type="button" class="btn-outline" data-open-modal="upload-media" data-media-key="' . e($key) . '">Upload</button>';
+
+                        $form = '<div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;">' . $preview . $btn . '</div>';
+                    } else {
+                        // Default: tetap ada form simpan
+                        $aria = ' aria-label="Nilai untuk ' . e($niceLabel) . '"';
+                        $inputHtml = $type === 'integer'
+                            ? '<input type="number" name="data_value" value="' . e($val) . '" required style="width:220px;"' . $aria . '>'
+                            : '<input type="text" name="data_value" value="' . e($val) . '" required style="min-width:260px;max-width:520px;width:100%;"' . $aria . '>';
+
+                        if ($hint !== '') {
+                            $inputHtml .= '<small class="field-hint">' . e($hint) . '</small>';
+                        }
+
+                        $form = '
+                            <form method="post" action="admin_management.php#data" class="table-actions__form" style="display:inline-flex;gap:8px;align-items:center;">
+                                <input type="hidden" name="action" value="update_data_value">
+                                <input type="hidden" name="data_key" value="' . e($key) . '">
+                                ' . $inputHtml . '
+                                <button type="submit" class="btn-outline">Simpan</button>
+                            </form>';
+                    }
+
+
+                    return '<tr>'
+                        . '<td>' . e($niceLabel) . '</td>'
+                        . '<td><code>' . e($key) . '</code></td>'
+                        . '<td>' . e($type) . '</td>'
+                        . '<td>' . $form . '</td>'
+                        . '<td>' . e($updatedAt) . '</td>'
+                        . '<td>' . e($updatedBy !== '' ? $updatedBy : '-') . '</td>'
+                        . '<td><!-- no extra actions --></td>'
+                        . '</tr>';
+                }
+            ) ?>
+
+            <!-- Aksi khusus Data Umum: Upload Foto Hukum Tua
+            <div class="card" style="margin-top:-12px; padding:12px; display:flex; justify-content:flex-end;">
+            <button type="button" class="btn-outline" data-open-modal="upload-hukumtua-foto">
+                Upload / Ganti Foto Hukum Tua
+            </button>
+            </div> -->
+
+            <?= section_card(
+                'apbdes',
+                'Dokumen APBDes',
+                'Daftar dokumen APBDes terbaru.',
+                ['ID', 'Judul', 'Berkas', 'Diubah oleh', 'Dibuat', 'Diperbarui', 'Aksi'],
+                $apbdes,
+                static function (array $row): string {
+                    $file = (string) ($row['apbdes_file'] ?? '');
+                    $fileLink = $file !== '' ? '<a href="' . e(base_uri('uploads/apbdes/' . ltrim($file, '/'))) . '" target="_blank" rel="noopener">Lihat</a>' : '-';
+                    $rowId = (int) ($row['apbdes_id'] ?? 0);
+                    $actionsHtml = '-';
+                    if ($rowId > 0) {
+                        $actionsHtml = '<button type="button" class="btn-outline" data-open-modal="apbdes-edit"'
+                            . ' data-apbdes-id="' . e((string) $rowId) . '"'
+                            . ' data-apbdes-judul="' . e((string) ($row['apbdes_judul'] ?? '')) . '"'
+                            . ' title="Ubah Judul">Ubah</button>'
+                            . '<form method="post" action="admin_management.php#apbdes" class="table-actions__form" onsubmit="return confirm(\'Hapus dokumen ini?\');">'
+                            . '<input type="hidden" name="action" value="delete_apbdes">'
+                            . '<input type="hidden" name="apbdes_id" value="' . e((string) $rowId) . '">'
+                            . '<button type="submit" class="btn-danger">Hapus</button>'
+                            . '</form>';
+                    }
+                    return '<tr>'
+                        . '<td>#' . e((string) $row['apbdes_id']) . '</td>'
+                        . '<td>' . e((string) $row['apbdes_judul']) . '</td>'
+                        . '<td>' . $fileLink . '</td>'
+                        . '<td>' . e((string) ($row['apbdes_edited_by'] ?? '')) . '</td>'
+                        . '<td>' . e(format_datetime($row['apbdes_created_at'] ?? null)) . '</td>'
+                        . '<td>' . e(format_datetime($row['apbdes_updated_at'] ?? null)) . '</td>'
+                        . '<td class="table-actions">' . $actionsHtml . '</td>'
+                        . '</tr>';
+                }
+            ) ?>
+
+            <?= section_card(   
+                'berita',
+                'Berita Desa',
+                'Artikel dan berita dari info publik.',
+                ['ID', 'Judul', 'Gambar', 'Dibaca', 'Dibuat', 'Diperbarui', 'Aksi'],
+                $berita,
+                static function (array $row): string {
+                    $thumb = (string) ($row['berita_gambar'] ?? '');
+                    $thumbHtml = $thumb !== '' ? '<a href="' . e(base_uri('uploads/berita/' . ltrim($thumb, '/'))) . '" target="_blank" rel="noopener">Buka</a>' : '-';
+                    $rowId = isset($row['berita_id']) ? (int) $row['berita_id'] : 0;
+                    $payload = [
+                        'id' => $rowId,
+                        'judul' => (string) ($row['berita_judul'] ?? ''),
+                        'isi' => (string) ($row['berita_isi'] ?? ''),
+                    ];
+                    $dataAttr = e((string) json_encode($payload, JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_AMP | JSON_UNESCAPED_UNICODE));
+                    $actionsHtml = $rowId > 0
+                        ? '<button type="button" class="btn-outline" data-open-modal="berita-edit" data-berita="' . $dataAttr . '">Ubah</button>'
+                            . '<form method="post" action="admin_management.php#berita" class="table-actions__form" onsubmit="return confirm(\'Hapus berita ini?\');">'
+                            . '<input type="hidden" name="action" value="delete_berita">'
+                            . '<input type="hidden" name="berita_id" value="' . e((string) $rowId) . '">'
+                            . '<button type="submit" class="btn-danger">Hapus</button>'
+                            . '</form>'
+                        : '-';
+                    return '<tr>'
+                        . '<td>#' . e((string) $row['berita_id']) . '</td>'
+                        . '<td>' . e((string) $row['berita_judul']) . '</td>'
+                        . '<td>' . $thumbHtml . '</td>'
+                        . '<td>' . e((string) ($row['berita_dilihat'] ?? 0)) . ' kali</td>'
+                        . '<td>' . e(format_datetime($row['berita_created_at'] ?? null)) . '</td>'
+                        . '<td>' . e(format_datetime($row['berita_updated_at'] ?? null)) . '</td>'
+                        . '<td class="table-actions">' . $actionsHtml . '</td>'
+                        . '</tr>';
+                }
+            ) ?>
+
+            <?= section_card(
+                'fasilitas',
+                'Fasilitas Desa',
+                'Data fasilitas publik dan link lokasi.',
+                ['ID', 'Nama', 'Gambar', 'Google Maps', 'Dibuat', 'Diperbarui', 'Aksi'],
+                $fasilitas,
+                static function (array $row): string {
+                    $img = (string) ($row['fasilitas_gambar'] ?? '');
+                    $maps = (string) ($row['fasilitas_gmaps_link'] ?? '');
+                    $imgHtml = $img !== '' ? '<a href="' . e(base_uri('uploads/fasilitas/' . ltrim($img, '/'))) . '" target="_blank" rel="noopener">Lihat</a>' : '-';
+                    $mapsHtml = $maps !== '' ? '<a href="' . e($maps) . '" target="_blank" rel="noopener">Buka Maps</a>' : '-';
+                    $rowId = isset($row['fasilitas_id']) ? (int) $row['fasilitas_id'] : 0;
+                    $payload = [
+                        'id' => $rowId,
+                        'nama' => (string) ($row['fasilitas_nama'] ?? ''),
+                        'gmaps' => (string) ($row['fasilitas_gmaps_link'] ?? ''),
+                    ];
+                    $dataAttr = e((string) json_encode($payload, JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_AMP | JSON_UNESCAPED_UNICODE));
+                    $actionsHtml = $rowId > 0
+                        ? '<button type="button" class="btn-outline" data-open-modal="fasilitas-edit" data-fasilitas="' . $dataAttr . '">Ubah</button>'
+                            . '<form method="post" action="admin_management.php#fasilitas" class="table-actions__form" onsubmit="return confirm(\'Hapus fasilitas ini?\');">'
+                            . '<input type="hidden" name="action" value="delete_fasilitas">'
+                            . '<input type="hidden" name="fasilitas_id" value="' . e((string) $rowId) . '">'
+                            . '<button type="submit" class="btn-danger">Hapus</button>'
+                        . '</form>'
+                    : '-';
+                    return '<tr>'
+                        . '<td>#' . e((string) $row['fasilitas_id']) . '</td>'
+                        . '<td>' . e((string) $row['fasilitas_nama']) . '</td>'
+                        . '<td>' . $imgHtml . '</td>'
+                        . '<td>' . $mapsHtml . '</td>'
+                        . '<td>' . e(format_datetime($row['fasilitas_created_at'] ?? null)) . '</td>'
+                        . '<td>' . e(format_datetime($row['fasilitas_updated_at'] ?? null)) . '</td>'
+                        . '<td class="table-actions">' . $actionsHtml . '</td>'
+                        . '</tr>';
+                }
+            ) ?>
+
+            <?= section_card(
+                'potensi',
+                'Potensi Desa',
+                'Daftar potensi desa beserta kategori.',
+                ['ID', 'Judul', 'Kategori', 'Google Maps', 'Foto', 'Dibuat', 'Diperbarui', 'Aksi'],
+                $potensiDesa,
+                static function (array $row) use ($gambarPotensiByPotensi): string {
+                $maps = (string) ($row['potensi_gmaps_link'] ?? '');
+                $mapsHtml = $maps !== '' ? '<a href="' . e($maps) . '" target="_blank" rel="noopener">Lokasi</a>' : '-';
+                $potensiId = isset($row['potensi_id']) ? (int) $row['potensi_id'] : 0;
+                $images = $potensiId > 0 && isset($gambarPotensiByPotensi[$potensiId]) ? $gambarPotensiByPotensi[$potensiId] : [];
+                $payload = [
+                    'id' => $potensiId,
+                    'judul' => (string) ($row['potensi_judul'] ?? ''),
+                    'isi' => (string) ($row['potensi_isi'] ?? ''),
+                    'kategori' => (string) ($row['potensi_kategori'] ?? ''),
+                    'gmaps' => (string) ($row['potensi_gmaps_link'] ?? ''),
+                ];
+                $dataAttr = e(json_encode($payload, JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_AMP | JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES));
+
+                $photosButton = $potensiId > 0
+                    ? '<button type="button" class="btn-outline" data-open-modal="potensi-gallery" data-potensi-gallery="' . $dataAttr . '">Foto (' . count($images) . ')</button>'
+                    : '-';
+
+                $actionsHtml = $potensiId > 0
+                    ? '<button type="button" class="btn-outline" data-open-modal="potensi-edit" data-potensi=\'' . $dataAttr . '\'>Ubah</button>'
+                        . '<form method="post" action="admin_management.php#potensi" class="table-actions__form" onsubmit="return confirm(\'Hapus potensi ini beserta semua fotonya?\');">'
+                        . '<input type="hidden" name="action" value="delete_potensi">'
+                        . '<input type="hidden" name="potensi_id" value="' . e((string) $potensiId) . '">'
+                        . '<button type="submit" class="btn-danger">Hapus</button>'
+                        . '</form>'
+                    : '-';
+
+                return '<tr>'
+                    . '<td>#' . e((string) $row['potensi_id']) . '</td>'
+                    . '<td>' . e((string) $row['potensi_judul']) . '</td>'
+                    . '<td>' . e((string) $row['potensi_kategori']) . '</td>'
+                    . '<td>' . $mapsHtml . '</td>'
+                    . '<td>' . $photosButton . '</td>'
+                    . '<td>' . e(format_datetime($row['potensi_created_at'] ?? null)) . '</td>'
+                    . '<td>' . e(format_datetime($row['potensi_updated_at'] ?? null)) . '</td>'
+                    . '<td class="table-actions">' . $actionsHtml . '</td>'
+                    . '</tr>';
+            }
+            ) ?>
+
+            <?= section_card(
+                'galeri',
+                'Galeri Desa',
+                'Koleksi media foto galeri.',
+                ['ID', 'Keterangan', 'Gambar', 'Dibuat', 'Aksi'],
+                $galeri,
+                static function (array $row): string {
+                    $img = (string) ($row['galeri_gambar'] ?? '');
+                    $imgHtml = $img !== '' 
+                        ? '<a href="' . e(base_uri('uploads/galeri/' . ltrim($img, '/'))) . '" target="_blank" rel="noopener">Lihat</a>'
+                        : '-';
+                    $rowId = (int) ($row['galeri_id'] ?? 0);
+                    $actionsHtml = $rowId > 0 ? '
+                        <form method="post" action="admin_management.php#galeri" class="table-actions__form" onsubmit="return confirm(\'Hapus gambar ini?\');">
+                            <input type="hidden" name="action" value="delete_galeri">
+                            <input type="hidden" name="galeri_id" value="' . e((string)$rowId) . '">
+                            <button type="submit" class="btn-danger">Hapus</button>
+                        </form>' : '-';
+
+                    return '<tr>'
+                        . '<td>#' . e((string)$row['galeri_id']) . '</td>'
+                        . '<td>' . e((string)($row['galeri_keterangan'] ?? '')) . '</td>'
+                        . '<td>' . $imgHtml . '</td>'
+                        . '<td>' . e(format_datetime($row['galeri_created_at'] ?? null)) . '</td>'
+                        . '<td>' . $actionsHtml . '</td>'
+                        . '</tr>';
+                }
+            ) ?>
+
+            <?= section_card(
+                'pengumuman',
+                'Pengumuman',
+                'Informasi dan pengumuman penting desa.',
+                ['ID', 'Berlaku sampai', 'Dibuat', 'Diperbarui', 'Aksi'],
+                $pengumuman,
+                static function (array $row): string {
+                    $id = (int) ($row['pengumuman_id'] ?? 0);
+                    $payload = [
+                        'id' => $id,
+                        'isi' => (string) ($row['pengumuman_isi'] ?? ''),
+                    ];
+                    $dataAttr = e(json_encode($payload, JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_AMP | JSON_UNESCAPED_UNICODE));
+
+                    $aksi = $id > 0
+                    ? '<div class="table-actions">'
+                        . '<button type="button" class="btn-outline" data-open-modal="pengumuman-view" data-pengumuman="' . $dataAttr . '">Lihat Isi</button>'
+                        . '<button type="button" class="btn-outline" data-open-modal="pengumuman-edit" data-pengumuman=\'' . $dataAttr . '\'>Ubah</button>'
+                        . '<form method="post" action="admin_management.php#pengumuman" class="table-actions__form" onsubmit="return confirm(\'Hapus pengumuman ini?\');">'
+                        . '<input type="hidden" name="action" value="delete_pengumuman">'
+                        . '<input type="hidden" name="pengumuman_id" value="' . e((string) $id) . '">'
+                        . '<button type="submit" class="btn-danger">Hapus</button>'
+                        . '</form>'
+                        . '</div>'
+                    : '-';
+
+                    return '<tr>'
+                        . '<td>#' . e((string) $id) . '</td>'
+                        . '<td>' . e(format_datetime($row['pengumuman_valid_hingga'] ?? null)) . '</td>'
+                        . '<td>' . e(format_datetime($row['pengumuman_created_at'] ?? null)) . '</td>'
+                        . '<td>' . e(format_datetime($row['pengumuman_updated_at'] ?? null)) . '</td>'
+                        . '<td class="table-actions">' . $aksi . '</td>'
+                        . '</tr>';
+                }
+            ) ?>
+
+            <!-- <?= section_card(
+                'permohonan',
+                'Permohonan Informasi',
+                'Riwayat permintaan informasi publik.',
+                ['ID', 'Email', 'Instansi', 'Status', 'Dibuat', 'Diperbarui'],
+                $permohonanInformasi,
+                static function (array $row): string {
+                    $status = (int) ($row['pi_selesai'] ?? 0) === 1
+                        ? '<span class="status-pill status-pill--done">Selesai</span>'
+                        : '<span class="status-pill status-pill--pending">Menunggu</span>';
+
+                    return '<tr>'
+                        . '<td>#' . e((string) $row['pi_id']) . '</td>'
+                        . '<td>' . e((string) ($row['pi_email'] ?? '-')) . '</td>'
+                        . '<td>' . e((string) ($row['pi_asal_instansi'] ?? '-')) . '</td>'
+                        . '<td>' . $status . '</td>'
+                        . '<td>' . e(format_datetime($row['pi_created_at'] ?? null)) . '</td>'
+                        . '<td>' . e(format_datetime($row['pi_updated_at'] ?? null)) . '</td>'
+                        . '</tr>';
+                }
+            ) ?> -->
+
+            <!-- <?= section_card(
+                'ppid',
+                'Dokumen PPID',
+                'Daftar dokumen layanan informasi publik.',
+                ['ID', 'Judul', 'Kategori', 'Nama File', 'Dibuat', 'Diperbarui'],
+                $ppidDokumen,
+                static function (array $row): string {
+                    return '<tr>'
+                        . '<td>#' . e((string) $row['ppid_id']) . '</td>'
+                        . '<td>' . e((string) $row['ppid_judul']) . '</td>'
+                        . '<td>' . e((string) ($row['ppid_kategori'] ?? '-')) . '</td>'
+                        . '<td>' . e((string) $row['ppid_namafile']) . '</td>'
+                        . '<td>' . e(format_datetime($row['ppid_created_at'] ?? null)) . '</td>'
+                        . '<td>' . e(format_datetime($row['ppid_updated_at'] ?? null)) . '</td>'
+                        . '</tr>';
+                }
+            ) ?> -->
+
+            <?= section_card(
+                'program',
+                'Program Desa',
+                'Program kerja dan kegiatan desa.',
+                ['ID', 'Nama Program', 'Gambar', 'Dibuat', 'Diperbarui', 'Aksi'],
+                $programDesa,
+                static function (array $row): string {
+                    $img = (string) ($row['program_gambar'] ?? '');
+                    $imgHtml = $img !== '' ? '<a href="' . e(base_uri('uploads/program/' . ltrim($img, '/'))) . '" target="_blank" rel="noopener">Lihat</a>' : '-';
+                    $rowId = (int) ($row['program_id'] ?? 0);
+                    $payload = [
+                        'id' => $rowId,
+                        'nama' => (string) ($row['program_nama'] ?? ''),
+                        'deskripsi' => (string) ($row['program_deskripsi'] ?? ''), // ✅ pastikan ini ada
+                    ];
+                    $dataAttr = e(json_encode($payload, JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_AMP | JSON_UNESCAPED_UNICODE));
+
+                    $actionsHtml = $rowId > 0
+                        ? '<button type="button" class="btn-outline" data-open-modal="program-edit" data-program="' . $dataAttr . '">Ubah</button>'
+                        . '<form method="post" action="admin_management.php#program" class="table-actions__form" onsubmit="return confirm(\'Hapus program ini?\');">'
+                        . '<input type="hidden" name="action" value="delete_program">'
+                        . '<input type="hidden" name="program_id" value="' . e((string) $rowId) . '">'
+                        . '<button type="submit" class="btn-danger">Hapus</button>'
+                        . '</form>'
+                        : '-';
+
+                    return '<tr>'
+                        . '<td>#' . e((string) $row['program_id']) . '</td>'
+                        . '<td>' . e((string) $row['program_nama']) . '</td>'
+                        . '<td>' . $imgHtml . '</td>'
+                        . '<td>' . e(format_datetime($row['program_created_at'] ?? null)) . '</td>'
+                        . '<td>' . e(format_datetime($row['program_updated_at'] ?? null)) . '</td>'
+                        . '<td class="table-actions">' . $actionsHtml . '</td>'
+                        . '</tr>';
+                }
+            ) ?>
+
+            <?= section_card(
+                'struktur',
+                'Struktur Organisasi',
+                'Susunan perangkat desa.',
+                ['ID', 'Nama', 'Jabatan', 'Foto', 'Dibuat', 'Diperbarui', 'Aksi'],
+                $strukturOrganisasi,
+                static function (array $row): string {
+                    $foto = (string) ($row['struktur_foto'] ?? '');
+                    $fotoHtml = $foto !== '' 
+                        ? '<a href="' . e(base_uri('uploads/struktur/' . ltrim($foto, '/'))) . '" target="_blank" rel="noopener">Lihat</a>'
+                        : '-';
+                    $id = (int)($row['struktur_id'] ?? 0);
+                    $actionsHtml = $id > 0 ? '
+                        <form method="post" action="admin_management.php#struktur" class="table-actions__form" onsubmit="return confirm(\'Hapus data ini?\');">
+                            <input type="hidden" name="action" value="delete_struktur">
+                            <input type="hidden" name="struktur_id" value="' . e((string)$id) . '">
+                            <button type="submit" class="btn-danger">Hapus</button>
+                        </form>' : '-';
+
+                    return '<tr>'
+                        . '<td>#' . e((string)$id) . '</td>'
+                        . '<td>' . e((string)($row['struktur_nama'] ?? '')) . '</td>'
+                        . '<td>' . e((string)($row['struktur_jabatan'] ?? '')) . '</td>'
+                        . '<td>' . $fotoHtml . '</td>'
+                        . '<td>' . e(format_datetime($row['struktur_created_at'] ?? null)) . '</td>'
+                        . '<td>' . e(format_datetime($row['struktur_updated_at'] ?? null)) . '</td>'
+                        . '<td>' . $actionsHtml . '</td>'
+                        . '</tr>';
+                }
+            ) ?>
+
+        </div>
+    </main>
+    <?php foreach ($tableForms as $modalId => $definition): ?>
+        <?= render_modal($modalId, $definition, $formOld[$modalId] ?? [], $formErrors[$modalId] ?? []) ?>
+    <?php endforeach; ?>
+        <div class="modal-backdrop" data-modal="admin-edit">
+        <div class="modal">
+            <div class="modal__header">
+                <h3 class="modal__title">Edit Akun Admin</h3>
+                <button type="button" class="modal__close" data-close-modal aria-label="Tutup">&times;</button>
+            </div>
+            <div class="modal__body">
+                <form method="post" action="admin_management.php#admin" autocomplete="off" id="admin-edit-form">
+                    <input type="hidden" name="action" value="edit_other_admin">
+                    <input type="hidden" name="target_admin_id" id="admin_edit_id">
+                    <div class="modal__field">
+                        <label for="admin_edit_nama">Nama <span class="required">*</span></label>
+                        <input type="text" name="admin_nama" id="admin_edit_nama" required>
+                    </div>
+                    <div class="modal__field">
+                        <label for="admin_edit_email">Email</label>
+                        <input type="email" name="admin_email" id="admin_edit_email" placeholder="opsional">
+                    </div>
+                    <div class="modal__field">
+                        <label for="admin_edit_hp">No. HP</label>
+                        <input type="text" name="admin_no_hp" id="admin_edit_hp" placeholder="+62… (opsional)">
+                        <small class="field-hint">Format: 8–15 digit, boleh diawali +62.</small>
+                    </div>
+                    <div class="modal__field modal__field--checkbox">
+                        <label><input type="checkbox" name="admin_is_superadmin" id="admin_edit_is_super"> Jadikan Superadmin</label>
+                    </div>
+                    <div class="modal__field modal__field--checkbox">
+                        <label><input type="checkbox" name="admin_is_deleted" id="admin_edit_is_deleted"> Tandai terhapus (soft delete)</label>
+                    </div>
+                    <div class="modal__actions">
+                        <button type="button" class="btn-secondary" data-close-modal>Batal</button>
+                        <button type="submit" class="btn-primary">Simpan Perubahan</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+        <div class="modal-backdrop" data-modal="admin-reset">
+        <div class="modal">
+            <div class="modal__header">
+                <h3 class="modal__title">Reset Password Admin</h3>
+                <button type="button" class="modal__close" data-close-modal aria-label="Tutup">&times;</button>
+            </div>
+            <div class="modal__body">
+                <form method="post" action="admin_management.php#admin" autocomplete="off" id="admin-reset-form">
+                    <input type="hidden" name="action" value="reset_admin_password">
+                    <input type="hidden" name="target_admin_id" id="admin_reset_id">
+                    <div class="modal__field">
+                        <label for="admin_reset_pass1">Password Baru <span class="required">*</span></label>
+                        <input type="password" name="new_password" id="admin_reset_pass1" minlength="8" required>
+                    </div>
+                    <div class="modal__field">
+                        <label for="admin_reset_pass2">Ketik Ulang Password Baru <span class="required">*</span></label>
+                        <input type="password" name="new_password_repeat" id="admin_reset_pass2" minlength="8" required>
+                    </div>
+                    <div class="modal__actions">
+                        <button type="button" class="btn-secondary" data-close-modal>Batal</button>
+                        <button type="submit" class="btn-primary">Reset Password</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <div class="modal-backdrop" data-modal="admin-create">
+        <div class="modal">
+            <div class="modal__header">
+            <h3 class="modal__title">Tambah Akun Admin</h3>
+            <button type="button" class="modal__close" data-close-modal aria-label="Tutup">&times;</button>
+            </div>
+            <div class="modal__body">
+            <form method="post" action="admin_management.php#admin" autocomplete="off" id="admin-create-form">
+                <input type="hidden" name="action" value="create_admin">
+                <div class="modal__field">
+                <label for="admin_create_nama">Nama <span class="required">*</span></label>
+                <input type="text" id="admin_create_nama" name="admin_nama" required>
+                </div>
+                <div class="modal__field">
+                <label for="admin_create_email">Email</label>
+                <input type="email" id="admin_create_email" name="admin_email" placeholder="opsional">
+                <small class="field-hint">Biarkan kosong jika tidak ingin menambahkan email.</small>
+                </div>
+                <div class="modal__field">
+                <label for="admin_create_hp">No. HP</label>
+                <input type="text" id="admin_create_hp" name="admin_no_hp" placeholder="+62… (opsional)">
+                <small class="field-hint">Format: 8–15 digit, boleh diawali +62.</small>
+                </div>
+                <div class="modal__field">
+                <label for="admin_create_password">Password <span class="required">*</span></label>
+                <input type="password" id="admin_create_password" name="admin_password" minlength="8" required>
+                <small class="field-hint">Minimal 8 karakter. Disimpan ter-enkripsi (hash).</small>
+                </div>
+                <div class="modal__field modal__field--checkbox">
+                <label>
+                    <input type="checkbox" name="admin_is_superadmin">
+                    Jadikan Superadmin
+                </label>
+                </div>
+                <div class="modal__actions">
+                <button type="button" class="btn-secondary" data-close-modal>Batal</button>
+                <button type="submit" class="btn-primary">Simpan</button>
+                </div>
+            </form>
+            </div>
+        </div>
+        </div>
+
+    <div class="modal-backdrop" data-modal="password-change">
+        <div class="modal">
+            <div class="modal__header">
+            <h3 class="modal__title">Ganti Password</h3>
+            <button type="button" class="modal__close" data-close-modal aria-label="Tutup">&times;</button>
+            </div>
+            <div class="modal__body">
+            <form method="post" action="admin_management.php#admin" autocomplete="off">
+                <input type="hidden" name="action" value="change_admin_password">
+                <div class="modal__field">
+                <label for="pw_lama">Password Lama <span class="required">*</span></label>
+                <input type="password" id="pw_lama" name="password_lama" required>
+                </div>
+                <div class="modal__field">
+                <label for="pw_baru">Password Baru <span class="required">*</span></label>
+                <input type="password" id="pw_baru" name="password_baru" minlength="8" required>
+                </div>
+                <div class="modal__field">
+                <label for="pw_baru_repeat">Ketik ulang Password Baru <span class="required">*</span></label>
+                <input type="password" id="pw_baru_repeat" name="password_baru_repeat" minlength="8" required>
+                </div>
+                <div class="modal__actions">
+                <button type="button" class="btn-secondary" data-close-modal>Batal</button>
+                <button type="submit" class="btn-primary">Submit</button>
+                </div>
+            </form>
+            </div>
+        </div>
+    </div>
+
+    <div class="modal-backdrop" data-modal="potensi-gallery">
+        <div class="modal modal--wide">
+            <div class="modal__header">
+                <h3 class="modal__title" data-potensi-gallery-title>Foto Potensi</h3>
+                <button type="button" class="modal__close" data-close-modal aria-label="Tutup">&times;</button>
+            </div>
+            <div class="modal__body">
+                <div class="modal__toolbar">
+                    <p class="modal__subtitle" data-potensi-gallery-subtitle></p>
+                    <button type="button" class="btn-primary" data-open-modal="potensi-media" data-potensi-media-id="" disabled="disabled">Tambah Foto</button>
+                </div>
+                <div class="table-wrapper is-hidden" data-potensi-gallery-table>
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Potensi</th>
+                                <th>File</th>
+                                <th>Diupload</th>
+                                <th>Aksi</th>
+                            </tr>
+                        </thead>
+                        <tbody data-potensi-gallery-tbody></tbody>
+                    </table>
+                </div>
+                <p class="modal-empty" data-potensi-gallery-empty>Belum ada foto untuk potensi ini.</p>
+            </div>
+        </div>
+    </div>
+    <div class="modal-backdrop" data-modal="upload-hukumtua-foto">
+    <div class="modal">
+        <div class="modal__header">
+        <h3 class="modal__title">Upload Foto Hukum Tua</h3>
+        <button type="button" class="modal__close" data-close-modal aria-label="Tutup">&times;</button>
+        </div>
+        <div class="modal__body">
+        <form method="post" action="admin_management.php#data" autocomplete="off" enctype="multipart/form-data">
+            <input type="hidden" name="action" value="update_hukum_tua_foto">
+            <div class="modal__field">
+            <label for="hukumtua_foto">Pilih Foto (JPG/PNG/WEBP) <span class="required">*</span></label>
+            <input type="file" id="hukumtua_foto" name="hukumtua_foto" accept="image/jpeg,image/png,image/webp" required>
+            <small class="field-hint">
+                File akan dikonversi ke .webp dan disimpan di <code>uploads/assets/</code>.
+                File lama akan dihapus otomatis.
+            </small>
+            </div>
+            <div class="modal__actions">
+            <button type="button" class="btn-secondary" data-close-modal>Batal</button>
+            <button type="submit" class="btn-primary">Simpan</button>
+            </div>
+        </form>
+        </div>
+    </div>
+    </div>
+
+    <div class="modal-backdrop" data-modal="upload-media">
+    <div class="modal">
+        <div class="modal__header">
+        <h3 class="modal__title">Upload Media</h3>
+        <button type="button" class="modal__close" data-close-modal aria-label="Tutup">&times;</button>
+        </div>
+        <div class="modal__body">
+        <form method="post" action="admin_management.php#data" autocomplete="off" enctype="multipart/form-data" id="upload-media-form">
+            <input type="hidden" name="action" value="upload_media_data">
+            <input type="hidden" name="data_key" id="upload_media_key">
+            <div class="modal__field">
+            <label for="upload_media_file">Pilih Gambar (JPG/PNG/WEBP) <span class="required">*</span></label>
+            <input type="file" id="upload_media_file" name="media_file" accept="image/jpeg,image/png,image/webp" required>
+            <small class="field-hint">File akan dikonversi ke .webp dan disimpan di <code>uploads/assets/</code>.</small>
+            </div>
+            <div class="modal__actions">
+            <button type="button" class="btn-secondary" data-close-modal>Batal</button>
+            <button type="submit" class="btn-primary">Upload</button>
+            </div>
+        </form>
+        </div>
+    </div>
+    </div>
+
+    <div class="modal-backdrop" data-modal="pengumuman-view">
+        <div class="modal modal--wide">
+            <div class="modal__header">
+                <h3 class="modal__title">Isi Pengumuman</h3>
+                <button type="button" class="modal__close" data-close-modal aria-label="Tutup">&times;</button>
+            </div>
+            <div class="modal__body">
+                <div class="modal__field">
+                    <label>Isi Pengumuman</label>
+                    <textarea id="pengumuman_view_isi" rows="10" readonly style="resize:none; background:#f9fafb;"></textarea>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="modal-backdrop" data-modal="pengumuman-edit">
+        <div class="modal">
+            <div class="modal__header">
+                <h3 class="modal__title">Ubah Pengumuman</h3>
+                <button type="button" class="modal__close" data-close-modal aria-label="Tutup">&times;</button>
+            </div>
+            <div class="modal__body">
+                <form method="post" action="admin_management.php#pengumuman" autocomplete="off" id="pengumuman-edit-form">
+                    <input type="hidden" name="action" value="edit_pengumuman">
+                    <input type="hidden" name="pengumuman_id" id="pengumuman_edit_id">
+                    <div class="modal__field">
+                        <label for="pengumuman_edit_isi">Isi Pengumuman <span class="required">*</span></label>
+                        <textarea name="pengumuman_isi" id="pengumuman_edit_isi" rows="6" required></textarea>
+                    </div>
+                    <div class="modal__field">
+                        <label for="pengumuman_edit_valid">Berlaku Hingga <span class="required">*</span></label>
+                        <input type="datetime-local" name="pengumuman_valid_hingga" id="pengumuman_edit_valid" required>
+                    </div>
+                    <div class="modal__actions">
+                        <button type="button" class="btn-secondary" data-close-modal>Batal</button>
+                        <button type="submit" class="btn-primary">Simpan Perubahan</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+    <div class="modal-backdrop" data-modal="apbdes-edit">
+        <div class="modal">
+            <div class="modal__header">
+                <h3 class="modal__title">Ubah Judul Dokumen</h3>
+                <button type="button" class="modal__close" data-close-modal aria-label="Tutup">&times;</button>
+            </div>
+            <div class="modal__body">
+                <form method="post" action="admin_management.php#apbdes" autocomplete="off" id="apbdes-edit-form">
+                    <input type="hidden" name="action" value="edit_apbdes">
+                    <input type="hidden" name="apbdes_id" id="apbdes_edit_id">
+                    <div class="modal__field">
+                        <label for="apbdes_edit_judul">Judul Dokumen <span class="required">*</span></label>
+                        <input type="text" name="apbdes_judul" id="apbdes_edit_judul" required>
+                    </div>
+                    <div class="modal__actions">
+                        <button type="button" class="btn-secondary" data-close-modal>Batal</button>
+                        <button type="submit" class="btn-primary">Simpan Perubahan</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+    <div class="modal-backdrop" data-modal="berita-edit">
+        <div class="modal">
+            <div class="modal__header">
+                <h3 class="modal__title">Ubah Berita</h3>
+                <button type="button" class="modal__close" data-close-modal aria-label="Tutup">&times;</button>
+            </div>
+            <div class="modal__body">
+                <form method="post" action="admin_management.php#berita" autocomplete="off" enctype="multipart/form-data" id="berita-edit-form">
+                    <input type="hidden" name="action" value="edit_berita">
+                    <input type="hidden" name="berita_id" id="berita_edit_id">
+                    <div class="modal__field">
+                        <label for="berita_edit_judul">Judul Berita <span class="required">*</span></label>
+                        <input type="text" name="berita_judul" id="berita_edit_judul" required>
+                    </div>
+                    <div class="modal__field">
+                        <label for="berita_edit_isi">Isi Berita <span class="required">*</span></label>
+                        <textarea name="berita_isi" id="berita_edit_isi" rows="6" required></textarea>
+                    </div>
+                    <div class="modal__field">
+                        <label for="berita_edit_gambar">Gambar (opsional)</label>
+                        <input type="file" name="berita_gambar" id="berita_edit_gambar" accept="image/jpeg,image/png,image/webp">
+                        <small class="field-hint">Kosongkan jika tidak ingin mengganti gambar.</small>
+                    </div>
+                    <div class="modal__actions">
+                        <button type="button" class="btn-secondary" data-close-modal>Batal</button>
+                        <button type="submit" class="btn-primary">Simpan Perubahan</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+    <div class="modal-backdrop" data-modal="fasilitas-edit">
+        <div class="modal">
+            <div class="modal__header">
+                <h3 class="modal__title">Ubah Fasilitas</h3>
+                <button type="button" class="modal__close" data-close-modal aria-label="Tutup">&times;</button>
+            </div>
+            <div class="modal__body">
+                <form method="post" action="admin_management.php#fasilitas" autocomplete="off" enctype="multipart/form-data" id="fasilitas-edit-form">
+                    <input type="hidden" name="action" value="edit_fasilitas">
+                    <input type="hidden" name="fasilitas_id" id="fasilitas_edit_id">
+                    <div class="modal__field">
+                        <label for="fasilitas_edit_nama">Nama Fasilitas <span class="required">*</span></label>
+                        <input type="text" name="fasilitas_nama" id="fasilitas_edit_nama" required>
+                    </div>
+                    <div class="modal__field">
+                        <label for="fasilitas_edit_gmaps">Link Google Maps</label>
+                        <input type="text" name="fasilitas_gmaps_link" id="fasilitas_edit_gmaps">
+                    </div>
+                    <div class="modal__field">
+                        <label for="fasilitas_edit_gambar">Gambar (opsional)</label>
+                        <input type="file" name="fasilitas_gambar" id="fasilitas_edit_gambar" accept="image/jpeg,image/png,image/webp">
+                        <small class="field-hint">Kosongkan jika tidak ingin mengganti gambar.</small>
+                    </div>
+                    <div class="modal__actions">
+                        <button type="button" class="btn-secondary" data-close-modal>Batal</button>
+                        <button type="submit" class="btn-primary">Simpan Perubahan</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <div class="modal-backdrop" data-modal="program-edit">
+        <div class="modal">
+            <div class="modal__header">
+                <h3 class="modal__title">Ubah Program Desa</h3>
+                <button type="button" class="modal__close" data-close-modal aria-label="Tutup">&times;</button>
+            </div>
+            <div class="modal__body">
+                <form method="post" action="admin_management.php#program" autocomplete="off" enctype="multipart/form-data" id="program-edit-form">
+                    <input type="hidden" name="action" value="edit_program">
+                    <input type="hidden" name="program_id" id="program_edit_id">
+                    <div class="modal__field">
+                        <label for="program_edit_nama">Nama Program <span class="required">*</span></label>
+                        <input type="text" name="program_nama" id="program_edit_nama" required>
+                    </div>
+                    <div class="modal__field">
+                        <label for="program_edit_deskripsi">Deskripsi <span class="required">*</span></label>
+                        <textarea name="program_deskripsi" id="program_edit_deskripsi" rows="5" required></textarea>
+                    </div>
+                    <div class="modal__field">
+                        <label for="program_edit_gambar">Gambar (opsional)</label>
+                        <input type="file" name="program_gambar" id="program_edit_gambar" accept="image/jpeg,image/png,image/webp">
+                        <small class="field-hint">Kosongkan jika tidak ingin mengganti gambar.</small>
+                    </div>
+                    <div class="modal__actions">
+                        <button type="button" class="btn-secondary" data-close-modal>Batal</button>
+                        <button type="submit" class="btn-primary">Simpan Perubahan</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <div class="modal-backdrop" data-modal="potensi-edit">
+        <div class="modal">
+            <div class="modal__header">
+                <h3 class="modal__title">Ubah Potensi Desa</h3>
+                <button type="button" class="modal__close" data-close-modal aria-label="Tutup">&times;</button>
+            </div>
+            <div class="modal__body">
+                <form method="post" action="admin_management.php#potensi" autocomplete="off" id="potensi-edit-form">
+                    <input type="hidden" name="action" value="edit_potensi">
+                    <input type="hidden" name="potensi_id" id="potensi_edit_id">
+                    <div class="modal__field">
+                        <label for="potensi_edit_judul">Judul Potensi <span class="required">*</span></label>
+                        <input type="text" name="potensi_judul" id="potensi_edit_judul" required>
+                    </div>
+                    <div class="modal__field">
+                        <label for="potensi_edit_kategori">Kategori <span class="required">*</span></label>
+                        <select name="potensi_kategori" id="potensi_edit_kategori" required>
+                            <option value="Wisata">Wisata</option>
+                            <option value="Budaya">Budaya</option>
+                            <option value="Kuliner">Kuliner</option>
+                            <option value="UMKM">UMKM</option>
+                        </select>
+                    </div>
+                    <div class="modal__field">
+                        <label for="potensi_edit_isi">Deskripsi <span class="required">*</span></label>
+                        <textarea name="potensi_isi" id="potensi_edit_isi" rows="6" required></textarea>
+                    </div>
+                    <div class="modal__field">
+                        <label for="potensi_edit_gmaps">Link Google Maps</label>
+                        <input type="text" name="potensi_gmaps_link" id="potensi_edit_gmaps">
+                    </div>
+                    <div class="modal__actions">
+                        <button type="button" class="btn-secondary" data-close-modal>Batal</button>
+                        <button type="submit" class="btn-primary">Simpan Perubahan</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+<div class="upload-overlay" id="upload-overlay" role="alert" aria-live="assertive" aria-hidden="true">
+    <div class="upload-overlay__content">
+        <div class="upload-overlay__spinner" aria-hidden="true"></div>
+        <p>Mengupload file...</p>
+    </div>
+</div>
+<script>
+    document.addEventListener('DOMContentLoaded', function () {
+        var bodyEl = document.body;
+        bodyEl.classList.add('js-enabled');
+        var uploadOverlay = document.getElementById('upload-overlay');
+        if (uploadOverlay) {
+            uploadOverlay.classList.remove('is-visible');
+            uploadOverlay.setAttribute('aria-hidden', 'true');
+        }
+        var apbdesEditIdInput = document.getElementById('apbdes_edit_id');
+        var apbdesEditTitleInput = document.getElementById('apbdes_edit_judul');
+        var beritaEditForm = document.getElementById('berita-edit-form');
+        var beritaEditIdInput = document.getElementById('berita_edit_id');
+        var beritaEditTitleInput = document.getElementById('berita_edit_judul');
+        var beritaEditBodyInput = document.getElementById('berita_edit_isi');
+        var beritaEditFileInput = document.getElementById('berita_edit_gambar');
+        var showUploadOverlay = function () {
+            if (!uploadOverlay) {
+                return;
+            }
+            uploadOverlay.classList.add('is-visible');
+            uploadOverlay.setAttribute('aria-hidden', 'false');
+        };
+        Array.from(document.querySelectorAll('form')).forEach(function (form) {
+            var formIdInput = form.querySelector('input[name="form_id"]');
+            var formIdValue = formIdInput ? (formIdInput.value || '') : '';
+            if (!formIdValue) {
+                return;
+            }
+            if (['apbdes', 'berita', 'fasilitas', 'potensi-media'].indexOf(formIdValue) === -1) {
+                return;
+            }
+            form.addEventListener('submit', function () {
+                var selector = 'input[type="file"]';
+                if (formIdValue === 'apbdes') {
+                    selector = 'input[type="file"][name="apbdes_file"]';
+                } else if (formIdValue === 'berita') {
+                    selector = 'input[type="file"][name="berita_gambar"]';
+                } else if (formIdValue === 'fasilitas') {
+                    selector = 'input[type="file"][name="fasilitas_gambar"]';
+                } else if (formIdValue === 'potensi-media') {
+                    selector = 'input[type="file"][name="gambar_namafile"]';
+                }
+                var fileInput = form.querySelector(selector);
+                if (fileInput && fileInput.files && fileInput.files.length > 0) {
+                    showUploadOverlay();
+                }
+            });
+        });
+        if (beritaEditForm) {
+            beritaEditForm.addEventListener('submit', function () {
+                if (beritaEditFileInput && beritaEditFileInput.files && beritaEditFileInput.files.length > 0) {
+                    showUploadOverlay();
+                }
+            });
+        }
+        var fasilitasEditForm = document.getElementById('fasilitas-edit-form');
+        var fasilitasEditIdInput = document.getElementById('fasilitas_edit_id');
+        var fasilitasEditNameInput = document.getElementById('fasilitas_edit_nama');
+        var fasilitasEditMapsInput = document.getElementById('fasilitas_edit_gmaps');
+        var fasilitasEditFileInput = document.getElementById('fasilitas_edit_gambar');
+        if (fasilitasEditForm) {
+            fasilitasEditForm.addEventListener('submit', function () {
+                if (fasilitasEditFileInput && fasilitasEditFileInput.files && fasilitasEditFileInput.files.length > 0) {
+                    showUploadOverlay();
+                }
+            });
+        }
+        var potensiMediaPotensiField = null;
+        var potensiGalleryTitle;
+        var potensiGallerySubtitle;
+        var potensiGalleryTable;
+        var potensiGalleryBody;
+        var potensiGalleryEmpty;
+        var potensiGalleryAddButton;
+        var navLinks = Array.from(document.querySelectorAll('.sidebar-link[data-section]'));
+        var sectionMap = {};
+        Array.from(document.querySelectorAll('.section-card[data-section]')).forEach(function (section) {
+            var id = section.getAttribute('data-section');
+            if (id) {
+                sectionMap[id] = section;
+            }
+        });
+
+        var activateSection = function (id) {
+            if (!sectionMap[id]) {
+                return;
+            }
+
+            Object.keys(sectionMap).forEach(function (key) {
+                sectionMap[key].classList.toggle('is-active', key === id);
+            });
+
+            navLinks.forEach(function (link) {
+                var match = link.getAttribute('data-section') === id;
+                link.classList.toggle('is-active', match);
+            });
+        };
+
+        navLinks.forEach(function (link) {
+            link.addEventListener('click', function (event) {
+                event.preventDefault();
+                var targetId = link.getAttribute('data-section');
+                activateSection(targetId);
+                if (history.replaceState) {
+                    history.replaceState(null, '', '#' + targetId);
+                } else {
+                    window.location.hash = targetId;
+                }
+            });
+        });
+
+        var initial = window.location.hash ? window.location.hash.slice(1) : null;
+        if (!initial || !sectionMap[initial]) {
+            initial = navLinks.length ? navLinks[0].getAttribute('data-section') : null;
+        }
+
+        if (initial) {
+            activateSection(initial);
+        }
+
+        window.addEventListener('hashchange', function () {
+            var target = window.location.hash ? window.location.hash.slice(1) : null;
+            if (target && sectionMap[target]) {
+                activateSection(target);
+            }
+        });
+
+        var modalBackdrops = Array.from(document.querySelectorAll('.modal-backdrop'));
+        var openButtons = Array.from(document.querySelectorAll('[data-open-modal]'));
+        var activeModal = null;
+
+        var findBackdrop = function (id) {
+            return modalBackdrops.find(function (backdrop) {
+                return backdrop.getAttribute('data-modal') === id;
+            });
+        };
+
+        var potensiGalleryBackdrop = findBackdrop('potensi-gallery');
+        if (potensiGalleryBackdrop) {
+            potensiGalleryTitle = potensiGalleryBackdrop.querySelector('[data-potensi-gallery-title]');
+            potensiGallerySubtitle = potensiGalleryBackdrop.querySelector('[data-potensi-gallery-subtitle]');
+            potensiGalleryTable = potensiGalleryBackdrop.querySelector('[data-potensi-gallery-table]');
+            potensiGalleryBody = potensiGalleryBackdrop.querySelector('[data-potensi-gallery-tbody]');
+            potensiGalleryEmpty = potensiGalleryBackdrop.querySelector('[data-potensi-gallery-empty]');
+            potensiGalleryAddButton = potensiGalleryBackdrop.querySelector('[data-open-modal="potensi-media"]');
+        }
+
+        var potensiMediaBackdrop = findBackdrop('potensi-media');
+        if (potensiMediaBackdrop) {
+            var potensiMediaForm = potensiMediaBackdrop.querySelector('form');
+            if (potensiMediaForm) {
+                potensiMediaPotensiField = potensiMediaForm.querySelector('[name="potensi_id"]');
+            }
+        }
+
+        var openModal = function (id) {
+            var backdrop = findBackdrop(id);
+            if (!backdrop) {
+                return;
+            }
+            modalBackdrops.forEach(function (item) {
+                item.classList.remove('is-open');
+            });
+            backdrop.classList.add('is-open');
+            bodyEl.classList.add('modal-open');
+            activeModal = backdrop;
+            var firstInput = backdrop.querySelector('input, textarea, select');
+            if (firstInput) {
+                setTimeout(function () {
+                    firstInput.focus({ preventScroll: true });
+                }, 80);
+            }
+        };
+
+        var closeModal = function () {
+            if (!activeModal) {
+                return;
+            }
+            activeModal.classList.remove('is-open');
+            bodyEl.classList.remove('modal-open');
+            activeModal = null;
+        };
+
+        var populatePotensiGallery = function (payload) {
+            if (!potensiGalleryBody || !potensiGalleryTable || !potensiGalleryEmpty) {
+                return;
+            }
+            var safePayload = (payload && typeof payload === 'object') ? payload : {};
+            var potensiTitle = safePayload.judul ? String(safePayload.judul) : 'Potensi Desa';
+            if (potensiGalleryTitle) {
+                potensiGalleryTitle.textContent = 'Foto Potensi — ' + potensiTitle;
+            }
+            if (potensiGallerySubtitle) {
+                var count = Array.isArray(safePayload.images) ? safePayload.images.length : 0;
+                potensiGallerySubtitle.textContent = potensiTitle + ' · ' + (count > 0 ? count + ' foto' : 'belum ada foto');
+            }
+            var images = Array.isArray(safePayload.images) ? safePayload.images : [];
+            potensiGalleryBody.innerHTML = '';
+            images.forEach(function (image) {
+                var tr = document.createElement('tr');
+                var titleTd = document.createElement('td');
+                titleTd.textContent = image && image.judul ? String(image.judul) : potensiTitle;
+                var fileTd = document.createElement('td');
+                var fileUrl = image && image.file ? String(image.file) : '';
+                var fileLabel = image && image.raw ? String(image.raw) : '';
+                if (fileUrl !== '') {
+                    var link = document.createElement('a');
+                    link.href = fileUrl;
+                    link.target = '_blank';
+                    link.rel = 'noopener';
+                    link.textContent = fileLabel !== '' ? fileLabel : fileUrl;
+                    fileTd.appendChild(link);
+                } else {
+                    fileTd.textContent = fileLabel !== '' ? fileLabel : '-';
+                }
+                var createdTd = document.createElement('td');
+                var createdLabel = image && image.created_label ? String(image.created_label) : '';
+                if (createdLabel === '' && image && image.created_at) {
+                    createdLabel = String(image.created_at);
+                }
+                createdTd.textContent = createdLabel !== '' ? createdLabel : '-';
+                tr.appendChild(titleTd);
+                tr.appendChild(fileTd);
+                tr.appendChild(createdTd);
+                    // Tambahkan tombol hapus
+                var actionsTd = document.createElement('td');
+                var form = document.createElement('form');
+                form.method = 'post';
+                form.action = 'admin_management.php#potensi';
+                form.className = 'table-actions__form'; 
+                form.onsubmit = function() {
+                    return confirm('Hapus foto ini?');
+                };
+
+                var actionInput = document.createElement('input');
+                actionInput.type = 'hidden';
+                actionInput.name = 'action';
+                actionInput.value = 'delete_gambar_potensi';
+                form.appendChild(actionInput);
+
+                var idInput = document.createElement('input');
+                idInput.type = 'hidden';
+                idInput.name = 'gambar_id';
+                idInput.value = image && image.id ? String(image.id) : '';
+                form.appendChild(idInput);
+
+                var button = document.createElement('button');
+                button.type = 'submit';
+                button.className = 'btn-danger';
+                button.textContent = 'Hapus';
+                form.appendChild(button);
+
+                actionsTd.appendChild(form);
+                tr.appendChild(actionsTd);
+
+                potensiGalleryBody.appendChild(tr);
+            });
+            if (potensiGalleryTable) {
+                potensiGalleryTable.classList.toggle('is-hidden', images.length === 0);
+            }
+            if (potensiGalleryEmpty) {
+                potensiGalleryEmpty.classList.toggle('is-hidden', images.length > 0);
+            }
+            if (potensiGalleryAddButton) {
+                if (safePayload.id) {
+                    potensiGalleryAddButton.removeAttribute('disabled');
+                    potensiGalleryAddButton.setAttribute('data-potensi-media-id', String(safePayload.id));
+                } else {
+                    potensiGalleryAddButton.setAttribute('disabled', 'disabled');
+                    potensiGalleryAddButton.removeAttribute('data-potensi-media-id');
+                }
+            }
+        };
+
+        openButtons.forEach(function (btn) {
+            btn.addEventListener('click', function () {
+                var targetId = btn.getAttribute('data-open-modal');
+                if (targetId === 'apbdes-edit') {
+                    if (apbdesEditIdInput) {
+                        apbdesEditIdInput.value = btn.getAttribute('data-apbdes-id') || '';
+                    }
+                    if (apbdesEditTitleInput) {
+                        apbdesEditTitleInput.value = btn.getAttribute('data-apbdes-judul') || '';
+                    }
+                }
+                if (targetId === 'berita-edit') {
+                    if (beritaEditFileInput) {
+                        beritaEditFileInput.value = '';
+                    }
+                    var payloadRaw = btn.getAttribute('data-berita') || '';
+                    var payload = {};
+                    if (payloadRaw !== '') {
+                        try {
+                            payload = JSON.parse(payloadRaw);
+                        } catch (error) {
+                            payload = {};
+                        }
+                    }
+                    if (beritaEditIdInput) {
+                        beritaEditIdInput.value = payload.id ? String(payload.id) : '';
+                    }
+                    if (beritaEditTitleInput) {
+                        beritaEditTitleInput.value = payload.judul ? String(payload.judul) : '';
+                    }
+                    if (beritaEditBodyInput) {
+                        beritaEditBodyInput.value = payload.isi ? String(payload.isi) : '';
+                    }
+                }
+                if (targetId === 'fasilitas-edit') {
+                    if (fasilitasEditFileInput) {
+                        fasilitasEditFileInput.value = '';
+                    }
+                    var fasilitasPayloadRaw = btn.getAttribute('data-fasilitas') || '';
+                    var fasilitasPayload = {};
+                    if (fasilitasPayloadRaw !== '') {
+                        try {
+                            fasilitasPayload = JSON.parse(fasilitasPayloadRaw);
+                        } catch (error) {
+                            fasilitasPayload = {};
+                        }
+                    }
+                    if (fasilitasEditIdInput) {
+                        fasilitasEditIdInput.value = fasilitasPayload.id ? String(fasilitasPayload.id) : '';
+                    }
+                    if (fasilitasEditNameInput) {
+                        fasilitasEditNameInput.value = fasilitasPayload.nama ? String(fasilitasPayload.nama) : '';
+                    }
+                    if (fasilitasEditMapsInput) {
+                        fasilitasEditMapsInput.value = fasilitasPayload.gmaps ? String(fasilitasPayload.gmaps) : '';
+                    }
+                }
+                if (targetId === 'potensi-gallery') {
+                    var galleryPayloadRaw = btn.getAttribute('data-potensi-gallery') || '';
+                    var galleryPayload = {};
+                    if (galleryPayloadRaw !== '') {
+                        try {
+                            galleryPayload = JSON.parse(galleryPayloadRaw);
+                        } catch (error) {
+                            galleryPayload = {};
+                        }
+                    }
+                    populatePotensiGallery(galleryPayload);
+                }
+                if (targetId === 'potensi-edit') {
+                    var potensiPayloadRaw = btn.getAttribute('data-potensi') || '';
+                    var potensiPayload = {};
+                    if (potensiPayloadRaw !== '') {
+                        try {
+                            potensiPayload = JSON.parse(potensiPayloadRaw);
+                        } catch (error) {
+                            potensiPayload = {};
+                        }
+                    }
+                    // Isi value awal form edit potensi
+                    document.getElementById('potensi_edit_id').value = potensiPayload.id || '';
+                    document.getElementById('potensi_edit_judul').value = potensiPayload.judul || '';
+                    document.getElementById('potensi_edit_kategori').value = potensiPayload.kategori || 'Wisata';
+                    document.getElementById('potensi_edit_isi').value = potensiPayload.isi || '';
+                    document.getElementById('potensi_edit_gmaps').value = potensiPayload.gmaps || '';
+                }
+                if (targetId === 'pengumuman-view') {
+                    var pengumumanRaw = btn.getAttribute('data-pengumuman') || '';
+                    var pengumuman = {};
+                    if (pengumumanRaw !== '') {
+                        try {
+                            pengumuman = JSON.parse(pengumumanRaw);
+                        } catch (error) {
+                            pengumuman = {};
+                        }
+                    }
+                    var textArea = document.getElementById('pengumuman_view_isi');
+                    if (textArea) {
+                        textArea.value = pengumuman.isi || '(Belum ada isi pengumuman)';
+                    }
+                }
+                if (targetId === 'pengumuman-edit') {
+                    var pengumumanRaw = btn.getAttribute('data-pengumuman') || '';
+                    var pengumuman = {};
+                    if (pengumumanRaw !== '') {
+                        try {
+                            pengumuman = JSON.parse(pengumumanRaw);
+                        } catch (error) {
+                            pengumuman = {};
+                        }
+                    }
+                    document.getElementById('pengumuman_edit_id').value = pengumuman.id || '';
+                    document.getElementById('pengumuman_edit_isi').value = pengumuman.isi || '';
+                    if (pengumuman.valid_hingga) {
+                        var date = new Date(pengumuman.valid_hingga);
+                        if (!isNaN(date)) {
+                            document.getElementById('pengumuman_edit_valid').value = date.toISOString().slice(0, 16);
+                        }
+                    }
+                }
+                if (targetId === 'potensi-media') {
+                    var potensiTargetId = btn.getAttribute('data-potensi-media-id') || '';
+                    // tambahkan hidden input potensi_id agar ikut terkirim saat submit
+                    var potensiMediaForm = potensiMediaBackdrop.querySelector('form');
+                    if (potensiMediaForm) {
+                        var hidden = potensiMediaForm.querySelector('input[name="potensi_id"]');
+                        if (!hidden) {
+                            hidden = document.createElement('input');
+                            hidden.type = 'hidden';
+                            hidden.name = 'potensi_id';
+                            potensiMediaForm.appendChild(hidden);
+                        }
+                        hidden.value = potensiTargetId;
+                    }
+                }
+                if (targetId === 'program-edit') {
+                    const raw = btn.getAttribute('data-program') || '';
+                    let data = {};
+                    try { data = JSON.parse(raw); } catch {}
+                    document.getElementById('program_edit_id').value = data.id || '';
+                    document.getElementById('program_edit_nama').value = data.nama || '';
+                    document.getElementById('program_edit_deskripsi').value = data.deskripsi || '';
+                    const inputFile = document.getElementById('program_edit_gambar');
+                    if (inputFile) inputFile.value = '';
+                }
+                if (targetId) {
+                    openModal(targetId);
+                }
+            });
+        });
+
+        modalBackdrops.forEach(function (backdrop) {
+            backdrop.addEventListener('click', function (event) {
+                if (event.target === backdrop) {
+                    closeModal();
+                }
+            });
+            Array.from(backdrop.querySelectorAll('[data-close-modal]')).forEach(function (btn) {
+                btn.addEventListener('click', function () {
+                    closeModal();
+                });
+            });
+        });
+
+        document.addEventListener('keydown', function (event) {
+            if (event.key === 'Escape') {
+                closeModal();
+            }
+        });
+
+        var initialModal = modalBackdrops.find(function (backdrop) {
+            return backdrop.getAttribute('data-open-on-load') === '1';
+        });
+        if (initialModal) {
+            openModal(initialModal.getAttribute('data-modal'));
+            initialModal.removeAttribute('data-open-on-load');
+        }
+    });
+    // Tampilkan overlay saat upload foto Hukum Tua
+    document.addEventListener('DOMContentLoaded', function () {
+    var uploadOverlay = document.getElementById('upload-overlay');
+    var hukumtuaForm = document.querySelector('form[action="admin_management.php#data"] input[name="action"][value="update_hukum_tua_foto"]')
+                        ? document.querySelector('form[action="admin_management.php#data"]').closest('form') : null;
+    if (hukumtuaForm) {
+        hukumtuaForm.addEventListener('submit', function () {
+        if (uploadOverlay) {
+            uploadOverlay.classList.add('is-visible');
+            uploadOverlay.setAttribute('aria-hidden', 'false');
+        }
+        });
+    }
+    });
+
+</script>
+<script>
+document.addEventListener('click', function (e) {
+  // Modal Edit Admin
+  const btnEdit = e.target.closest('[data-open-modal="admin-edit"]');
+  if (btnEdit) {
+    try {
+      const payload = JSON.parse(btnEdit.getAttribute('data-admin') || '{}');
+      const m = document.querySelector('.modal-backdrop[data-modal="admin-edit"]');
+      if (m) {
+        m.classList.add('is-open');
+        document.body.classList.add('modal-open');
+        m.querySelector('#admin_edit_id').value = payload.id || '';
+        m.querySelector('#admin_edit_nama').value = payload.nama || '';
+        m.querySelector('#admin_edit_email').value = payload.email || '';
+        m.querySelector('#admin_edit_hp').value = payload.nohp || '';
+        m.querySelector('#admin_edit_is_super').checked = (payload.is_superadmin === 1);
+        m.querySelector('#admin_edit_is_deleted').checked = (payload.is_deleted === 1);
+      }
+    } catch (_) {}
+  }
+
+  // Modal Reset Password
+  const btnReset = e.target.closest('[data-open-modal="admin-reset"]');
+  if (btnReset) {
+    const id = btnReset.getAttribute('data-admin-id') || '';
+    const m = document.querySelector('.modal-backdrop[data-modal="admin-reset"]');
+    if (m) {
+      m.classList.add('is-open');
+      document.body.classList.add('modal-open');
+      m.querySelector('#admin_reset_id').value = id;
+    }
+  }
+
+  // Close modal generic (pakai atribut yang sudah ada)
+  const btnClose = e.target.closest('[data-close-modal]');
+  if (btnClose) {
+    const mb = btnClose.closest('.modal-backdrop');
+    if (mb) {
+      mb.classList.remove('is-open');
+      document.body.classList.remove('modal-open');
+    }
+  }
+});
+</script>
+
+</body>
+</html>

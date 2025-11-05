@@ -2,70 +2,64 @@
 
 declare(strict_types=1);
 
+require_once __DIR__ . '/../config/database.php';
+
+try {
+    $pdo = db();
+
+    // 🔹 Ambil pengumuman
+    $stmt = $pdo->query('
+        SELECT 
+            pengumuman_id, 
+            pengumuman_isi, 
+            pengumuman_valid_hingga, 
+            pengumuman_created_at, 
+            pengumuman_updated_at
+        FROM pengumuman
+        ORDER BY pengumuman_created_at DESC
+    ');
+    $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+    // 🔹 Ambil galeri
+    $stmtGaleri = $pdo->query('
+        SELECT 
+            galeri_id, 
+            galeri_keterangan, 
+            galeri_gambar, 
+            galeri_created_at
+        FROM galeri
+        ORDER BY galeri_created_at DESC
+    ');
+    $rowsGaleri = $stmtGaleri->fetchAll(PDO::FETCH_ASSOC);
+} catch (Throwable $e) {
+    $rows = [];
+    $rowsGaleri = [];
+}
+
+$pengumuman = [];
+foreach ($rows as $row) {
+    $pengumuman[] = [
+        'id' => (int)($row['pengumuman_id'] ?? 0),
+        'isi' => (string)($row['pengumuman_isi'] ?? ''),
+        'valid_hingga' => date('d F Y H:i', strtotime((string)($row['pengumuman_valid_hingga'] ?? ''))),
+        'updated_at' => date('d F Y H:i', strtotime((string)($row['pengumuman_updated_at'] ?? $row['pengumuman_created_at'] ?? ''))),
+    ];
+}
+
+$galeri = [];
+foreach ($rowsGaleri as $row) {
+    $fileName = trim((string)($row['galeri_gambar'] ?? ''));
+    $galeri[] = [
+        'galeri_id' => (int)($row['galeri_id'] ?? 0),
+        'galeri_keterangan' => (string)($row['galeri_keterangan'] ?? ''),
+        'gambar' => $fileName !== '' 
+            ? base_uri('uploads/galeri/' . ltrim($fileName, '/')) 
+            : asset('images/placeholder-gallery.jpg'),
+        'created_at' => date('d F Y H:i', strtotime((string)($row['galeri_created_at'] ?? ''))),
+    ];
+}
+
 return [
-    'berita' => [
-        [
-            'judul' => 'Pembangunan Saluran Irigasi Rampung 90%',
-            'ringkasan' => 'Gotong royong warga mempercepat pembangunan irigasi sawah Jaga III.',
-            'tanggal' => '12 Oktober 2025',
-            'gambar' => asset('images/placeholder-media.svg'),
-            'tautan' => '#',
-            'berita_dilihat' => 245,
-        ],
-        [
-            'judul' => 'Pelaksanaan Posyandu Balita',
-            'ringkasan' => 'Kegiatan rutin posyandu menghadirkan penyuluhan gizi bagi orang tua.',
-            'tanggal' => '05 Oktober 2025',
-            'gambar' => asset('images/placeholder-media.svg'),
-            'tautan' => '#',
-            'berita_dilihat' => 198,
-        ],
-        [
-            'judul' => 'Pelatihan Digital UMKM Desa',
-            'ringkasan' => 'UMKM dilatih menghadirkan produk secara online untuk meningkatkan pemasaran.',
-            'tanggal' => '28 September 2025',
-            'gambar' => asset('images/placeholder-media.svg'),
-            'tautan' => '#',
-            'berita_dilihat' => 167,
-        ],
-    ],
-    'pengumuman' => [
-        [
-            'judul' => 'Jadwal Penyaluran BLT Dana Desa',
-            'tanggal' => '10 Oktober 2025',
-            'tautan' => '#',
-        ],
-        [
-            'judul' => 'Layanan Administrasi Offline',
-            'tanggal' => '08 Oktober 2025',
-            'tautan' => '#',
-        ],
-        [
-            'judul' => 'Pendataan Keluarga Pra Sejahtera',
-            'tanggal' => '01 Oktober 2025',
-            'tautan' => '#',
-        ],
-    ],
-    'galeri' => [
-        [
-            'judul' => 'Panen Raya',
-            'gambar' => 'https://images.unsplash.com/photo-1501004318641-b39e6451bec6',
-            'galeri_keterangan' => 'Petani Desa Sendangan panen raya bersama di sawah.',
-        ],
-        [
-            'judul' => 'Festival Budaya',
-            'gambar' => 'https://images.unsplash.com/photo-1500530855697-b586d89ba3ee',
-            'galeri_keterangan' => 'Penampilan tari Maengket pada Festival Rentak Budaya.',
-        ],
-        [
-            'judul' => 'Kegiatan Posyandu',
-            'gambar' => 'https://images.unsplash.com/photo-1582711012124-a56cf82307ef',
-            'galeri_keterangan' => 'Kader posyandu melakukan pemeriksaan kesehatan balita.',
-        ],
-        [
-            'judul' => 'Pelatihan UMKM',
-            'gambar' => 'https://images.unsplash.com/photo-1489515217757-5fd1be406fef',
-            'galeri_keterangan' => 'Pelaku UMKM mengikuti pelatihan pemasaran digital desa.',
-        ],
-    ],
+    'pengumuman' => $pengumuman,
+    'galeri' => $galeri,
 ];

@@ -12,6 +12,7 @@ CREATE TABLE admin (
     admin_password VARCHAR(255) NOT NULL,
     admin_no_hp VARCHAR(15) unique,
     admin_email VARCHAR(100) unique,
+    admin_is_superadmin smallint DEFAULT 0,
     admin_created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     admin_updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     admin_is_deleted smallint DEFAULT 0
@@ -103,7 +104,6 @@ create table struktur_organisasi (
 
 create table galeri (
     galeri_id int AUTO_INCREMENT PRIMARY KEY,
-    galeri_namafile VARCHAR(255) NOT NULL,
     galeri_keterangan TEXT,
     galeri_gambar VARCHAR(50),
     galeri_created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
@@ -111,7 +111,7 @@ create table galeri (
 
 create table apbdes (
     apbdes_id INT AUTO_INCREMENT PRIMARY KEY,
-    apbdes_judul INT NOT NULL,
+    apbdes_judul VARCHAR(255) NOT NULL,
     apbdes_file VARCHAR(255) NOT NULL,
     apbdes_edited_by VARCHAR(100),
     apbdes_created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
