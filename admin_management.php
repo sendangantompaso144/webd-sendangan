@@ -43,6 +43,15 @@ if ($currentAdminId > 0) {
 
 // ✅ Baru hitung setelah $currentAdmin terisi
 $isSuperadmin = ((int)($currentAdmin['admin_is_superadmin'] ?? 0) === 1);
+// === Filter UI: tampilkan admin soft-deleted? (persist di sesi)
+$showDeletedAdmins = 0;
+if ($isSuperadmin) {
+    $showDeletedAdmins = isset($_GET['show_deleted'])
+        ? (int)($_GET['show_deleted'] === '1')
+        : (int)($_SESSION['ui_show_admin_deleted'] ?? 0);
+    $_SESSION['ui_show_admin_deleted'] = $showDeletedAdmins;
+}
+
 
 } catch (Throwable $exception) {
     http_response_code(500);
@@ -2101,14 +2110,18 @@ $strukturOrganisasi = fetch_table(
 );
 $otherAdmins = [];
 if ($isSuperadmin) {
-    $otherAdmins = fetch_table(
-        $pdo,
-        'SELECT admin_id, admin_nama, admin_no_hp, admin_email, admin_created_at, admin_updated_at, admin_is_deleted, admin_is_superadmin 
-         FROM admin 
-         WHERE admin_id <> ?
-         ORDER BY admin_updated_at DESC',
-        [$currentAdminId]
-    );
+    $sql = 'SELECT admin_id, admin_nama, admin_no_hp, admin_email,
+                   admin_created_at, admin_updated_at, admin_is_deleted, admin_is_superadmin
+            FROM admin
+            WHERE admin_id <> ?';
+    $params = [$currentAdminId];
+
+    if (!$showDeletedAdmins) {
+        $sql .= ' AND admin_is_deleted = 0'; // default: sembunyikan yang soft-deleted
+    }
+
+    $sql .= ' ORDER BY admin_updated_at DESC';
+    $otherAdmins = fetch_table($pdo, $sql, $params);
 }
 
 
@@ -3129,14 +3142,27 @@ function render_modal(string $formId, array $definition, array $oldInputs, array
     // ——— Tampilkan "Daftar Admin Lain" hanya untuk superadmin ———
     if ($isSuperadmin): ?>
     <header class="card__header" style="margin-top:8px;">
-        <div>
-            <h2>Daftar Admin Lain</h2>
-            <p>Seluruh admin kecuali akun yang sedang login. Anda dapat menandai hapus (soft delete) atau memulihkan akun.</p>
-        </div>
-        <div class="card__tools">
-            <span class="badge"><?= count($otherAdmins) ?> akun</span>
-            <button type="button" class="btn-add" data-open-modal="admin-create">Tambah Akun</button>
-        </div>
+    <div>
+        <h2>Daftar Admin Lain</h2>
+        <p>Seluruh admin kecuali akun yang sedang login (read-only).</p>
+    </div>
+    <div class="card__tools">
+        <!-- ⬇⬇ Toggle baru -->
+        <form method="get" action="admin_management.php#admin"
+            id="toggle-deleted-form"
+            class="table-actions__form"
+            style="display:inline-flex;align-items:center;gap:8px;">
+        <input type="hidden" name="show_deleted" value="0">
+        <label style="display:inline-flex;align-items:center;gap:8px;">
+            <input type="checkbox" name="show_deleted" value="1"
+                <?= $showDeletedAdmins ? 'checked' : '' ?>
+                onchange="this.form.submit()">
+            Tampilkan data soft deleted
+        </label>
+        </form>
+        <span class="badge"><?= count($otherAdmins) ?> akun</span>
+        <button type="button" class="btn-add" data-open-modal="admin-create">Tambah Akun</button>
+    </div>
     </header>
 
     <div class="table-wrapper">
