@@ -119,16 +119,16 @@ function render_base_layout(array $options = []): void
     });
 
     // 2. Tutup menu saat user scroll (opsional - hapus jika tidak diinginkan)
-    let scrollTimeout;
-    window.addEventListener('scroll', function() {
-        if (!menuToggle.checked) return;
+    // let scrollTimeout;
+    // window.addEventListener('scroll', function() {
+    //     if (!menuToggle.checked) return;
 
-        clearTimeout(scrollTimeout);
-        scrollTimeout = setTimeout(function() {
-            menuToggle.checked = false;
-            body.classList.remove('menu-open');
-        }, 150);
-    }, { passive: true });
+    //     clearTimeout(scrollTimeout);
+    //     scrollTimeout = setTimeout(function() {
+    //         menuToggle.checked = false;
+    //         body.classList.remove('menu-open');
+    //     }, 150);
+    // }, { passive: true });
 
     // 3. Tutup menu saat klik link (agar smooth scroll bekerja)
     const navLinks = document.querySelectorAll('.main-navigation a');
