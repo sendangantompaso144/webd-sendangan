@@ -263,11 +263,14 @@ render_base_layout([
 
         <div class="map-view-modal" data-map-modal aria-hidden="true" hidden>
             <div class="map-view-modal__inner">
-                <div class="map-view-modal__help">
-                    <strong>Kontrol Peta</strong>
-                    <span>Scroll: zoom in / zoom out</span>
-                    <span>Klik kanan + geser: pindahkan peta</span>
-                    <span>Klik kiri: tutup tampilan</span>
+                <div class="map-view-modal__help" data-map-help>
+                    <button type="button" class="map-view-modal__help-toggle" aria-label="Bantuan kontrol peta">?</button>
+                    <div class="map-view-modal__help-content">
+                        <strong>Kontrol Peta</strong>
+                        <span>Scroll: zoom in / zoom out</span>
+                        <span>Klik kanan + geser: pindahkan peta</span>
+                        <span>Klik kiri: tutup tampilan</span>
+                    </div>
                 </div>
                 <div class="map-view-modal__canvas" data-map-modal-canvas>
                     <img src="" alt="Peta Desa Sendangan" data-map-modal-image>
@@ -409,6 +412,7 @@ render_base_layout([
                     var mapModal = document.querySelector('[data-map-modal]');
                     var mapModalImage = mapModal ? mapModal.querySelector('[data-map-modal-image]') : null;
                     var mapModalCanvas = mapModal ? mapModal.querySelector('[data-map-modal-canvas]') : null;
+                    var mapModalHelp = mapModal ? mapModal.querySelector('[data-map-help]') : null;
                     var mapDisplays = mapSection.querySelectorAll('[data-map-display]');
                     var modalState = {
                         scale: 1,
@@ -420,10 +424,30 @@ render_base_layout([
                     var isPanning = false;
                     var panStart = { x: 0, y: 0 };
 
+                    var clampModalTranslation = function () {
+                        if (!mapModalCanvas || !mapModalImage) {
+                            return;
+                        }
+                        var baseWidth = parseFloat(mapModalImage.dataset.baseWidth || '0');
+                        var baseHeight = parseFloat(mapModalImage.dataset.baseHeight || '0');
+                        if (!baseWidth || !baseHeight) {
+                            var rect = mapModalImage.getBoundingClientRect();
+                            baseWidth = rect.width / modalState.scale || mapModalCanvas.clientWidth;
+                            baseHeight = rect.height / modalState.scale || mapModalCanvas.clientHeight;
+                        }
+                        var displayWidth = baseWidth * modalState.scale;
+                        var displayHeight = baseHeight * modalState.scale;
+                        var limitX = Math.max(0, (displayWidth - mapModalCanvas.clientWidth) / 2);
+                        var limitY = Math.max(0, (displayHeight - mapModalCanvas.clientHeight) / 2);
+                        modalState.translateX = Math.min(limitX, Math.max(-limitX, modalState.translateX));
+                        modalState.translateY = Math.min(limitY, Math.max(-limitY, modalState.translateY));
+                    };
+
                     var applyModalTransform = function () {
                         if (!mapModalImage) {
                             return;
                         }
+                        clampModalTranslation();
                         mapModalImage.style.transform = 'translate(' + modalState.translateX + 'px, ' + modalState.translateY + 'px) scale(' + modalState.scale + ')';
                     };
 
@@ -432,6 +456,21 @@ render_base_layout([
                         modalState.translateX = 0;
                         modalState.translateY = 0;
                         applyModalTransform();
+                    };
+
+                    var refreshModalMetrics = function () {
+                        if (!mapModalCanvas || !mapModalImage) {
+                            return;
+                        }
+                        window.requestAnimationFrame(function () {
+                            var rect = mapModalImage.getBoundingClientRect();
+                            if (rect.width === 0 || rect.height === 0) {
+                                return;
+                            }
+                            mapModalImage.dataset.baseWidth = String(rect.width / modalState.scale);
+                            mapModalImage.dataset.baseHeight = String(rect.height / modalState.scale);
+                            applyModalTransform();
+                        });
                     };
 
                     if (mapModal && mapModalImage && mapModalCanvas && mapDisplays.length > 0) {
@@ -459,7 +498,23 @@ render_base_layout([
                             mapModal.removeAttribute('hidden');
                             mapModal.setAttribute('aria-hidden', 'false');
                             document.body.classList.add('map-modal-open');
+                            refreshModalMetrics();
                         };
+
+                        if (mapModalImage) {
+                            mapModalImage.addEventListener('load', function () {
+                                if (mapModal.classList.contains('is-active')) {
+                                    resetModalTransform();
+                                    refreshModalMetrics();
+                                }
+                            });
+                        }
+
+                        if (mapModalHelp) {
+                            mapModalHelp.addEventListener('click', function (event) {
+                                event.stopPropagation();
+                            });
+                        }
 
                         mapModalCanvas.addEventListener('wheel', function (event) {
                             event.preventDefault();
@@ -518,13 +573,22 @@ render_base_layout([
                             });
                         });
 
-                        mapModal.addEventListener('click', function () {
+                        mapModal.addEventListener('click', function (event) {
+                            if (event.target.closest('[data-map-help]')) {
+                                return;
+                            }
                             closeMapModal();
                         });
 
                         document.addEventListener('keydown', function (event) {
                             if (event.key === 'Escape' && mapModal.classList.contains('is-active')) {
                                 closeMapModal();
+                            }
+                        });
+
+                        window.addEventListener('resize', function () {
+                            if (mapModal.classList.contains('is-active')) {
+                                refreshModalMetrics();
                             }
                         });
                     }

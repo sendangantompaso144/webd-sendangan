@@ -1125,26 +1125,73 @@ img {
     position: absolute;
     top: 1rem;
     right: 1rem;
-    background: rgba(15, 23, 42, 0.7);
-    color: #fff;
-    font-size: 0.85rem;
-    line-height: 1.4;
-    padding: 0.65rem 0.95rem;
-    border-radius: var(--radius-medium);
-    box-shadow: 0 10px 25px rgba(0, 0, 0, 0.35);
-    max-width: min(320px, 90vw);
+    display: inline-flex;
+    align-items: flex-start;
+    gap: 0.5rem;
+    z-index: 5;
 }
 
-.map-view-modal__help strong {
+.map-view-modal__help-toggle {
+    width: 40px;
+    height: 40px;
+    border-radius: 999px;
+    border: none;
+    background: rgba(15, 23, 42, 0.8);
+    color: #fff;
+    font-size: 1.2rem;
+    line-height: 1;
+    font-weight: 700;
+    cursor: help;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    transition: transform 0.2s ease, background 0.2s ease;
+    box-shadow: 0 10px 25px rgba(0, 0, 0, 0.35);
+}
+
+.map-view-modal__help-toggle:hover,
+.map-view-modal__help-toggle:focus-visible {
+    background: rgba(99, 102, 241, 0.95);
+    transform: translateY(-2px);
+}
+
+.map-view-modal__help-toggle:focus-visible {
+    outline: 2px solid rgba(255, 255, 255, 0.85);
+    outline-offset: 2px;
+}
+
+.map-view-modal__help-content {
+    background: rgba(15, 23, 42, 0.85);
+    color: #fff;
+    font-size: 0.85rem;
+    line-height: 1.5;
+    padding: 0.75rem 1rem;
+    border-radius: var(--radius-medium);
+    box-shadow: 0 15px 35px rgba(0, 0, 0, 0.45);
+    max-width: min(320px, 80vw);
+    opacity: 0;
+    transform: translateY(4px);
+    pointer-events: none;
+    transition: opacity 0.2s ease, transform 0.2s ease;
+}
+
+.map-view-modal__help:focus-within .map-view-modal__help-content,
+.map-view-modal__help:hover .map-view-modal__help-content {
+    opacity: 1;
+    pointer-events: auto;
+    transform: translateY(0);
+}
+
+.map-view-modal__help-content strong {
     display: block;
     font-size: 0.8rem;
-    letter-spacing: 0.04em;
+    letter-spacing: 0.05em;
     text-transform: uppercase;
-    margin-bottom: 0.15rem;
+    margin-bottom: 0.2rem;
     color: rgba(255, 255, 255, 0.9);
 }
 
-.map-view-modal__help span {
+.map-view-modal__help-content span {
     display: block;
 }
 
