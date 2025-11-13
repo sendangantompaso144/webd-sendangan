@@ -832,7 +832,7 @@ render_base_layout([
             .hero-section {
                 position: relative;
                 min-height: 560px;
-                background: linear-gradient(135deg, rgba(21, 101, 192, 0.05) 0%, rgba(144, 202, 249, 0.08) 100%), url('assets/images/hero-background.jpg');
+                background: linear-gradient(135deg, rgba(21, 101, 192, 0.05) 0%, rgba(144, 202, 249, 0.08) 100%), url('assets/images/hero-background.webp');
                 background-position: center;
                 background-size: cover;
                 background-repeat: no-repeat;
@@ -1856,7 +1856,6 @@ render_base_layout([
                     width: 100%;
                     text-align: center;
                 }
-            }
             }
 
             /* Smooth Scroll Behavior */

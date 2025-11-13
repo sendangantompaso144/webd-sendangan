@@ -303,8 +303,10 @@ render_base_layout([
                                         <img src="<?= e($item['program_gambar']) ?>" alt="<?= e(($item['program_nama'] ?? 'Program Desa') . ' - Foto') ?>">
                                     </div>
                                 <?php endif; ?>
-                                <h3><?= e($item['program_nama'] ?? '') ?></h3>
-                                <p><?= e($item['program_deskripsi'] ?? '') ?></p>
+                                <div class="program-card__content">
+                                    <h3><?= e($item['program_nama'] ?? '') ?></h3>
+                                    <p><?= e($item['program_deskripsi'] ?? '') ?></p>
+                                </div>
                             </article>
                         <?php endforeach; ?>
                     </div>
