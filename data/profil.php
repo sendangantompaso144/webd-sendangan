@@ -74,6 +74,7 @@ $demografiDasar = (static function (): array {
 
 $fasilitas = [];
 $program = [];
+$sotkImage = '';
 
 if ($pdo !== null) {
     try {
@@ -101,9 +102,19 @@ if ($pdo !== null) {
     }
 }
 
+$sotkValues = data_values([
+    'profile.sotk' => 'sotk-image.webp',
+]);
+$sotkFilename = trim((string) ($sotkValues['profile.sotk'] ?? ''));
+
+if ($sotkFilename !== '') {
+    $sotkImage = base_uri('uploads/struktur/' . ltrim($sotkFilename, '/'));
+}
+
 return [
     'sejarah' => $sejarah,
     'demografi_dasar' => $demografiDasar,
     'fasilitas' => $fasilitas,
     'program' => $program,
+    'sotk_image' => $sotkImage,
 ];

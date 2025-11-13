@@ -16,6 +16,7 @@ render_base_layout([
         $demografi = [];
         $fasilitas = $profil['fasilitas'] ?? [];
         $program = $profil['program'] ?? [];
+        $sotkImage = trim((string) ($profil['sotk_image'] ?? ''));
 
         $sejarah = array_values(array_filter(array_map(
             static fn($item): string => is_string($item) ? trim($item) : '',
@@ -254,6 +255,22 @@ render_base_layout([
                                     </div>
                                 <?php endforeach; ?>
                             </div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+        <?php endif; ?>
+
+        <?php if ($sotkImage !== ''): ?>
+            <section class="section section--sotk">
+                <div class="container">
+                    <div class="section-header">
+                        <h2>SOTK</h2>
+                        <p>Struktur Organisasi dan Tata Kerja Pemerintah Desa Sendangan.</p>
+                    </div>
+                    <div class="sotk-card">
+                        <div class="sotk-image">
+                            <img src="<?= e($sotkImage) ?>" alt="Struktur Organisasi dan Tata Kerja Pemerintah Desa Sendangan">
                         </div>
                     </div>
                 </div>

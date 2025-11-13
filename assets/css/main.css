@@ -672,6 +672,30 @@ img {
     justify-content: center;
 }
 
+.section--sotk .section-header {
+    text-align: center;
+    margin-bottom: 2rem;
+}
+
+.sotk-card {
+    background: #fff;
+    border-radius: var(--radius-large);
+    box-shadow: var(--shadow-card);
+    padding: 1.5rem;
+}
+
+.sotk-image {
+    border-radius: var(--radius-large);
+    overflow: hidden;
+    background: rgba(15, 23, 42, 0.04);
+}
+
+.sotk-image img {
+    width: 100%;
+    height: auto;
+    display: block;
+}
+
 .section-info-content {
     padding-top: 0;
 }
