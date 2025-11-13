@@ -1725,6 +1725,117 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         header('Location: admin_management.php#data'); exit;
     }
 
+    if ($action === 'upload_sotk_image') {
+        $file = $_FILES['sotk_file'] ?? null;
+        if (!is_array($file) || ($file['error'] ?? UPLOAD_ERR_NO_FILE) === UPLOAD_ERR_NO_FILE) {
+            $_SESSION['flash_error'][] = 'Pilih gambar terlebih dahulu.';
+            header('Location: admin_management.php#struktur'); exit;
+        }
+        if (($file['error'] ?? UPLOAD_ERR_OK) !== UPLOAD_ERR_OK) {
+            $_SESSION['flash_error'][] = 'Upload gagal.';
+            header('Location: admin_management.php#struktur'); exit;
+        }
+
+        $finfo = finfo_open(FILEINFO_MIME_TYPE);
+        $mime  = $finfo ? (string) finfo_file($finfo, $file['tmp_name']) : '';
+        if ($finfo) {
+            finfo_close($finfo);
+        }
+        if (!in_array($mime, ['image/jpeg', 'image/png', 'image/webp'], true)) {
+            $_SESSION['flash_error'][] = 'Format harus JPG, PNG, atau WEBP.';
+            header('Location: admin_management.php#struktur'); exit;
+        }
+
+        $dir = base_path('uploads/struktur');
+        if (!is_dir($dir) && !mkdir($dir, 0755, true) && !is_dir($dir)) {
+            $_SESSION['flash_error'][] = 'Folder uploads/struktur tidak dapat dibuat.';
+            header('Location: admin_management.php#struktur'); exit;
+        }
+
+        $tempPath = $dir . DIRECTORY_SEPARATOR . 'sotk-image-' . uniqid('', true) . '.webp';
+        $finalPath = $dir . DIRECTORY_SEPARATOR . 'sotk-image.webp';
+
+        $processed = false;
+        if ($mime === 'image/webp') {
+            $processed = move_uploaded_file($file['tmp_name'], $tempPath);
+        } else {
+            if (!function_exists('imagewebp')) {
+                $_SESSION['flash_error'][] = 'Konversi ke WebP tidak tersedia di server.';
+                header('Location: admin_management.php#struktur'); exit;
+            }
+            $image = null;
+            if ($mime === 'image/jpeg') {
+                $image = @imagecreatefromjpeg($file['tmp_name']);
+            } elseif ($mime === 'image/png') {
+                $image = @imagecreatefrompng($file['tmp_name']);
+                if ($image !== false) {
+                    imagepalettetotruecolor($image);
+                    imagealphablending($image, false);
+                    imagesavealpha($image, true);
+                }
+            }
+
+            if ($image !== false && $image !== null) {
+                $processed = imagewebp($image, $tempPath, 90);
+                imagedestroy($image);
+            }
+        }
+
+        if (!$processed) {
+            if (is_file($tempPath)) {
+                @unlink($tempPath);
+            }
+            $_SESSION['flash_error'][] = 'Gagal memproses gambar SOTK.';
+            header('Location: admin_management.php#struktur'); exit;
+        }
+
+        if (is_file($finalPath)) {
+            @unlink($finalPath);
+        }
+
+        if (!@rename($tempPath, $finalPath)) {
+            if (!@copy($tempPath, $finalPath)) {
+                @unlink($tempPath);
+                $_SESSION['flash_error'][] = 'Gagal menyimpan berkas SOTK.';
+                header('Location: admin_management.php#struktur'); exit;
+            }
+            @unlink($tempPath);
+        }
+
+        try {
+            $updatedBy = '';
+            if (!empty($adminSession['name'])) {
+                $updatedBy = (string) $adminSession['name'];
+            } elseif (!empty($adminSession['email'])) {
+                $updatedBy = (string) $adminSession['email'];
+            } elseif (!empty($adminSession['id'])) {
+                $updatedBy = 'admin#' . (int) $adminSession['id'];
+            }
+
+            $stmt = $pdo->prepare('
+                INSERT INTO data (data_key, data_value, data_type, data_updated_at, data_updated_by)
+                VALUES (?, ?, ?, NOW(), ?)
+                ON DUPLICATE KEY UPDATE 
+                    data_value = VALUES(data_value),
+                    data_type = VALUES(data_type),
+                    data_updated_at = NOW(),
+                    data_updated_by = VALUES(data_updated_by)
+            ');
+
+            if ($stmt === false) {
+                throw new RuntimeException('Tidak dapat menyiapkan kueri penyimpanan SOTK.');
+            }
+
+            $stmt->execute(['profile.sotk', 'sotk-image.webp', 'string', $updatedBy !== '' ? $updatedBy : null]);
+            $_SESSION['flash'][] = 'Gambar SOTK berhasil diperbarui.';
+        } catch (Throwable $e) {
+            $_SESSION['flash_error'][] = 'Gagal menyimpan data SOTK: ' . $e->getMessage();
+            header('Location: admin_management.php#struktur'); exit;
+        }
+
+        header('Location: admin_management.php#struktur'); exit;
+    }
+
         if ($action === 'update_hukum_tua_foto') {
         // Validasi input
         $file = $_FILES['hukumtua_foto'] ?? null;
@@ -2242,6 +2353,27 @@ $strukturOrganisasi = fetch_table(
      FROM struktur_organisasi 
      ORDER BY struktur_updated_at DESC LIMIT 50'
 );
+
+$sotkDataRow = [
+    'data_key' => 'profile.sotk',
+    'data_value' => 'sotk-image.webp',
+    'data_type' => 'string',
+    'data_updated_at' => null,
+    'data_updated_by' => null,
+];
+
+try {
+    $stmt = $pdo->prepare('SELECT data_key, data_value, data_type, data_updated_at, data_updated_by FROM data WHERE data_key = ? LIMIT 1');
+    if ($stmt !== false && $stmt->execute(['profile.sotk'])) {
+        $row = $stmt->fetch(PDO::FETCH_ASSOC);
+        if (is_array($row)) {
+            $sotkDataRow = array_merge($sotkDataRow, $row);
+        }
+    }
+} catch (Throwable) {
+    // ignore and keep defaults
+}
+
 $otherAdmins = [];
 if ($isSuperadmin) {
     $sql = 'SELECT admin_id, admin_nama, admin_no_hp, admin_email,
@@ -2264,10 +2396,11 @@ $flashErrors = $_SESSION['flash_error'] ?? [];
 $formErrors = $_SESSION['form_errors'] ?? [];
 $formOld = $_SESSION['form_old'] ?? [];
 unset($_SESSION['flash'], $_SESSION['flash_error'], $_SESSION['form_errors'], $_SESSION['form_old']);
+$sectionCardExtras = [];
 
 function section_card(string $sectionId, string $title, string $description, array $headers, array $rows, callable $rowRenderer): string
 {
-    global $tableForms;
+    global $tableForms, $sectionCardExtras;
 
     $headerHtml = '';
     foreach ($headers as $header) {
@@ -2288,6 +2421,11 @@ function section_card(string $sectionId, string $title, string $description, arr
         $toolsHtml .= '<button type="button" class="btn-add" data-open-modal="' . e($sectionId) . '">Tambah Data</button>';
     }
 
+    $extraHtml = '';
+    if (isset($sectionCardExtras[$sectionId])) {
+        $extraHtml = (string) $sectionCardExtras[$sectionId];
+    }
+
     return '
     <section class="card section-card" data-section="' . e($sectionId) . '" id="' . e($sectionId) . '">
         <header class="card__header">
@@ -2297,6 +2435,7 @@ function section_card(string $sectionId, string $title, string $description, arr
             </div>
             <div class="card__tools">' . $toolsHtml . '</div>
         </header>
+        ' . $extraHtml . '
         <div class="table-wrapper">
             <table>
                 <thead><tr>' . $headerHtml . '</tr></thead>
@@ -2304,6 +2443,60 @@ function section_card(string $sectionId, string $title, string $description, arr
             </table>
         </div>
     </section>';
+}
+
+function render_sotk_preview_table(?array $row): string
+{
+    $row = is_array($row) ? $row : [];
+    $key = (string) ($row['data_key'] ?? 'profile.sotk');
+    $type = strtolower((string) ($row['data_type'] ?? 'string'));
+    $value = trim((string) ($row['data_value'] ?? ''));
+    $updatedAt = format_datetime($row['data_updated_at'] ?? null);
+    $updatedBy = (string) ($row['data_updated_by'] ?? '-');
+
+    $preview = $value !== ''
+        ? '<div class="media-thumb">'
+            . '<img src="' . e(base_uri('uploads/struktur/' . ltrim($value, '/'))) . '" alt="Preview Struktur" onerror="this.style.display=\'none\'">'
+            . '<span>' . e($value) . '</span>'
+          . '</div>'
+        : '<em class="empty-state">belum ada file</em>';
+
+    $valueCell = '<div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;">'
+        . $preview
+        . '<button type="button" class="btn-outline" data-open-modal="upload-sotk">Upload</button>'
+        . '</div>';
+
+    return '
+        <div class="subsection-block">
+            <div class="subsection-header">
+                <h3>Gambar SOTK</h3>
+                <p>Akan ditampilkan di halaman profil.</p>
+            </div>
+            <div class="table-wrapper">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Nama Data</th>
+                            <th>Key</th>
+                            <th>Tipe</th>
+                            <th>Nilai</th>
+                            <th>Diubah pada</th>
+                            <th>Oleh</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td>Gambar SOTK</td>
+                            <td><code>' . e($key) . '</code></td>
+                            <td>' . e($type) . '</td>
+                            <td>' . $valueCell . '</td>
+                            <td>' . e($updatedAt) . '</td>
+                            <td>' . e($updatedBy !== '' ? $updatedBy : '-') . '</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>';
 }
 
 function render_modal(string $formId, array $definition, array $oldInputs, array $errors): string
@@ -2438,6 +2631,8 @@ function render_modal(string $formId, array $definition, array $oldInputs, array
         </div>
     </div>';
 }
+
+$sectionCardExtras['struktur'] = render_sotk_preview_table($sotkDataRow);
 
 ?><!DOCTYPE html>
 <html lang="id">
@@ -3045,6 +3240,26 @@ function render_modal(string $formId, array $definition, array $oldInputs, array
         .media-thumb span {
             display: inline-block;
             color: #475569;
+        }
+
+        .subsection-block {
+            margin-bottom: 1.5rem;
+        }
+
+        .subsection-header {
+            margin-bottom: 0.75rem;
+        }
+
+        .subsection-header h3 {
+            margin: 0;
+            font-size: 1.05rem;
+            font-weight: 600;
+        }
+
+        .subsection-header p {
+            margin: 0.2rem 0 0;
+            color: #64748b;
+            font-size: 0.92rem;
         }
 
         .table small {
@@ -3991,11 +4206,11 @@ function render_modal(string $formId, array $definition, array $oldInputs, array
         <h3 class="modal__title">Upload Media</h3>
         <button type="button" class="modal__close" data-close-modal aria-label="Tutup">&times;</button>
         </div>
-        <div class="modal__body">
-        <form method="post" action="admin_management.php#data" autocomplete="off" enctype="multipart/form-data" id="upload-media-form">
-            <input type="hidden" name="action" value="upload_media_data">
-            <input type="hidden" name="data_key" id="upload_media_key">
-            <div class="modal__field">
+    <div class="modal__body">
+    <form method="post" action="admin_management.php#data" autocomplete="off" enctype="multipart/form-data" id="upload-media-form">
+        <input type="hidden" name="action" value="upload_media_data">
+        <input type="hidden" name="data_key" id="upload_media_key">
+        <div class="modal__field">
             <label for="upload_media_file">Pilih Gambar (JPG/PNG/WEBP) <span class="required">*</span></label>
             <input type="file" id="upload_media_file" name="media_file" accept="image/jpeg,image/png,image/webp" required>
             <small class="field-hint">File akan dikonversi ke .webp dan disimpan di <code>uploads/assets/</code>.</small>
@@ -4007,6 +4222,29 @@ function render_modal(string $formId, array $definition, array $oldInputs, array
         </form>
         </div>
     </div>
+    </div>
+
+    <div class="modal-backdrop" data-modal="upload-sotk">
+        <div class="modal">
+            <div class="modal__header">
+                <h3 class="modal__title">Upload Gambar SOTK</h3>
+                <button type="button" class="modal__close" data-close-modal aria-label="Tutup">&times;</button>
+            </div>
+            <div class="modal__body">
+                <form method="post" action="admin_management.php#struktur" autocomplete="off" enctype="multipart/form-data">
+                    <input type="hidden" name="action" value="upload_sotk_image">
+                    <div class="modal__field">
+                        <label for="sotk_file">Pilih Gambar (JPG/PNG/WEBP) <span class="required">*</span></label>
+                        <input type="file" name="sotk_file" id="sotk_file" accept="image/jpeg,image/png,image/webp" required>
+                        <small class="field-hint">File disimpan sebagai <code>sotk-image.webp</code> di <code>uploads/struktur/</code>.</small>
+                    </div>
+                    <div class="modal__actions">
+                        <button type="button" class="btn-secondary" data-close-modal>Batal</button>
+                        <button type="submit" class="btn-primary">Upload</button>
+                    </div>
+                </form>
+            </div>
+        </div>
     </div>
 
     <div class="modal-backdrop" data-modal="pengumuman-view">
