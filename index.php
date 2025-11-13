@@ -612,6 +612,12 @@ render_base_layout([
             </div>
         </section>
 
+        <div class="map-view-modal" data-map-modal aria-hidden="true" hidden>
+            <div class="map-view-modal__inner">
+                <img src="" alt="Peta Desa Sendangan" data-map-modal-image>
+            </div>
+        </div>
+
         <!-- Structure Section -->
         <section class="content-section structure-section">
             <div class="section-container">
@@ -2159,6 +2165,58 @@ render_base_layout([
                             setMapMode(fallbackView);
                         }
                     }
+                }
+
+                var mapModal = document.querySelector('[data-map-modal]');
+                var mapModalImage = mapModal ? mapModal.querySelector('[data-map-modal-image]') : null;
+                var mapDisplays = document.querySelectorAll('[data-map-display]');
+
+                if (mapModal && mapModalImage && mapDisplays.length > 0) {
+                    var closeMapModal = function () {
+                        mapModal.classList.remove('is-active');
+                        mapModal.setAttribute('aria-hidden', 'true');
+                        mapModal.setAttribute('hidden', 'hidden');
+                        mapModalImage.removeAttribute('src');
+                        document.body.classList.remove('map-modal-open');
+                    };
+
+                    var openMapModal = function (image) {
+                        if (!image) {
+                            return;
+                        }
+                        var src = image.currentSrc || image.getAttribute('src');
+                        if (!src) {
+                            return;
+                        }
+                        var alt = image.getAttribute('alt') || 'Peta Desa Sendangan';
+                        mapModalImage.setAttribute('src', src);
+                        mapModalImage.setAttribute('alt', alt + ' - tampilan penuh');
+                        mapModal.classList.add('is-active');
+                        mapModal.removeAttribute('hidden');
+                        mapModal.setAttribute('aria-hidden', 'false');
+                        document.body.classList.add('map-modal-open');
+                    };
+
+                    mapDisplays.forEach(function (display) {
+                        display.addEventListener('click', function (event) {
+                            var mapImage = event.target.closest('.map-image');
+                            if (!mapImage || !display.contains(mapImage)) {
+                                return;
+                            }
+                            var imageEl = mapImage.querySelector('img');
+                            openMapModal(imageEl);
+                        });
+                    });
+
+                    mapModal.addEventListener('click', function () {
+                        closeMapModal();
+                    });
+
+                    document.addEventListener('keydown', function (event) {
+                        if (event.key === 'Escape' && mapModal.classList.contains('is-active')) {
+                            closeMapModal();
+                        }
+                    });
                 }
             });
         </script>
