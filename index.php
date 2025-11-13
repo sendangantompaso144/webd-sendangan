@@ -614,7 +614,15 @@ render_base_layout([
 
         <div class="map-view-modal" data-map-modal aria-hidden="true" hidden>
             <div class="map-view-modal__inner">
-                <img src="" alt="Peta Desa Sendangan" data-map-modal-image>
+                <div class="map-view-modal__help">
+                    <strong>Kontrol Peta</strong>
+                    <span>Scroll: zoom in / zoom out</span>
+                    <span>Klik kanan + geser: pindahkan peta</span>
+                    <span>Klik kiri: tutup tampilan</span>
+                </div>
+                <div class="map-view-modal__canvas" data-map-modal-canvas>
+                    <img src="" alt="Peta Desa Sendangan" data-map-modal-image>
+                </div>
             </div>
         </div>
 
@@ -2169,10 +2177,35 @@ render_base_layout([
 
                 var mapModal = document.querySelector('[data-map-modal]');
                 var mapModalImage = mapModal ? mapModal.querySelector('[data-map-modal-image]') : null;
+                var mapModalCanvas = mapModal ? mapModal.querySelector('[data-map-modal-canvas]') : null;
                 var mapDisplays = document.querySelectorAll('[data-map-display]');
+                var mapModalState = {
+                    scale: 1,
+                    minScale: 1,
+                    maxScale: 4,
+                    translateX: 0,
+                    translateY: 0
+                };
+                var isMapPanning = false;
+                var panOrigin = { x: 0, y: 0 };
 
-                if (mapModal && mapModalImage && mapDisplays.length > 0) {
+                var applyMapModalTransform = function () {
+                    if (!mapModalImage) {
+                        return;
+                    }
+                    mapModalImage.style.transform = 'translate(' + mapModalState.translateX + 'px, ' + mapModalState.translateY + 'px) scale(' + mapModalState.scale + ')';
+                };
+
+                var resetMapModalTransform = function () {
+                    mapModalState.scale = 1;
+                    mapModalState.translateX = 0;
+                    mapModalState.translateY = 0;
+                    applyMapModalTransform();
+                };
+
+                if (mapModal && mapModalImage && mapModalCanvas && mapDisplays.length > 0) {
                     var closeMapModal = function () {
+                        resetMapModalTransform();
                         mapModal.classList.remove('is-active');
                         mapModal.setAttribute('aria-hidden', 'true');
                         mapModal.setAttribute('hidden', 'hidden');
@@ -2196,6 +2229,52 @@ render_base_layout([
                         mapModal.setAttribute('aria-hidden', 'false');
                         document.body.classList.add('map-modal-open');
                     };
+
+                    mapModalCanvas.addEventListener('wheel', function (event) {
+                        event.preventDefault();
+                        var delta = event.deltaY || 0;
+                        var step = delta > 0 ? -0.15 : 0.15;
+                        var nextScale = Math.min(mapModalState.maxScale, Math.max(mapModalState.minScale, mapModalState.scale + step));
+                        if (nextScale === mapModalState.scale) {
+                            return;
+                        }
+                        mapModalState.scale = parseFloat(nextScale.toFixed(3));
+                        applyMapModalTransform();
+                    }, { passive: false });
+
+                    mapModalCanvas.addEventListener('contextmenu', function (event) {
+                        event.preventDefault();
+                    });
+
+                    mapModalCanvas.addEventListener('mousedown', function (event) {
+                        if (event.button !== 2) {
+                            return;
+                        }
+                        event.preventDefault();
+                        isMapPanning = true;
+                        panOrigin.x = event.clientX;
+                        panOrigin.y = event.clientY;
+                    });
+
+                    window.addEventListener('mouseup', function (event) {
+                        if (event.button === 2) {
+                            isMapPanning = false;
+                        }
+                    });
+
+                    window.addEventListener('mousemove', function (event) {
+                        if (!isMapPanning) {
+                            return;
+                        }
+                        event.preventDefault();
+                        var dx = event.clientX - panOrigin.x;
+                        var dy = event.clientY - panOrigin.y;
+                        panOrigin.x = event.clientX;
+                        panOrigin.y = event.clientY;
+                        mapModalState.translateX += dx;
+                        mapModalState.translateY += dy;
+                        applyMapModalTransform();
+                    });
 
                     mapDisplays.forEach(function (display) {
                         display.addEventListener('click', function (event) {
