@@ -34,6 +34,11 @@ return [
             'href' => 'potensi.php',
             'page' => 'potensi',
         ],
+        [
+            'label' => 'Kontak',
+            'href' => 'kontak.php',
+            'page' => 'kontak',
+        ],
     ],
     'footer' => [
         [
