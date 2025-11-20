@@ -725,9 +725,9 @@ render_base_layout([
                             </div>
                         <?php endforeach; ?>
                     </div>
-                    <div class="potential-note">
+                    <!-- <div class="potential-note">
                         <p>Data potensi bersumber dari basis potensi desa. Kunjungi halaman Potensi Desa untuk informasi selengkapnya.</p>
-                    </div>
+                    </div> -->
                 </div>
             </section>
         <?php endif; ?>

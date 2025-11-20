@@ -3802,6 +3802,7 @@ $sectionCardExtras['struktur'] = render_sotk_preview_table($sotkDataRow);
                     'isi' => (string) ($row['potensi_isi'] ?? ''),
                     'kategori' => (string) ($row['potensi_kategori'] ?? ''),
                     'gmaps' => (string) ($row['potensi_gmaps_link'] ?? ''),
+                    'images' => $images,
                 ];
                 $dataAttr = e(json_encode($payload, JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_AMP | JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES));
 
